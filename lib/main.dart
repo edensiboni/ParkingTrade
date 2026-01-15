@@ -1,0 +1,167 @@
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'config/supabase_config.dart';
+import 'services/auth_service.dart';
+import 'services/notification_service.dart';
+import 'screens/auth/phone_auth_screen.dart';
+import 'screens/building/join_building_screen.dart';
+import 'screens/building/pending_approval_screen.dart';
+import 'screens/spots/parking_spots_screen.dart';
+import 'models/profile.dart';
+
+// Background message handler (must be top-level)
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  // Handle background message
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase (handle missing config files gracefully)
+  try {
+    await Firebase.initializeApp();
+    // Initialize Firebase Messaging background handler
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  } catch (e) {
+    print('Warning: Firebase initialization failed: $e');
+    print('Push notifications may not work. Make sure GoogleService-Info.plist (iOS) and google-services.json (Android) are configured.');
+  }
+
+  // Initialize Supabase
+  if (!SupabaseConfig.isConfigured) {
+    throw Exception(
+      'Supabase configuration is missing. Please set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.',
+    );
+  }
+
+  await Supabase.initialize(
+    url: SupabaseConfig.supabaseUrl,
+    anonKey: SupabaseConfig.supabaseAnonKey,
+  );
+
+  // Initialize notification service (may fail if Firebase is not configured)
+  try {
+    final notificationService = NotificationService();
+    await notificationService.initialize();
+  } catch (e) {
+    print('Warning: Notification service initialization failed: $e');
+  }
+
+  runApp(const ParkingTradeApp());
+}
+
+class ParkingTradeApp extends StatelessWidget {
+  const ParkingTradeApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Parking Trade',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      ),
+      home: const AuthWrapper(),
+      routes: {
+        '/auth': (context) => const PhoneAuthScreen(),
+        '/join-building': (context) => const JoinBuildingScreen(),
+        '/pending-approval': (context) => const PendingApprovalScreen(),
+        '/home': (context) => const ParkingSpotsScreen(),
+      },
+    );
+  }
+}
+
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  final _authService = AuthService();
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuth();
+    _authService.authStateChanges.listen((state) {
+      _handleAuthChange(state);
+    });
+  }
+
+  Future<void> _checkAuth() async {
+    final user = _authService.currentUser;
+    if (user != null) {
+      await _navigateBasedOnProfile();
+    } else {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _handleAuthChange(AuthState state) async {
+    if (state.event == AuthChangeEvent.signedIn) {
+      await _navigateBasedOnProfile();
+    } else if (state.event == AuthChangeEvent.signedOut) {
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/auth');
+      }
+    }
+  }
+
+  Future<void> _navigateBasedOnProfile() async {
+    try {
+      final profile = await _authService.getCurrentProfile();
+      
+      if (!mounted) return;
+
+      if (profile == null) {
+        // Profile doesn't exist, need to join a building
+        Navigator.of(context).pushReplacementNamed('/join-building');
+      } else if (profile.buildingId == null) {
+        // Not in a building, need to join
+        Navigator.of(context).pushReplacementNamed('/join-building');
+      } else if (profile.status == ProfileStatus.pending) {
+        // Pending approval
+        Navigator.of(context).pushReplacementNamed('/pending-approval');
+      } else if (profile.status == ProfileStatus.approved) {
+        // Approved, show main app
+        Navigator.of(context).pushReplacementNamed('/home');
+      } else {
+        // Rejected or other status, allow re-joining
+        Navigator.of(context).pushReplacementNamed('/join-building');
+      }
+    } catch (e) {
+      // Error loading profile, show auth screen
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/auth');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return const PhoneAuthScreen();
+  }
+}
+
