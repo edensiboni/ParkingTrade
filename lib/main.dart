@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -11,6 +12,8 @@ import 'screens/building/pending_approval_screen.dart';
 import 'screens/spots/parking_spots_screen.dart';
 import 'models/profile.dart';
 
+
+
 // Background message handler (must be top-level)
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -20,6 +23,10 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  print('### MAIN STARTED ###');
+  print('### TIME: ${DateTime.now().toIso8601String()} ###');
+
+
 
   // Initialize Firebase (handle missing config files gracefully)
   try {
@@ -27,8 +34,10 @@ void main() async {
     // Initialize Firebase Messaging background handler
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   } catch (e) {
-    print('Warning: Firebase initialization failed: $e');
-    print('Push notifications may not work. Make sure GoogleService-Info.plist (iOS) and google-services.json (Android) are configured.');
+    debugPrint('Warning: Firebase initialization failed: $e');
+    debugPrint(
+      'Push notifications may not work. Make sure GoogleService-Info.plist (iOS) and google-services.json (Android) are configured.',
+    );
   }
 
   // Initialize Supabase
@@ -38,9 +47,20 @@ void main() async {
     );
   }
 
+  // ✅ DEBUG: Print Supabase configuration being used at runtime
+  final supabaseUrl = SupabaseConfig.supabaseUrl;
+  final supabaseAnonKey = SupabaseConfig.supabaseAnonKey;
+
+  debugPrint('================ Supabase Runtime Config ================');
+  debugPrint('SUPABASE_URL = $supabaseUrl');
+  debugPrint(
+    'SUPABASE_ANON_KEY starts with = ${supabaseAnonKey.isNotEmpty ? supabaseAnonKey.substring(0, 12) : "EMPTY"}',
+  );
+  debugPrint('========================================================');
+
   await Supabase.initialize(
-    url: SupabaseConfig.supabaseUrl,
-    anonKey: SupabaseConfig.supabaseAnonKey,
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
   );
 
   // Initialize notification service (may fail if Firebase is not configured)
@@ -48,7 +68,7 @@ void main() async {
     final notificationService = NotificationService();
     await notificationService.initialize();
   } catch (e) {
-    print('Warning: Notification service initialization failed: $e');
+    debugPrint('Warning: Notification service initialization failed: $e');
   }
 
   runApp(const ParkingTradeApp());
@@ -120,27 +140,21 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<void> _navigateBasedOnProfile() async {
     try {
       final profile = await _authService.getCurrentProfile();
-      
+
       if (!mounted) return;
 
       if (profile == null) {
-        // Profile doesn't exist, need to join a building
         Navigator.of(context).pushReplacementNamed('/join-building');
       } else if (profile.buildingId == null) {
-        // Not in a building, need to join
         Navigator.of(context).pushReplacementNamed('/join-building');
       } else if (profile.status == ProfileStatus.pending) {
-        // Pending approval
         Navigator.of(context).pushReplacementNamed('/pending-approval');
       } else if (profile.status == ProfileStatus.approved) {
-        // Approved, show main app
         Navigator.of(context).pushReplacementNamed('/home');
       } else {
-        // Rejected or other status, allow re-joining
         Navigator.of(context).pushReplacementNamed('/join-building');
       }
     } catch (e) {
-      // Error loading profile, show auth screen
       if (mounted) {
         Navigator.of(context).pushReplacementNamed('/auth');
       }
@@ -164,4 +178,3 @@ class _AuthWrapperState extends State<AuthWrapper> {
     return const PhoneAuthScreen();
   }
 }
-
