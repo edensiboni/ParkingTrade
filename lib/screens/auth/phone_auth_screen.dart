@@ -60,14 +60,21 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     });
 
     try {
-      await _authService.verifyOtp(
+      final response = await _authService.verifyOtp(
         _phoneController.text.trim(),
         _otpController.text.trim(),
       );
+      
+      // OTP verified successfully
       // Navigation will be handled by auth state listener in main.dart
+      // Don't reset loading state here - let navigation happen
+      if (response.user != null) {
+        // User is signed in, wait for navigation
+        // The AuthWrapper will handle navigation based on profile
+      }
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;
       });
     }

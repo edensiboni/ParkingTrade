@@ -3,6 +3,7 @@ import '../../services/parking_spot_service.dart';
 import '../../services/auth_service.dart';
 import '../../models/parking_spot.dart';
 import 'add_spot_screen.dart';
+import 'manage_availability_screen.dart';
 import '../bookings/bookings_screen.dart';
 
 class ParkingSpotsScreen extends StatefulWidget {
@@ -82,6 +83,54 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
                 ),
               );
             },
+            tooltip: 'Bookings',
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) async {
+              if (value == 'signout') {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Sign Out'),
+                    content: const Text('Are you sure you want to sign out?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text('Sign Out'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true && mounted) {
+                  // Sign out and navigate to auth screen
+                  await _authService.signOut();
+                  // Force navigation to auth screen
+                  if (mounted) {
+                    Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil(
+                      '/auth',
+                      (route) => false,
+                    );
+                  }
+                }
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'signout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout),
+                    SizedBox(width: 8),
+                    Text('Sign Out'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -136,9 +185,28 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
                             subtitle: Text(
                               spot.isActive ? 'Active' : 'Inactive',
                             ),
-                            trailing: Switch(
-                              value: spot.isActive,
-                              onChanged: (value) => _toggleSpotActive(spot),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.calendar_today),
+                                  onPressed: spot.isActive
+                                      ? () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  ManageAvailabilityScreen(spot: spot),
+                                            ),
+                                          );
+                                        }
+                                      : null,
+                                  tooltip: 'Manage Availability',
+                                ),
+                                Switch(
+                                  value: spot.isActive,
+                                  onChanged: (value) => _toggleSpotActive(spot),
+                                ),
+                              ],
                             ),
                           ),
                         );

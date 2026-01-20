@@ -1,9 +1,11 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/booking_request.dart';
 import '../models/parking_spot.dart';
+import '../services/parking_spot_service.dart';
 
 class BookingService {
   final SupabaseClient _supabase = Supabase.instance.client;
+  final _spotService = ParkingSpotService();
 
   // Create booking request via Edge Function
   Future<BookingRequest> createBookingRequest({
@@ -123,7 +125,11 @@ class BookingService {
   }
 
   // Get available parking spots in building
-  Future<List<ParkingSpot>> getAvailableSpots() async {
+  // Optionally filter by time period to show only spots available during that time
+  Future<List<ParkingSpot>> getAvailableSpots({
+    DateTime? startTime,
+    DateTime? endTime,
+  }) async {
     final user = _supabase.auth.currentUser;
     if (user == null) throw Exception('Not authenticated');
 
@@ -143,6 +149,24 @@ class BookingService {
         .eq('is_active', true)
         .neq('resident_id', user.id); // Exclude user's own spots
 
-    return (response as List).map((json) => ParkingSpot.fromJson(json)).toList();
+    final allSpots = (response as List).map((json) => ParkingSpot.fromJson(json)).toList();
+
+    // If time period is specified, filter by availability
+    if (startTime != null && endTime != null) {
+      final availableSpots = <ParkingSpot>[];
+      for (final spot in allSpots) {
+        final isAvailable = await _spotService.isSpotAvailable(
+          spotId: spot.id,
+          startTime: startTime,
+          endTime: endTime,
+        );
+        if (isAvailable) {
+          availableSpots.add(spot);
+        }
+      }
+      return availableSpots;
+    }
+
+    return allSpots;
   }
 }

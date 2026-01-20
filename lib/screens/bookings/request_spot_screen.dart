@@ -37,7 +37,11 @@ class _RequestSpotScreenState extends State<RequestSpotScreen> {
     });
 
     try {
-      final spots = await _bookingService.getAvailableSpots();
+      // If start and end times are selected, filter spots by availability
+      final spots = await _bookingService.getAvailableSpots(
+        startTime: _startTime,
+        endTime: _endTime,
+      );
       setState(() {
         _availableSpots = spots;
         _isLoading = false;
@@ -47,6 +51,13 @@ class _RequestSpotScreenState extends State<RequestSpotScreen> {
         _isLoading = false;
         _errorMessage = 'Error loading spots: $e';
       });
+    }
+  }
+
+  // Reload spots when time changes
+  void _onTimeChanged() {
+    if (_startTime != null && _endTime != null) {
+      _loadAvailableSpots();
     }
   }
 
@@ -78,7 +89,9 @@ class _RequestSpotScreenState extends State<RequestSpotScreen> {
             time.hour,
             time.minute,
           );
+          _endTime = null; // Reset end time when start time changes
         });
+        _onTimeChanged();
       }
     }
   }
@@ -129,6 +142,7 @@ class _RequestSpotScreenState extends State<RequestSpotScreen> {
         setState(() {
           _endTime = endTime;
         });
+        _onTimeChanged();
       }
     }
   }

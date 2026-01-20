@@ -29,14 +29,20 @@ class AuthService {
     final user = currentUser;
     if (user == null) return null;
 
-    final response = await _supabase
-        .from('profiles')
-        .select()
-        .eq('id', user.id)
-        .maybeSingle();
+    try {
+      final response = await _supabase
+          .from('profiles')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
 
-    if (response == null) return null;
-    return Profile.fromJson(response);
+      if (response == null) return null;
+      return Profile.fromJson(response);
+    } catch (e) {
+      // If profile doesn't exist or there's an error, return null
+      // This allows new users to proceed to join-building screen
+      return null;
+    }
   }
 
   // Sign out

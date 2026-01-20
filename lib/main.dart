@@ -132,7 +132,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
       await _navigateBasedOnProfile();
     } else if (state.event == AuthChangeEvent.signedOut) {
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/auth');
+        // Use pushNamedAndRemoveUntil to clear navigation stack
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/auth',
+          (route) => false,
+        );
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -143,9 +150,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
       if (!mounted) return;
 
+      // New user or no profile - go to join building
       if (profile == null) {
         Navigator.of(context).pushReplacementNamed('/join-building');
-      } else if (profile.buildingId == null) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      // User has profile - navigate based on status
+      if (profile.buildingId == null) {
         Navigator.of(context).pushReplacementNamed('/join-building');
       } else if (profile.status == ProfileStatus.pending) {
         Navigator.of(context).pushReplacementNamed('/pending-approval');
@@ -154,11 +171,29 @@ class _AuthWrapperState extends State<AuthWrapper> {
       } else {
         Navigator.of(context).pushReplacementNamed('/join-building');
       }
-    } catch (e) {
+      
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/auth');
+        setState(() {
+          _isLoading = false;
+        });
       }
-    } finally {
+    } catch (e) {
+      debugPrint('Error navigating based on profile: $e');
+      // Only navigate back to auth if there's a real error (not just missing profile)
+      // Check if user is still authenticated
+      final user = _authService.currentUser;
+      if (user == null) {
+        // User is not authenticated, go to auth
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/auth');
+        }
+      } else {
+        // User is authenticated but profile fetch failed - try join building
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/join-building');
+        }
+      }
+      
       if (mounted) {
         setState(() {
           _isLoading = false;
