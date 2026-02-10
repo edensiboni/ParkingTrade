@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { sendPushToUser } from '../_shared/fcm.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -153,8 +154,13 @@ serve(async (req) => {
       )
     }
 
-    // TODO: Send push notification to lender
-    // This would typically use Supabase's notification system or an external service
+    await sendPushToUser(
+      supabaseClient,
+      spot.resident_id,
+      'New booking request',
+      'Someone requested your parking spot.',
+      { booking_id: bookingRequest.id, type: 'booking_request' }
+    )
 
     return new Response(
       JSON.stringify({ 

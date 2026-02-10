@@ -1,11 +1,15 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+// Web entry point. Optional Firebase web config enables browser push (FCM).
+// Use: flutter run -d chrome -t lib/main_web.dart
+//      flutter build web -t lib/main_web.dart
+
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'config/firebase_options_web.dart';
 import 'config/supabase_config.dart';
-import 'firebase_initializer_stub.dart' if (dart.library.io) 'firebase_initializer.dart' as firebase_init;
 import 'services/auth_service.dart';
-import 'services/notification_service_stub.dart' if (dart.library.io) 'services/notification_service.dart';
+import 'services/notification_service_web.dart';
 import 'screens/auth/phone_auth_screen.dart';
 import 'screens/building/join_building_screen.dart';
 import 'screens/building/pending_approval_screen.dart';
@@ -14,51 +18,29 @@ import 'models/profile.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  debugPrint('### MAIN STARTED ###');
-  debugPrint('### TIME: ${DateTime.now().toIso8601String()} ###');
+  debugPrint('### MAIN STARTED (web) ###');
 
-  // Initialize Firebase only on mobile (push notifications not supported on web)
-  if (!kIsWeb) {
-    try {
-      await firebase_init.initializeFirebase();
-    } catch (e) {
-      debugPrint('Warning: Firebase initialization failed: $e');
-      debugPrint(
-        'Push notifications may not work. Make sure GoogleService-Info.plist (iOS) and google-services.json (Android) are configured.',
-      );
-    }
-  }
-
-  // Initialize Supabase
   if (!SupabaseConfig.isConfigured) {
     throw Exception(
-      'Supabase configuration is missing. Please set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.',
+      'Supabase configuration is missing. Please set SUPABASE_URL and SUPABASE_ANON_KEY (e.g. via --dart-define).',
     );
   }
 
-  // ✅ DEBUG: Print Supabase configuration being used at runtime
   final supabaseUrl = SupabaseConfig.supabaseUrl;
   final supabaseAnonKey = SupabaseConfig.supabaseAnonKey;
-
-  debugPrint('================ Supabase Runtime Config ================');
-  debugPrint('SUPABASE_URL = $supabaseUrl');
-  debugPrint(
-    'SUPABASE_ANON_KEY starts with = ${supabaseAnonKey.isNotEmpty ? supabaseAnonKey.substring(0, 12) : "EMPTY"}',
-  );
-  debugPrint('========================================================');
+  debugPrint('Supabase URL = $supabaseUrl');
 
   await Supabase.initialize(
     url: supabaseUrl,
     anonKey: supabaseAnonKey,
   );
 
-  // Initialize notification service only on mobile (not supported on web)
-  if (!kIsWeb) {
+  if (FirebaseOptionsWeb.isConfigured) {
     try {
-      final notificationService = NotificationService();
-      await notificationService.initialize();
+      await Firebase.initializeApp(options: FirebaseOptionsWeb.options);
+      await WebNotificationService().initialize();
     } catch (e) {
-      debugPrint('Warning: Notification service initialization failed: $e');
+      debugPrint('Firebase/Web push init failed: $e');
     }
   }
 
@@ -123,7 +105,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       await _navigateBasedOnProfile();
     } else if (state.event == AuthChangeEvent.signedOut) {
       if (mounted) {
-        // Use pushNamedAndRemoveUntil to clear navigation stack
         Navigator.of(context).pushNamedAndRemoveUntil(
           '/auth',
           (route) => false,
@@ -141,18 +122,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
       if (!mounted) return;
 
-      // New user or no profile - go to join building
       if (profile == null) {
         Navigator.of(context).pushReplacementNamed('/join-building');
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
-      // User has profile - navigate based on status
       if (profile.buildingId == null) {
         Navigator.of(context).pushReplacementNamed('/join-building');
       } else if (profile.status == ProfileStatus.pending) {
@@ -162,34 +137,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
       } else {
         Navigator.of(context).pushReplacementNamed('/join-building');
       }
-      
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+
+      if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       debugPrint('Error navigating based on profile: $e');
-      // Only navigate back to auth if there's a real error (not just missing profile)
-      // Check if user is still authenticated
       final user = _authService.currentUser;
-      if (user == null) {
-        // User is not authenticated, go to auth
-        if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/auth');
-        }
-      } else {
-        // User is authenticated but profile fetch failed - try join building
-        if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/join-building');
-        }
+      if (user == null && mounted) {
+        Navigator.of(context).pushReplacementNamed('/auth');
+      } else if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/join-building');
       }
-      
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -200,7 +158,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
-
     return const PhoneAuthScreen();
   }
 }

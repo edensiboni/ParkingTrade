@@ -1,0 +1,10 @@
+---
+description: Update specs.md for implementations; do not create separate .md files per feature
+alwaysApply: true
+---
+
+# Project documentation
+
+- **Single source of truth**: All product, setup, and implementation details live in **specs.md** at the project root.
+- When you implement or change a feature, **update specs.md** accordingly (new sections, revised steps, new migrations, env vars, etc.).
+- **Do not** create separate markdown files per feature or implementation (e.g. no `FEATURE_NAME.md`, `SETUP_WEB.md`). Keep everything in specs.md.
