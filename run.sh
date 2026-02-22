@@ -14,21 +14,23 @@ fi
 
 echo "✓ Flutter found"
 
-# Check for Supabase credentials
-if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+# Check for Supabase credentials (support both PUBLISHABLE_KEY and ANON_KEY for backward compatibility)
+if [ -z "$SUPABASE_URL" ] || ([ -z "$SUPABASE_PUBLISHABLE_KEY" ] && [ -z "$SUPABASE_ANON_KEY" ]); then
     echo ""
     echo "⚠️  Supabase credentials not set as environment variables"
     echo "   You can either:"
     echo "   1. Set environment variables:"
     echo "      export SUPABASE_URL='your-url'"
-    echo "      export SUPABASE_ANON_KEY='your-key'"
+    echo "      export SUPABASE_PUBLISHABLE_KEY='your-publishable-key'  # Preferred"
+    echo "      # or export SUPABASE_ANON_KEY='your-publishable-key'  # Legacy, still works"
     echo "   2. Or pass them as arguments:"
-    echo "      ./run.sh your-url your-key"
+    echo "      ./run.sh your-url your-publishable-key"
     echo ""
     
     if [ $# -eq 2 ]; then
         SUPABASE_URL=$1
-        SUPABASE_ANON_KEY=$2
+        SUPABASE_PUBLISHABLE_KEY=$2
+        SUPABASE_ANON_KEY=$2  # Also set for backward compatibility
         echo "✓ Using provided credentials"
     else
         echo "❌ Missing Supabase credentials"
@@ -37,6 +39,10 @@ if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
     fi
 else
     echo "✓ Supabase credentials found in environment"
+    # Use PUBLISHABLE_KEY if set, otherwise fall back to ANON_KEY
+    if [ -z "$SUPABASE_PUBLISHABLE_KEY" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+        SUPABASE_PUBLISHABLE_KEY="$SUPABASE_ANON_KEY"
+    fi
 fi
 
 # Install dependencies
@@ -56,10 +62,11 @@ echo ""
 echo "Starting the app..."
 echo ""
 
-if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_PUBLISHABLE_KEY" ]; then
     flutter run \
         --dart-define=SUPABASE_URL="$SUPABASE_URL" \
-        --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+        --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY" \
+        --dart-define=SUPABASE_ANON_KEY="$SUPABASE_PUBLISHABLE_KEY"
 else
     flutter run
 fi

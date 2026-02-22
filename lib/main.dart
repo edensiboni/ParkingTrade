@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -32,24 +34,29 @@ void main() async {
   // Initialize Supabase
   if (!SupabaseConfig.isConfigured) {
     throw Exception(
-      'Supabase configuration is missing. Please set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.',
+      'Supabase configuration is missing. Please set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY for backward compatibility).',
     );
   }
 
   // ✅ DEBUG: Print Supabase configuration being used at runtime
   final supabaseUrl = SupabaseConfig.supabaseUrl;
-  final supabaseAnonKey = SupabaseConfig.supabaseAnonKey;
+  final supabasePublishableKey = SupabaseConfig.supabasePublishableKey;
 
   debugPrint('================ Supabase Runtime Config ================');
   debugPrint('SUPABASE_URL = $supabaseUrl');
   debugPrint(
-    'SUPABASE_ANON_KEY starts with = ${supabaseAnonKey.isNotEmpty ? supabaseAnonKey.substring(0, 12) : "EMPTY"}',
+    'SUPABASE_PUBLISHABLE_KEY starts with = ${supabasePublishableKey.isNotEmpty ? supabasePublishableKey.substring(0, 12) : "EMPTY"}',
   );
+  if (SupabaseConfig.isPlaceholder) {
+    debugPrint(
+      '⚠️ Using placeholder config. Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (e.g. .env + run_web.sh or --dart-define).',
+    );
+  }
   debugPrint('========================================================');
 
   await Supabase.initialize(
     url: supabaseUrl,
-    anonKey: supabaseAnonKey,
+    anonKey: supabasePublishableKey, // Supabase SDK still uses 'anonKey' parameter name
   );
 
   // Initialize notification service only on mobile (not supported on web)
@@ -97,14 +104,33 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final _authService = AuthService();
   bool _isLoading = true;
+  StreamSubscription<AuthState>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
     _checkAuth();
-    _authService.authStateChanges.listen((state) {
-      _handleAuthChange(state);
-    });
+    _authSubscription = _authService.authStateChanges.listen(
+      (state) {
+        // Handle async operation properly to avoid promise rejection
+        _handleAuthChange(state).catchError((error) {
+          if (mounted) {
+            debugPrint('Error handling auth change: $error');
+          }
+        });
+      },
+      onError: (error) {
+        if (mounted) {
+          debugPrint('Auth state stream error: $error');
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkAuth() async {

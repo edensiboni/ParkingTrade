@@ -23,10 +23,18 @@ class WebNotificationService {
         await _storeFcmTokenIfUser();
         _firebaseMessaging.onTokenRefresh.listen((token) {
           _currentToken = token;
-          _storeFcmTokenIfUser();
+          // Handle async operation properly
+          _storeFcmTokenIfUser().catchError((error) {
+            debugPrint('Error storing refreshed FCM token: $error');
+          });
         });
         FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-        _supabase.auth.onAuthStateChange.listen((_) => _storeFcmTokenIfUser());
+        _supabase.auth.onAuthStateChange.listen((_) {
+          // Handle async operation properly
+          _storeFcmTokenIfUser().catchError((error) {
+            debugPrint('Error storing FCM token on auth change: $error');
+          });
+        });
       }
     } catch (e) {
       debugPrint('WebNotificationService init failed: $e');

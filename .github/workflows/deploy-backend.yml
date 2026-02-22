@@ -1,0 +1,45 @@
+# Deploy Supabase migrations and Edge Functions.
+# Requires secrets: SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF
+# Optional: SUPABASE_DB_PASSWORD (if db push prompts for password)
+
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: true
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Push migrations
+        run: supabase db push --yes
+
+      - name: Deploy Edge Functions
+        run: |
+          for fn in join-building create-building approve-booking create-booking-request places-autocomplete; do
+            echo "Deploying $fn..."
+            supabase functions deploy "$fn"
+          done
+          echo "All Edge Functions deployed."

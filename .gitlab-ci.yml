@@ -1,0 +1,24 @@
+# Deploy Supabase migrations and Edge Functions.
+# Set CI/CD variables (masked): SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF
+# Optional: SUPABASE_DB_PASSWORD
+
+stages:
+  - deploy-backend
+
+deploy-backend:
+  stage: deploy-backend
+  image: node:20-bookworm-slim
+  before_script:
+    - npm install -g supabase
+    - supabase link --project-ref "${SUPABASE_PROJECT_REF}"
+  script:
+    - supabase db push --yes
+    - |
+      for fn in join-building create-building approve-booking create-booking-request; do
+        echo "Deploying $fn..."
+        supabase functions deploy "$fn"
+      done
+      echo "All Edge Functions deployed."
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - when: manual

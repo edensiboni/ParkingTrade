@@ -28,6 +28,7 @@
     - Realtime for chat and live updates.
   - Supabase Edge Functions (Deno + TypeScript) for transactional flows:
     - `join-building`
+    - `create-building` (create building, generate invite code, set creator as first member)
     - `create-booking-request`
     - `approve-booking`
   - Push notifications via Firebase:
@@ -41,7 +42,8 @@
 ### 3. Core Domains & Business Rules
 
 - **Buildings**
-  - Identified by invite codes (e.g. `TEST123`).
+  - Identified by invite codes (e.g. `TEST123`). Optional `address` (full formatted address from Places API) and `created_by_user_id` (user who created the building, for future owner/admin flows).
+  - Creation: buildings are created only via the `create-building` Edge Function (no client INSERT on `buildings`). The function generates a unique 6-character invite code and sets the creator as first member.
   - Flags:
     - `approval_required`:
       - `false`: users join and are immediately active.
@@ -100,22 +102,19 @@
 ### 4. User Flows (Happy Paths)
 
 - **Authentication & Onboarding**
-  - User enters phone number (E.164 format, e.g. `+1234567890`).
-  - App requests OTP via Supabase Auth (phone provider).
-  - User enters OTP, receives a session and is considered authenticated.
-  - An `AuthWrapper` listens to auth changes and:
-    - If no profile/building: routes to `Join Building`.
+  - Sign-in options (single auth screen):
+    - **Sign in with Google**: User taps "Continue with Google"; OAuth redirects to Google then back to the app; Supabase restores the session. On web, redirect URL must match the app origin (see §5.2 Google OAuth setup).
+    - **Sign in with Phone (OTP)**: User enters phone number (E.164 format, e.g. `+1234567890`). App requests OTP via Supabase Auth (phone provider). User enters OTP and is authenticated.
+  - After either method, the user has a session. An `AuthWrapper` listens to auth changes and:
+    - If no profile/building: routes to **Join or create building**.
     - If profile status is `pending`: routes to `Pending Approval`.
     - If `approved`: routes to `Home`.
 
-- **Join Building**
-  - User enters invite code (e.g. `TEST123`) and optional display name.
-  - If building exists and `approval_required = false`:
-    - Profile is created/updated with `building_id` and `status = 'approved'`.
-    - User is routed to parking spots.
-  - If `approval_required = true`:
-    - Profile `status = 'pending'`.
-    - User is routed to a pending screen until approved.
+- **Join or create building**
+  - Single "Your building" screen with two paths:
+    - **Join existing**: (A) "I have an invite code" – enter code and optional display name, then Join. (B) "Find my building" – search by name, tap a building to join (uses that building’s invite code). If building has `approval_required`, user is routed to pending until approved.
+    - **Create new**: "First here? Create your building." – enter building name or address (with optional address autocomplete from Google Places API if `PLACES_API_KEY` is set). Submit calls `create-building` Edge Function; app shows "Building created. Share this code: **XYZ123**" with copy button, then Continue to parking spots.
+  - After join or create: if `approval_required` and status `pending`, user is routed to Pending Approval; otherwise to parking spots (Home).
 
 - **Manage Parking Spots**
   - From spots screen:
@@ -175,7 +174,7 @@
 - **Project Dependencies**
   - From project root:
     - `flutter pub get`
-  - This pulls Flutter packages such as `supabase_flutter`, `provider`, `firebase_core`, `firebase_messaging`, `flutter_local_notifications`, `intl`, `uuid`, etc.
+  - This pulls Flutter packages such as `supabase_flutter`, `provider`, `firebase_core`, `firebase_messaging`, `flutter_local_notifications`, `intl`, `uuid`, `http`, etc.
 
 #### 5.2 Supabase
 
@@ -186,6 +185,7 @@
   - In Supabase Dashboard → SQL Editor:
     - Run `supabase/migrations/001_initial_schema.sql` in full.
     - Run `supabase/migrations/002_overlap_constraint.sql` in full.
+  - If you see **PGRST205** ("Could not find the table 'public.buildings'"), the database schema is missing: run the migrations above, then `003_fix_rls_recursion.sql`, `004_spot_availability_periods.sql`, `005_user_fcm_tokens.sql`, and `006_buildings_address_created_by.sql` in that order.
   - Alternative via CLI:
     - `npm install -g supabase`
     - `supabase login`
@@ -200,6 +200,8 @@
     - Apply `004_spot_availability_periods.sql` to create `spot_availability_periods` and related policies.
   - FCM token storage (for push to mobile and web):
     - Apply `005_user_fcm_tokens.sql` to create `user_fcm_tokens` (user_id, token, platform: ios | android | web) and RLS.
+  - Buildings address and creator (for create-building flow):
+    - Apply `006_buildings_address_created_by.sql` to add optional `address` and `created_by_user_id` to `buildings`.
 
 - **Create Test Building**
   - For local/testing flows:
@@ -209,11 +211,17 @@
     ```
   - This building is used by many guides and tests as the canonical example.
 
+- **Google OAuth setup (optional, for "Continue with Google")**
+  - In **Supabase Dashboard**: Authentication → Providers → enable **Google**. Add **Client ID** and **Client Secret** from Google Cloud Console. Under URL Configuration: set **Site URL** to the app origin (e.g. `https://yourdomain.com` or `http://localhost:PORT` for web dev). Add **Redirect URLs** to the allow list (e.g. `https://yourdomain.com/`, `http://localhost:PORT/`). Note the Supabase callback URL shown (e.g. `https://<project-ref>.supabase.co/auth/v1/callback`).
+  - In **Google Cloud Console**: Create OAuth 2.0 credentials (Web application for web; optionally Android/iOS for native). Under **Authorized JavaScript origins** add the app origin(s). Under **Authorized redirect URIs** add the Supabase callback URL from the dashboard.
+  - The Flutter app uses `signInWithOAuth(OAuthProvider.google, redirectTo: ...)`; on web it passes the current origin so Supabase redirects back to the app after consent.
+
 #### 5.3 Edge Functions
 
 - **When to Use**
   - Recommended for production for:
     - `join-building`
+    - `create-building`
     - `create-booking-request`
     - `approve-booking`
   - For simple local testing, the app can temporarily talk directly to tables without functions, but long‑term flows should go through Edge Functions.
@@ -224,8 +232,10 @@
   - Link project: `supabase link --project-ref <project-ref>`.
   - Deploy:
     - `supabase functions deploy join-building`
+    - `supabase functions deploy create-building`
     - `supabase functions deploy approve-booking`
     - `supabase functions deploy create-booking-request`
+    - `supabase functions deploy places-autocomplete` (for address autocomplete on web; set secret `PLACES_API_KEY`)
   - **Push (FCM)**: To send push from Edge Functions, set Supabase secrets from Firebase service account JSON: `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`. Then redeploy `create-booking-request` and `approve-booking`.
 
 #### 5.4 Flutter App Configuration
@@ -233,11 +243,19 @@
 - **Supabase Credentials**
   - At runtime, app needs:
     - `SUPABASE_URL` (e.g. `https://xxxxx.supabase.co`).
-    - `SUPABASE_ANON_KEY` (anon public key from Supabase API settings).
+    - `SUPABASE_PUBLISHABLE_KEY` (publishable key from Supabase Dashboard → Project Settings → API; formerly called "anon public key").
+    - `SUPABASE_ANON_KEY` is still supported for backward compatibility (maps to publishable key).
   - Options:
     - Pass as Dart defines:
-      - `flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...`
-    - Or set in `lib/config/supabase_config.dart` for development builds.
+      - `flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_PUBLISHABLE_KEY=...`
+      - Or use legacy: `--dart-define=SUPABASE_ANON_KEY=...` (still works)
+    - Or set in `.env` file (see §14 Web support) or `lib/config/supabase_config.dart` for development builds.
+
+- **Places API (address autocomplete when creating a building)**
+  - **Web:** The app calls the `places-autocomplete` Edge Function (no CORS; API key stays server-side). Set the Google API key as a Supabase secret: `supabase secrets set PLACES_API_KEY=your-google-key`, then deploy the function: `supabase functions deploy places-autocomplete`.
+  - **Mobile:** Set `PLACES_API_KEY` in `.env` or `--dart-define`; the app calls Google directly. See [.env.example](.env.example).
+  - In Google Cloud Console: enable **Places API** (Place Autocomplete). Create an API key. Without the key/function, create-building still works with plain text name/address.
+  - **Troubleshooting:** (1) Web: deploy `places-autocomplete` and set the secret. (2) Type at least 3 characters for suggestions. (3) Mobile: add PLACES_API_KEY to `.env` and run with a script that passes it.
 
 - **Firebase / Push Notifications**
   - Optional for basic testing; required for push features.
@@ -247,6 +265,20 @@
     - For iOS: add app, download `GoogleService-Info.plist` to `ios/Runner/`.
     - Enable Cloud Messaging.
   - For **web push**: add a Web app in the same Firebase project; pass web config via `--dart-define` (see §14) and configure `web/firebase-messaging-sw.js` with the same config for background push.
+
+#### 5.5 DevOps / Deployment
+
+- **First-time setup**
+  - Install [Supabase CLI](https://supabase.com/docs/guides/cli).
+  - Run `supabase login`.
+  - From repo root run `supabase link --project-ref <ref>` (get ref from Supabase Dashboard → Project Settings → General).
+  - For CI: add GitHub secrets `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_REF` (Settings → Secrets and variables → Actions). Optional: `SUPABASE_DB_PASSWORD` if `db push` prompts for it.
+- **Local**
+  - Run `./scripts/deploy-all.sh` to apply migrations and deploy Edge Functions (or run `./scripts/migrate.sh` then `./scripts/deploy-functions.sh`).
+  - Scripts require Supabase CLI and a linked project; they change to repo root and source `.env` if present.
+- **CI**
+  - **GitHub Actions:** Workflow [.github/workflows/deploy-backend.yml](.github/workflows/deploy-backend.yml) runs on push to `main` and on manual trigger. It runs migrations then deploys the Edge Functions (join-building, create-building, approve-booking, create-booking-request, places-autocomplete). Uses concurrency so overlapping runs cancel.
+  - **GitLab (optional):** [.gitlab-ci.yml](.gitlab-ci.yml) mirrors the same steps; set CI/CD variables (masked) `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_REF`.
 
 ### 6. Dart & Flutter Conventions
 
@@ -374,8 +406,11 @@
 
 - **Key Manual Scenarios**
   - Authentication:
-    - Valid login: phone → OTP → building join screen.
+    - **Google (web)**: "Continue with Google" → redirect to Google → sign in → redirect back to app → join building or home.
+    - **Google (mobile)**: Same flow; ensure redirect URL in Supabase allow list matches app scheme/origin if using deep links.
+    - **Phone OTP**: "Sign in with Phone" → enter phone → Send OTP → enter OTP → building join or home.
     - Invalid OTP: shows clear error.
+    - Sign out: both providers use same sign-out; user can sign back in with either method.
   - Building join:
     - Valid code (`TEST123`): routes to spots.
     - Invalid code: shows “invalid invite code”.
@@ -501,13 +536,18 @@
   - Verify device: `flutter devices` (expect `Chrome (web)`). If `web/` is missing: `flutter create . --platforms=web`.
 
 - **Run locally**
-  - Use the web entry point and Supabase credentials:
-    - `flutter run -d chrome -t lib/main_web.dart --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY`
-  - Web server: `flutter run -d web-server -t lib/main_web.dart --web-port=8080 --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...` then open http://localhost:8080.
+  - Default placeholder credentials (same as `.env.example`) are built into `lib/config/supabase_config.dart`, so `./run_web.sh` or `./restart_web.sh` start the app without any config. For real Supabase (auth, DB): create a `.env` (gitignored) from `.env.example` and set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY` for backward compatibility), or pass them as env/args.
+  - Or set env once: `export SUPABASE_URL='...'` and `export SUPABASE_PUBLISHABLE_KEY='...'` (or `SUPABASE_ANON_KEY='...'`), then `./run_web.sh` (port 8081 by default; set `WEB_PORT` to override).
+  - Or pass as arguments: `./run_web.sh "https://YOUR_PROJECT.supabase.co" "your-publishable-key"`.
+  - Restart: `./restart_web.sh` (same .env / env / args as `run_web.sh`).
+  - Manual: `flutter run -d web-server -t lib/main_web.dart --web-port=8080 --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_PUBLISHABLE_KEY=...` then open http://localhost:8080.
+  - Chrome device: `flutter run -d chrome -t lib/main_web.dart --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_PUBLISHABLE_KEY=...`
+  - Get URL and publishable key from: Supabase Dashboard → Project Settings → API (look for "Publishable key", formerly called "anon public key").
 
 - **Build for production**
-  - `flutter build web -t lib/main_web.dart --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...`
+  - `flutter build web -t lib/main_web.dart --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_PUBLISHABLE_KEY=...` (or `--dart-define=SUPABASE_ANON_KEY=...` for backward compatibility)
   - Output: `build/web/`. Deploy to any static host (Vercel, Netlify, Firebase Hosting, Supabase Storage). Do not commit production keys; use CI/CD secrets for `--dart-define`.
+  - **Base path**: Keep `web/index.html` with `<base href="$FLUTTER_BASE_HREF">`. Flutter replaces it at build time (default `/` for root). For a subpath (e.g. `example.com/app/`), add `--base-href=/app/` to the build command.
 
 - **Web push (optional)**
   - Use the same Firebase project; add a **Web app** in Firebase Console and copy config (apiKey, appId, projectId, messagingSenderId).

@@ -2,6 +2,9 @@
 // Use: flutter run -d chrome -t lib/main_web.dart
 //      flutter build web -t lib/main_web.dart
 
+import 'dart:async';
+import 'dart:ui' show PlatformDispatcher;
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -17,34 +20,72 @@ import 'screens/spots/parking_spots_screen.dart';
 import 'models/profile.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  debugPrint('### MAIN STARTED (web) ###');
+  // Set up error handlers to catch and display errors
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint('FlutterError: ${details.exception}');
+    debugPrint('Stack: ${details.stack}');
+  };
 
-  if (!SupabaseConfig.isConfigured) {
-    throw Exception(
-      'Supabase configuration is missing. Please set SUPABASE_URL and SUPABASE_ANON_KEY (e.g. via --dart-define).',
-    );
-  }
+  // Handle async errors
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('PlatformDispatcher error: $error');
+    debugPrint('Stack: $stack');
+    return true;
+  };
 
-  final supabaseUrl = SupabaseConfig.supabaseUrl;
-  final supabaseAnonKey = SupabaseConfig.supabaseAnonKey;
-  debugPrint('Supabase URL = $supabaseUrl');
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
+    debugPrint('### MAIN STARTED (web) ###');
 
-  await Supabase.initialize(
-    url: supabaseUrl,
-    anonKey: supabaseAnonKey,
-  );
-
-  if (FirebaseOptionsWeb.isConfigured) {
-    try {
-      await Firebase.initializeApp(options: FirebaseOptionsWeb.options);
-      await WebNotificationService().initialize();
-    } catch (e) {
-      debugPrint('Firebase/Web push init failed: $e');
+    if (!SupabaseConfig.isConfigured) {
+      runApp(ErrorApp(
+        'Supabase configuration is missing.\n\n'
+        'Please set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY\n'
+        '(or SUPABASE_ANON_KEY for backward compatibility)\n'
+        'via .env + run_web.sh or --dart-define.',
+      ));
+      return;
     }
-  }
 
-  runApp(const ParkingTradeApp());
+    final supabaseUrl = SupabaseConfig.supabaseUrl;
+    final supabasePublishableKey = SupabaseConfig.supabasePublishableKey;
+    debugPrint('Supabase URL = $supabaseUrl');
+    if (SupabaseConfig.isPlaceholder) {
+      debugPrint(
+        '⚠️ Using placeholder Supabase config. Edit .env with real URL and publishable key (Supabase Dashboard → Project Settings → API).',
+      );
+    }
+
+    try {
+      await Supabase.initialize(
+        url: supabaseUrl,
+        anonKey: supabasePublishableKey, // Supabase SDK still uses 'anonKey' parameter name
+      );
+    } catch (e) {
+      runApp(ErrorApp(
+        'Failed to initialize Supabase:\n\n$e\n\n'
+        'Please check your SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY.',
+      ));
+      return;
+    }
+
+    if (FirebaseOptionsWeb.isConfigured) {
+      try {
+        await Firebase.initializeApp(options: FirebaseOptionsWeb.options);
+        await WebNotificationService().initialize();
+      } catch (e) {
+        debugPrint('Firebase/Web push init failed: $e');
+        // Continue even if Firebase fails - it's optional
+      }
+    }
+
+    runApp(const ParkingTradeApp());
+  } catch (e, stackTrace) {
+    debugPrint('Fatal error in main: $e');
+    debugPrint('Stack: $stackTrace');
+    runApp(ErrorApp('Fatal error:\n\n$e'));
+  }
 }
 
 class ParkingTradeApp extends StatelessWidget {
@@ -69,6 +110,54 @@ class ParkingTradeApp extends StatelessWidget {
   }
 }
 
+class ErrorApp extends StatelessWidget {
+  final String message;
+
+  const ErrorApp(this.message, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Parking Trade - Error',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.red),
+        useMaterial3: true,
+      ),
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: Colors.red,
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Configuration Error',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
@@ -79,14 +168,33 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final _authService = AuthService();
   bool _isLoading = true;
+  StreamSubscription<AuthState>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
     _checkAuth();
-    _authService.authStateChanges.listen((state) {
-      _handleAuthChange(state);
-    });
+    _authSubscription = _authService.authStateChanges.listen(
+      (state) {
+        // Handle async operation properly to avoid promise rejection
+        _handleAuthChange(state).catchError((error) {
+          if (mounted) {
+            debugPrint('Error handling auth change: $error');
+          }
+        });
+      },
+      onError: (error) {
+        if (mounted) {
+          debugPrint('Auth state stream error: $error');
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkAuth() async {

@@ -40,7 +40,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString();
+        // Clean up error message - remove "Exception: " prefix if present
+        String errorMsg = e.toString();
+        errorMsg = errorMsg.replaceAll('Exception: ', '');
+        _errorMessage = errorMsg;
         _isLoading = false;
       });
     }
@@ -80,6 +83,24 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     }
   }
 
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await _authService.signInWithGoogle();
+      // On web, browser redirects away; on mobile, auth state will update. Don't reset loading here.
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceAll('Exception: ', '');
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -90,34 +111,77 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (!_isOtpSent) ...[
-                TextFormField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number',
-                    hintText: '+1234567890',
-                    prefixIcon: Icon(Icons.phone),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!_isOtpSent) ...[
+                  OutlinedButton.icon(
+                    onPressed: _isLoading ? null : _signInWithGoogle,
+                    icon: const Icon(Icons.g_mobiledata, size: 24),
+                    label: const Text('Continue with Google'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your phone number';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _sendOtp,
-                  child: _isLoading
-                      ? const CircularProgressIndicator()
-                      : const Text('Send OTP'),
-                ),
-              ] else ...[
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(child: Divider(color: Theme.of(context).colorScheme.outline)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'or',
+                          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        ),
+                      ),
+                      Expanded(child: Divider(color: Theme.of(context).colorScheme.outline)),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Sign in with Phone',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone Number',
+                      hintText: '+1234567890',
+                      prefixIcon: Icon(Icons.phone),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your phone number';
+                      }
+                      // Validate E.164 format (must start with +)
+                      final trimmed = value.trim();
+                      if (!trimmed.startsWith('+')) {
+                        return 'Phone number must start with + (e.g., +1234567890)';
+                      }
+                      // Basic E.164 validation: + followed by 1-15 digits
+                      final phoneRegex = RegExp(r'^\+\d{1,15}$');
+                      if (!phoneRegex.hasMatch(trimmed)) {
+                        return 'Invalid phone format. Use E.164 format: +1234567890';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _sendOtp,
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Send OTP'),
+                  ),
+                ] else ...[
                 const Text(
                   'Enter the OTP sent to your phone',
                   style: TextStyle(fontSize: 16),
@@ -136,7 +200,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 ElevatedButton(
                   onPressed: _isLoading ? null : _verifyOtp,
                   child: _isLoading
-                      ? const CircularProgressIndicator()
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : const Text('Verify OTP'),
                 ),
                 const SizedBox(height: 16),
@@ -159,6 +227,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 ),
               ],
             ],
+            ),
           ),
         ),
       ),
