@@ -110,6 +110,12 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     }
 
     try {
+      // Debug: Print what we're about to save
+      print('📅 Creating availability period:');
+      print('   Local time: ${startDateTime.toLocal()} to ${endDateTime.toLocal()}');
+      print('   UTC time: ${startDateTime.toUtc()} to ${endDateTime.toUtc()}');
+      print('   ISO string: ${startDateTime.toIso8601String()} to ${endDateTime.toIso8601String()}');
+      
       await _spotService.addAvailabilityPeriod(
         spotId: widget.spot.id,
         startTime: startDateTime,

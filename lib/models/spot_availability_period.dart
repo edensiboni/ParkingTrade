@@ -42,7 +42,19 @@ class SpotAvailabilityPeriod {
   }
 
   // Check if a requested time period overlaps with this availability period
+  // Two periods overlap if: start1 < end2 AND end1 > start2
+  // Also handle exact boundary matches (if requested starts exactly when period ends, no overlap)
   bool overlapsWith(DateTime requestedStart, DateTime requestedEnd) {
-    return requestedStart.isBefore(endTime) && requestedEnd.isAfter(startTime);
+    // Normalize to UTC for comparison (Supabase stores in UTC)
+    final periodStartUtc = startTime.toUtc();
+    final periodEndUtc = endTime.toUtc();
+    final requestedStartUtc = requestedStart.toUtc();
+    final requestedEndUtc = requestedEnd.toUtc();
+    
+    // Overlap check: requestedStart < periodEnd AND requestedEnd > periodStart
+    final overlaps = requestedStartUtc.isBefore(periodEndUtc) && 
+                     requestedEndUtc.isAfter(periodStartUtc);
+    
+    return overlaps;
   }
 }

@@ -7,26 +7,140 @@ class BookingService {
   final SupabaseClient _supabase = Supabase.instance.client;
   final _spotService = ParkingSpotService();
 
-  // Create booking request via Edge Function
+  // Create booking request (direct database access - no edge function required)
   Future<BookingRequest> createBookingRequest({
     required String spotId,
     required DateTime startTime,
     required DateTime endTime,
   }) async {
-    final response = await _supabase.functions.invoke(
-      'create-booking-request',
-      body: {
-        'spot_id': spotId,
-        'start_time': startTime.toIso8601String(),
-        'end_time': endTime.toIso8601String(),
-      },
-    );
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw Exception('Not authenticated');
 
-    if (response.status != 200) {
-      throw Exception(response.data['error'] ?? 'Failed to create booking request');
+    // Get borrower profile
+    final borrowerProfileResponse = await _supabase
+        .from('profiles')
+        .select('id, building_id, status')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    if (borrowerProfileResponse == null) {
+      throw Exception('Borrower profile not found');
     }
 
-    return BookingRequest.fromJson(response.data['booking']);
+    final borrowerProfile = borrowerProfileResponse;
+    final buildingId = borrowerProfile['building_id'] as String?;
+    
+    if (buildingId == null || borrowerProfile['status'] != 'approved') {
+      throw Exception('Borrower must be an approved member of a building');
+    }
+
+    // Get parking spot
+    final spotResponse = await _supabase
+        .from('parking_spots')
+        .select('id, resident_id, building_id, is_active')
+        .eq('id', spotId)
+        .maybeSingle();
+
+    if (spotResponse == null) {
+      throw Exception('Parking spot not found');
+    }
+
+    final spot = spotResponse;
+    if (!spot['is_active']) {
+      throw Exception('Parking spot is not active');
+    }
+
+    // Verify same building
+    if (spot['building_id'] != buildingId) {
+      throw Exception('Borrower and spot must be in the same building');
+    }
+
+    // Prevent self-booking
+    if (spot['resident_id'] == user.id) {
+      throw Exception('Cannot request your own parking spot');
+    }
+
+    // Check for overlapping APPROVED bookings (partial bookings allowed - only approved bookings block)
+    // This allows multiple pending bookings and partial bookings of the same availability period
+    // Two bookings overlap if: start1 < end2 AND end1 > start2
+    // We need to check: startTime < existing.end AND endTime > existing.start
+    try {
+      final allApprovedBookings = await _supabase
+          .from('booking_requests')
+          .select('start_time, end_time')
+          .eq('spot_id', spotId)
+          .eq('status', 'approved');
+
+      // Check for overlaps manually
+      if (allApprovedBookings.isNotEmpty) {
+        for (final booking in allApprovedBookings) {
+          final existingStart = DateTime.parse(booking['start_time'] as String);
+          final existingEnd = DateTime.parse(booking['end_time'] as String);
+          
+          // Check if time ranges overlap
+          if (startTime.isBefore(existingEnd) && endTime.isAfter(existingStart)) {
+            throw Exception('This time slot overlaps with an existing approved booking');
+          }
+        }
+      }
+    } catch (e) {
+      // If overlap check fails, rethrow
+      if (e.toString().contains('overlaps')) {
+        rethrow;
+      }
+      // Otherwise, log but continue (might be RLS issue, but we'll try insert anyway)
+      print('Warning: Could not check for overlapping bookings: $e');
+    }
+
+    // Create booking request
+    // CRITICAL FIX: Treat the input DateTime as "naive" local time
+    // and convert it to UTC explicitly, same as availability periods
+    final localStart = startTime.toLocal();
+    final localEnd = endTime.toLocal();
+    
+    // Create UTC DateTime with the same date/time components
+    // This ensures the date doesn't shift when stored
+    final utcStart = DateTime.utc(
+      localStart.year,
+      localStart.month,
+      localStart.day,
+      localStart.hour,
+      localStart.minute,
+    );
+    final utcEnd = DateTime.utc(
+      localEnd.year,
+      localEnd.month,
+      localEnd.day,
+      localEnd.hour,
+      localEnd.minute,
+    );
+    
+    try {
+      final response = await _supabase
+        .from('booking_requests')
+        .insert({
+          'spot_id': spotId,
+          'borrower_id': user.id,
+          'lender_id': spot['resident_id'],
+          'start_time': utcStart.toIso8601String(),
+          'end_time': utcEnd.toIso8601String(),
+          'status': 'pending',
+        })
+        .select()
+        .single();
+
+      return BookingRequest.fromJson(response);
+    } catch (e) {
+      // Provide more detailed error message
+      final errorMessage = e.toString();
+      if (errorMessage.contains('permission') || errorMessage.contains('policy')) {
+        throw Exception('Permission denied. Please check your account status.');
+      } else if (errorMessage.contains('overlap') || errorMessage.contains('constraint')) {
+        throw Exception('This time slot overlaps with an existing approved booking');
+      } else {
+        throw Exception('Failed to create booking: ${errorMessage.replaceAll('Exception: ', '')}');
+      }
+    }
   }
 
   // Approve or reject booking via Edge Function

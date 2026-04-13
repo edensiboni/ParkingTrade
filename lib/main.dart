@@ -4,8 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'config/supabase_config.dart';
+import 'config/dev_auth_config.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
+import 'screens/auth/dev_auth_screen.dart';
 import 'screens/auth/phone_auth_screen.dart';
 import 'screens/building/join_building_screen.dart';
 import 'screens/building/pending_approval_screen.dart';
@@ -87,7 +89,9 @@ class ParkingTradeApp extends StatelessWidget {
       ),
       home: const AuthWrapper(),
       routes: {
-        '/auth': (context) => const PhoneAuthScreen(),
+        '/auth': (context) => DevAuthConfig.isEnabled
+            ? const DevAuthScreen()
+            : const PhoneAuthScreen(),
         '/join-building': (context) => const JoinBuildingScreen(),
         '/pending-approval': (context) => const PendingApprovalScreen(),
         '/home': (context) => const ParkingSpotsScreen(),
@@ -210,6 +214,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
 
-    return const PhoneAuthScreen();
+    return DevAuthConfig.isEnabled ? const DevAuthScreen() : const PhoneAuthScreen();
   }
 }

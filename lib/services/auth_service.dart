@@ -15,6 +15,18 @@ class AuthService {
     );
   }
 
+  // Dev/testing sign-in (email/password) to bypass OTP.
+  // Only used when `DEV_AUTH_ENABLED=true`.
+  Future<AuthResponse> signInWithEmailPassword({
+    required String email,
+    required String password,
+  }) async {
+    return await _supabase.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+  }
+
   // Verify OTP
   Future<AuthResponse> verifyOtp(String phone, String token) async {
     return await _supabase.auth.verifyOTP(
