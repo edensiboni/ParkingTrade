@@ -1,12 +1,14 @@
+import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+
 import 'config/supabase_config.dart';
 import 'config/dev_auth_config.dart';
+import 'firebase_initializer_stub.dart' if (dart.library.io) 'firebase_initializer.dart' as firebase_init;
 import 'services/auth_service.dart';
-import 'services/notification_service.dart';
+import 'services/notification_service_stub.dart' if (dart.library.io) 'services/notification_service.dart';
 import 'screens/auth/dev_auth_screen.dart';
 import 'screens/auth/phone_auth_screen.dart';
 import 'screens/building/join_building_screen.dart';
@@ -14,63 +16,59 @@ import 'screens/building/pending_approval_screen.dart';
 import 'screens/spots/parking_spots_screen.dart';
 import 'models/profile.dart';
 
-
-
-// Background message handler (must be top-level)
-@pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  // Handle background message
-}
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  print('### MAIN STARTED ###');
-  print('### TIME: ${DateTime.now().toIso8601String()} ###');
+  debugPrint('### MAIN STARTED ###');
+  debugPrint('### TIME: ${DateTime.now().toIso8601String()} ###');
 
-
-
-  // Initialize Firebase (handle missing config files gracefully)
-  try {
-    await Firebase.initializeApp();
-    // Initialize Firebase Messaging background handler
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  } catch (e) {
-    debugPrint('Warning: Firebase initialization failed: $e');
-    debugPrint(
-      'Push notifications may not work. Make sure GoogleService-Info.plist (iOS) and google-services.json (Android) are configured.',
-    );
+  // Initialize Firebase only on mobile (push notifications not supported on web)
+  if (!kIsWeb) {
+    try {
+      await firebase_init.initializeFirebase();
+    } catch (e) {
+      debugPrint('Warning: Firebase initialization failed: $e');
+      debugPrint(
+        'Push notifications may not work. Make sure GoogleService-Info.plist (iOS) and google-services.json (Android) are configured.',
+      );
+    }
   }
 
   // Initialize Supabase
   if (!SupabaseConfig.isConfigured) {
     throw Exception(
-      'Supabase configuration is missing. Please set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.',
+      'Supabase configuration is missing. Please set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY for backward compatibility).',
     );
   }
 
   // ✅ DEBUG: Print Supabase configuration being used at runtime
   final supabaseUrl = SupabaseConfig.supabaseUrl;
-  final supabaseAnonKey = SupabaseConfig.supabaseAnonKey;
+  final supabasePublishableKey = SupabaseConfig.supabasePublishableKey;
 
   debugPrint('================ Supabase Runtime Config ================');
   debugPrint('SUPABASE_URL = $supabaseUrl');
   debugPrint(
-    'SUPABASE_ANON_KEY starts with = ${supabaseAnonKey.isNotEmpty ? supabaseAnonKey.substring(0, 12) : "EMPTY"}',
+    'SUPABASE_PUBLISHABLE_KEY starts with = ${supabasePublishableKey.isNotEmpty ? supabasePublishableKey.substring(0, 12) : "EMPTY"}',
   );
+  if (SupabaseConfig.isPlaceholder) {
+    debugPrint(
+      '⚠️ Using placeholder config. Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (e.g. .env + run_web.sh or --dart-define).',
+    );
+  }
   debugPrint('========================================================');
 
   await Supabase.initialize(
     url: supabaseUrl,
-    anonKey: supabaseAnonKey,
+    anonKey: supabasePublishableKey, // Supabase SDK still uses 'anonKey' parameter name
   );
 
-  // Initialize notification service (may fail if Firebase is not configured)
-  try {
-    final notificationService = NotificationService();
-    await notificationService.initialize();
-  } catch (e) {
-    debugPrint('Warning: Notification service initialization failed: $e');
+  // Initialize notification service only on mobile (not supported on web)
+  if (!kIsWeb) {
+    try {
+      final notificationService = NotificationService();
+      await notificationService.initialize();
+    } catch (e) {
+      debugPrint('Warning: Notification service initialization failed: $e');
+    }
   }
 
   runApp(const ParkingTradeApp());
@@ -110,14 +108,33 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final _authService = AuthService();
   bool _isLoading = true;
+  StreamSubscription<AuthState>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
     _checkAuth();
-    _authService.authStateChanges.listen((state) {
-      _handleAuthChange(state);
-    });
+    _authSubscription = _authService.authStateChanges.listen(
+      (state) {
+        // Handle async operation properly to avoid promise rejection
+        _handleAuthChange(state).catchError((error) {
+          if (mounted) {
+            debugPrint('Error handling auth change: $error');
+          }
+        });
+      },
+      onError: (error) {
+        if (mounted) {
+          debugPrint('Auth state stream error: $error');
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkAuth() async {

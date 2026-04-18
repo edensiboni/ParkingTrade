@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { sendPushToUser } from '../_shared/fcm.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -131,8 +132,15 @@ serve(async (req) => {
       )
     }
 
-    // TODO: Send push notification to borrower when approved
-    // This would typically use Supabase's notification system or an external service
+    if (action === 'approve') {
+      await sendPushToUser(
+        supabaseClient,
+        booking.borrower_id,
+        'Booking approved',
+        'Your parking spot request was approved.',
+        { booking_id: booking_id, type: 'booking_approved' }
+      )
+    }
 
     return new Response(
       JSON.stringify({ 
