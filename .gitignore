@@ -57,3 +57,6 @@ ios/Runner/GoogleService-Info.plist
 .supabase/
 
 supabase/.temp/
+
+# Firebase Hosting local cache
+.firebase/

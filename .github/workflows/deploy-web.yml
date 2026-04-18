@@ -1,0 +1,106 @@
+# Build Flutter web and deploy to Firebase Hosting.
+#
+# Required GitHub secrets:
+#   FIREBASE_SERVICE_ACCOUNT       - JSON contents of a Firebase service account with
+#                                    the "Firebase Hosting Admin" role. Create via:
+#                                    Firebase Console -> Project settings -> Service accounts -> Generate new private key.
+#   FIREBASE_PROJECT_ID            - Firebase project ID (e.g. "parking-trade-xxxxx").
+#   SUPABASE_URL                   - https://<ref>.supabase.co
+#   SUPABASE_PUBLISHABLE_KEY       - Supabase publishable (anon) key.
+#
+# Optional GitHub secrets:
+#   PLACES_API_KEY                 - Google Places API key (for address autocomplete).
+#   FIREBASE_WEB_API_KEY           - Firebase Web API key (for FCM on web).
+#   FIREBASE_WEB_APP_ID            - Firebase Web app ID.
+#   FIREBASE_WEB_PROJECT_ID        - Firebase project ID used by the web app (often same as FIREBASE_PROJECT_ID).
+#   FIREBASE_WEB_MESSAGING_SENDER_ID
+#   FIREBASE_WEB_AUTH_DOMAIN
+#   FIREBASE_WEB_STORAGE_BUCKET
+#
+# Behavior:
+#   - Push to main: waits for the "CI" workflow to succeed, then deploys to the live channel.
+#   - Pull request:  builds and deploys to a temporary preview channel (expires in 7 days).
+
+name: Deploy web
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    # For push-to-main (workflow_run), only run if CI passed.
+    # For PRs and manual dispatch, always run.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # For workflow_run triggers, check out the commit that CI ran against.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build web
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
+          FIREBASE_WEB_API_KEY: ${{ secrets.FIREBASE_WEB_API_KEY }}
+          FIREBASE_WEB_APP_ID: ${{ secrets.FIREBASE_WEB_APP_ID }}
+          FIREBASE_WEB_PROJECT_ID: ${{ secrets.FIREBASE_WEB_PROJECT_ID }}
+          FIREBASE_WEB_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_WEB_MESSAGING_SENDER_ID }}
+          FIREBASE_WEB_AUTH_DOMAIN: ${{ secrets.FIREBASE_WEB_AUTH_DOMAIN }}
+          FIREBASE_WEB_STORAGE_BUCKET: ${{ secrets.FIREBASE_WEB_STORAGE_BUCKET }}
+        run: |
+          flutter build web \
+            --release \
+            -t lib/main_web.dart \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_PUBLISHABLE_KEY" \
+            --dart-define=PLACES_API_KEY="$PLACES_API_KEY" \
+            --dart-define=FIREBASE_WEB_API_KEY="$FIREBASE_WEB_API_KEY" \
+            --dart-define=FIREBASE_WEB_APP_ID="$FIREBASE_WEB_APP_ID" \
+            --dart-define=FIREBASE_WEB_PROJECT_ID="$FIREBASE_WEB_PROJECT_ID" \
+            --dart-define=FIREBASE_WEB_MESSAGING_SENDER_ID="$FIREBASE_WEB_MESSAGING_SENDER_ID" \
+            --dart-define=FIREBASE_WEB_AUTH_DOMAIN="$FIREBASE_WEB_AUTH_DOMAIN" \
+            --dart-define=FIREBASE_WEB_STORAGE_BUCKET="$FIREBASE_WEB_STORAGE_BUCKET"
+
+      - name: Deploy to Firebase Hosting (live)
+        if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
+          channelId: live
+
+      - name: Deploy to Firebase Hosting (preview)
+        if: github.event_name == 'pull_request'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
+          expires: 7d

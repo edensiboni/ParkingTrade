@@ -148,11 +148,37 @@ supabase stop
 
 ## CI/CD
 
-GitHub Actions workflow at `.github/workflows/ci.yml` runs on pushes to `main` and `feature/**`:
-- Flutter analyze
-- Flutter test
+GitHub Actions workflows in `.github/workflows/`:
 
-To extend CI for deployment, add build + deploy steps for Android/iOS and `supabase functions deploy`.
+- **`ci.yml`** — runs `flutter analyze` + `flutter test` on pushes to `main` and `feature/**`, and on PRs.
+- **`deploy-backend.yml`** — on push to `main`, pushes Supabase migrations and deploys Edge Functions.
+- **`deploy-web.yml`** — builds Flutter web (entry point `lib/main_web.dart`) and deploys to Firebase Hosting. On push to `main` it waits for CI to pass, then deploys to the live channel. On PRs it deploys a 7-day preview channel.
+
+### Required GitHub secrets (repo settings → Secrets → Actions)
+
+Backend (already set): `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF`.
+
+Web deploy — add these:
+- `FIREBASE_SERVICE_ACCOUNT` — full JSON of a service account with the "Firebase Hosting Admin" role.
+- `FIREBASE_PROJECT_ID` — Firebase project ID.
+- `SUPABASE_URL` — same value as in `.env`.
+- `SUPABASE_PUBLISHABLE_KEY` — Supabase publishable/anon key.
+- `PLACES_API_KEY` *(optional)* — Google Places API key.
+- `FIREBASE_WEB_*` *(optional, for web push)* — `FIREBASE_WEB_API_KEY`, `FIREBASE_WEB_APP_ID`, `FIREBASE_WEB_PROJECT_ID`, `FIREBASE_WEB_MESSAGING_SENDER_ID`, `FIREBASE_WEB_AUTH_DOMAIN`, `FIREBASE_WEB_STORAGE_BUCKET`.
+
+### One-time Firebase Hosting setup (local)
+
+```bash
+npm install -g firebase-tools
+firebase login
+firebase projects:create parking-trade   # or reuse one from `firebase projects:list`
+# Edit .firebaserc and replace REPLACE_WITH_FIREBASE_PROJECT_ID with the project id.
+
+# Sanity-check a deploy locally
+flutter build web --release -t lib/main_web.dart \
+  --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_PUBLISHABLE_KEY=...
+firebase deploy --only hosting
+```
 
 ## Common Issues
 
