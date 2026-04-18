@@ -34,7 +34,7 @@ jobs:
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
       - name: Push migrations
-        run: supabase db push --yes
+        run: supabase db push --include-all --yes
 
       - name: Deploy Edge Functions
         run: |
