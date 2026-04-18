@@ -4,7 +4,7 @@ import '../models/parking_spot.dart';
 import '../models/spot_availability_period.dart';
 
 class ParkingSpotService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  SupabaseClient get _supabase => Supabase.instance.client;
 
   // Get user's parking spots
   Future<List<ParkingSpot>> getUserSpots() async {
