@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../config/places_config.dart';
 import '../../models/building.dart';
 import '../../services/address_autocomplete_service.dart';
 import '../../services/auth_service.dart';
