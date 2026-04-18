@@ -2,6 +2,7 @@ class Profile {
   final String id;
   final String? buildingId;
   final ProfileStatus status;
+  final String role;
   final String? displayName;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -10,16 +11,20 @@ class Profile {
     required this.id,
     this.buildingId,
     required this.status,
+    this.role = 'member',
     this.displayName,
     required this.createdAt,
     required this.updatedAt,
   });
+
+  bool get isAdmin => role == 'admin';
 
   factory Profile.fromJson(Map<String, dynamic> json) {
     return Profile(
       id: json['id'] as String,
       buildingId: json['building_id'] as String?,
       status: ProfileStatus.fromString(json['status'] as String),
+      role: (json['role'] as String?) ?? 'member',
       displayName: json['display_name'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
@@ -31,6 +36,7 @@ class Profile {
       'id': id,
       'building_id': buildingId,
       'status': status.toString(),
+      'role': role,
       'display_name': displayName,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),

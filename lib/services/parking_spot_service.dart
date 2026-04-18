@@ -467,8 +467,87 @@ class ParkingSpotService {
     
     // Sort by start time
     availableSlots.sort((a, b) => a['start']!.compareTo(b['start']!));
-    
+
     return availableSlots;
+  }
+
+  /// Expand a list of availability periods into concrete `{start, end}` instances
+  /// falling within `[rangeStart, rangeEnd)`.
+  ///
+  /// Non-recurring periods are returned as-is if they overlap the range.
+  /// Recurring periods are expanded according to `recurringPattern`:
+  /// - `daily`: every day
+  /// - `weekly`: same weekday each week
+  /// - `weekdays`: Monday through Friday
+  /// - `weekends`: Saturday and Sunday
+  ///
+  /// An instance is included if it overlaps `[rangeStart, rangeEnd)`.
+  List<Map<String, DateTime>> expandRecurringPeriods(
+    List<SpotAvailabilityPeriod> periods,
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) {
+    final result = <Map<String, DateTime>>[];
+
+    bool overlapsRange(DateTime start, DateTime end) {
+      return start.isBefore(rangeEnd) && end.isAfter(rangeStart);
+    }
+
+    for (final period in periods) {
+      if (!period.isRecurring) {
+        if (overlapsRange(period.startTime, period.endTime)) {
+          result.add({'start': period.startTime, 'end': period.endTime});
+        }
+        continue;
+      }
+
+      final pattern = period.recurringPattern ?? 'weekly';
+      final duration = period.endTime.difference(period.startTime);
+
+      // Iterate day by day from the period's start date up to rangeEnd,
+      // anchored to the period's original start time-of-day.
+      var cursor = DateTime.utc(
+        period.startTime.year,
+        period.startTime.month,
+        period.startTime.day,
+        period.startTime.hour,
+        period.startTime.minute,
+        period.startTime.second,
+      );
+
+      while (!cursor.isAfter(rangeEnd)) {
+        final weekday = cursor.weekday;
+        bool include = false;
+        switch (pattern) {
+          case 'daily':
+            include = true;
+            break;
+          case 'weekly':
+            include = weekday == period.startTime.weekday;
+            break;
+          case 'weekdays':
+            include = weekday >= DateTime.monday && weekday <= DateTime.friday;
+            break;
+          case 'weekends':
+            include = weekday == DateTime.saturday || weekday == DateTime.sunday;
+            break;
+          default:
+            include = weekday == period.startTime.weekday;
+        }
+
+        if (include) {
+          final instanceStart = cursor;
+          final instanceEnd = cursor.add(duration);
+          if (overlapsRange(instanceStart, instanceEnd)) {
+            result.add({'start': instanceStart, 'end': instanceEnd});
+          }
+        }
+
+        cursor = cursor.add(const Duration(days: 1));
+      }
+    }
+
+    return result;
   }
 }
 
