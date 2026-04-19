@@ -4,7 +4,11 @@ import '../models/message.dart';
 class ChatService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  // Send a message
+  // Send a message via the send-chat-message edge function.
+  //
+  // The edge function enforces that the sender is a participant in the
+  // booking and triggers a push notification to the other party. Realtime
+  // subscriptions still deliver the inserted row to any open chat view.
   Future<Message> sendMessage({
     required String bookingId,
     required String content,
@@ -12,17 +16,23 @@ class ChatService {
     final user = _supabase.auth.currentUser;
     if (user == null) throw Exception('Not authenticated');
 
-    final response = await _supabase
-        .from('messages')
-        .insert({
-          'booking_id': bookingId,
-          'sender_id': user.id,
-          'content': content,
-        })
-        .select()
-        .single();
+    final response = await _supabase.functions.invoke(
+      'send-chat-message',
+      body: {
+        'booking_id': bookingId,
+        'content': content,
+      },
+    );
 
-    return Message.fromJson(response);
+    if (response.status != 200) {
+      final data = response.data;
+      final error = (data is Map && data['error'] != null)
+          ? data['error'].toString()
+          : 'Failed to send message';
+      throw Exception(error);
+    }
+
+    return Message.fromJson(response.data['message']);
   }
 
   // Get messages for a booking

@@ -1,9 +1,13 @@
+import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'navigation_service.dart';
 
 class NotificationService {
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
@@ -49,8 +53,17 @@ class NotificationService {
       // Handle foreground messages
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
 
-      // Handle background messages (configured in main.dart)
+      // Handle tap when the app is in the background.
       FirebaseMessaging.onMessageOpenedApp.listen(_handleBackgroundMessageTap);
+
+      // Handle tap that launched the app from a terminated state. Defer until
+      // after the first frame so the navigator key is attached.
+      final initialMessage = await _firebaseMessaging.getInitialMessage();
+      if (initialMessage != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _handleBackgroundMessageTap(initialMessage);
+        });
+      }
     }
   }
 
@@ -82,8 +95,7 @@ class NotificationService {
 
   // Handle background message tap
   void _handleBackgroundMessageTap(RemoteMessage message) {
-    // Navigate to relevant screen based on message data
-    // This would typically use a navigation service
+    handleNotificationTap(Map<String, dynamic>.from(message.data));
   }
 
   // Show local notification
@@ -109,14 +121,22 @@ class NotificationService {
       title: message.notification?.title ?? 'Parking Trade',
       body: message.notification?.body ?? '',
       notificationDetails: notificationDetails,
-      payload: message.data.toString(),
+      payload: jsonEncode(message.data),
     );
   }
 
-  // Handle notification tap
+  // Handle notification tap (foreground local notification).
   void _onNotificationTapped(NotificationResponse response) {
-    // Navigate to relevant screen based on payload
-    // This would typically use a navigation service
+    final payload = response.payload;
+    if (payload == null || payload.isEmpty) return;
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is Map) {
+        handleNotificationTap(Map<String, dynamic>.from(decoded));
+      }
+    } catch (e) {
+      debugPrint('Failed to parse notification payload: $e');
+    }
   }
 
 }

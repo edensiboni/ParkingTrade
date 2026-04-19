@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/parking_spot_service.dart';
@@ -136,6 +138,223 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     }
   }
 
+  Future<void> _showAddSheet() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.event),
+                title: const Text('One-time availability'),
+                subtitle: const Text('Specific date and time range'),
+                onTap: () => Navigator.of(context).pop('once'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.event_repeat),
+                title: const Text('Weekly recurring'),
+                subtitle: const Text('Same days and hours every week'),
+                onTap: () => Navigator.of(context).pop('weekly'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted || choice == null) return;
+    if (choice == 'once') {
+      await _addAvailabilityPeriod();
+    } else if (choice == 'weekly') {
+      await _addRecurringPeriod();
+    }
+  }
+
+  Future<void> _addRecurringPeriod() async {
+    // Pick start date (first occurrence anchor).
+    final now = DateTime.now();
+    final startDate = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (startDate == null || !mounted) return;
+
+    // Pick start time-of-day.
+    final startTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+    if (startTime == null || !mounted) return;
+
+    // Pick end time-of-day.
+    final endTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: (startTime.hour + 1) % 24,
+        minute: startTime.minute,
+      ),
+    );
+    if (endTime == null || !mounted) return;
+
+    // Pick weekdays.
+    final days = await _pickWeekdays(startDate.weekday);
+    if (!mounted || days == null || days.isEmpty) return;
+
+    // Build start/end DateTimes on the anchor date.
+    final anchor = DateTime(
+      startDate.year,
+      startDate.month,
+      startDate.day,
+      startTime.hour,
+      startTime.minute,
+    );
+    var endAnchor = DateTime(
+      startDate.year,
+      startDate.month,
+      startDate.day,
+      endTime.hour,
+      endTime.minute,
+    );
+    if (!endAnchor.isAfter(anchor)) {
+      // Treat as same-day window that wraps — bump end to next day.
+      endAnchor = endAnchor.add(const Duration(days: 1));
+    }
+
+    final pattern = jsonEncode({
+      'type': 'weekly',
+      'days': days.toList()..sort(),
+    });
+
+    try {
+      await _spotService.addAvailabilityPeriod(
+        spotId: widget.spot.id,
+        startTime: anchor,
+        endTime: endAnchor,
+        isRecurring: true,
+        recurringPattern: pattern,
+      );
+      _loadPeriods();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Recurring availability added')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  Future<Set<String>?> _pickWeekdays(int defaultWeekday) async {
+    const labels = <String, String>{
+      'MON': 'Mon',
+      'TUE': 'Tue',
+      'WED': 'Wed',
+      'THU': 'Thu',
+      'FRI': 'Fri',
+      'SAT': 'Sat',
+      'SUN': 'Sun',
+    };
+    const weekdayToCode = <int, String>{
+      DateTime.monday: 'MON',
+      DateTime.tuesday: 'TUE',
+      DateTime.wednesday: 'WED',
+      DateTime.thursday: 'THU',
+      DateTime.friday: 'FRI',
+      DateTime.saturday: 'SAT',
+      DateTime.sunday: 'SUN',
+    };
+
+    final selected = <String>{weekdayToCode[defaultWeekday] ?? 'MON'};
+
+    return showDialog<Set<String>>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) => AlertDialog(
+            title: const Text('Repeat on'),
+            content: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: labels.entries.map((entry) {
+                final isSelected = selected.contains(entry.key);
+                return FilterChip(
+                  label: Text(entry.value),
+                  selected: isSelected,
+                  onSelected: (v) {
+                    setStateDialog(() {
+                      if (v) {
+                        selected.add(entry.key);
+                      } else {
+                        selected.remove(entry.key);
+                      }
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: selected.isEmpty
+                    ? null
+                    : () => Navigator.of(context).pop(selected),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _describeRecurrence(SpotAvailabilityPeriod period) {
+    if (!period.isRecurring) return '';
+    final raw = period.recurringPattern ?? '';
+    final trimmed = raw.trim();
+    if (trimmed.startsWith('{')) {
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is Map) {
+          final type = decoded['type']?.toString() ?? 'weekly';
+          if (type == 'weekly') {
+            final daysRaw = decoded['days'];
+            if (daysRaw is List && daysRaw.isNotEmpty) {
+              const labels = <String, String>{
+                'MON': 'Mon',
+                'TUE': 'Tue',
+                'WED': 'Wed',
+                'THU': 'Thu',
+                'FRI': 'Fri',
+                'SAT': 'Sat',
+                'SUN': 'Sun',
+              };
+              final days = daysRaw
+                  .map((d) => labels[d.toString().toUpperCase()] ?? d.toString())
+                  .join(', ');
+              return 'Weekly · $days';
+            }
+            return 'Weekly';
+          }
+          return 'Repeats: $type';
+        }
+      } catch (_) {
+        // Fall through to raw pattern.
+      }
+    }
+    return 'Repeats: $raw';
+  }
+
   Future<void> _deletePeriod(SpotAvailabilityPeriod period) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -238,19 +457,25 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
                       itemCount: _periods.length,
                       itemBuilder: (context, index) {
                         final period = _periods[index];
+                        final title = period.isRecurring
+                            ? '${DateFormat('HH:mm').format(period.startTime)} – ${DateFormat('HH:mm').format(period.endTime)}'
+                            : '${DateFormat('MMM dd, yyyy HH:mm').format(period.startTime)} - ${DateFormat('MMM dd, yyyy HH:mm').format(period.endTime)}';
+                        final recurrence = _describeRecurrence(period);
+                        final durationLabel = _formatDuration(period.startTime, period.endTime);
+                        final subtitle = recurrence.isEmpty
+                            ? durationLabel
+                            : '$recurrence · $durationLabel';
                         return Card(
                           margin: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 8,
                           ),
                           child: ListTile(
-                            leading: const Icon(Icons.access_time),
-                            title: Text(
-                              '${DateFormat('MMM dd, yyyy HH:mm').format(period.startTime)} - ${DateFormat('MMM dd, yyyy HH:mm').format(period.endTime)}',
+                            leading: Icon(
+                              period.isRecurring ? Icons.event_repeat : Icons.access_time,
                             ),
-                            subtitle: Text(
-                              _formatDuration(period.startTime, period.endTime),
-                            ),
+                            title: Text(title),
+                            subtitle: Text(subtitle),
                             trailing: IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
                               onPressed: () => _deletePeriod(period),
@@ -263,7 +488,7 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
               ],
             ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _addAvailabilityPeriod,
+        onPressed: _showAddSheet,
         child: const Icon(Icons.add),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,

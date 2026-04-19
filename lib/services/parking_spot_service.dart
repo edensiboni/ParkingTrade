@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/parking_spot.dart';
@@ -225,27 +227,25 @@ class ParkingSpotService {
     debugPrint('📅 Requested (UTC): ${requestedStartUtc.toIso8601String()} to ${requestedEndUtc.toIso8601String()}');
     debugPrint('📋 Found ${periods.length} availability periods');
 
-    // Check if requested time overlaps with any availability period
-    for (final period in periods) {
-      final periodStartUtc = period.startTime.toUtc();
-      final periodEndUtc = period.endTime.toUtc();
-      
-      debugPrint('  ⏰ Period (UTC): ${periodStartUtc.toIso8601String()} to ${periodEndUtc.toIso8601String()}');
-      debugPrint('  📆 Period dates: ${periodStartUtc.year}-${periodStartUtc.month.toString().padLeft(2, '0')}-${periodStartUtc.day.toString().padLeft(2, '0')} ${periodStartUtc.hour.toString().padLeft(2, '0')}:${periodStartUtc.minute.toString().padLeft(2, '0')} to ${periodEndUtc.year}-${periodEndUtc.month.toString().padLeft(2, '0')}-${periodEndUtc.day.toString().padLeft(2, '0')} ${periodEndUtc.hour.toString().padLeft(2, '0')}:${periodEndUtc.minute.toString().padLeft(2, '0')}');
-      debugPrint('  📆 Requested dates: ${requestedStartUtc.year}-${requestedStartUtc.month.toString().padLeft(2, '0')}-${requestedStartUtc.day.toString().padLeft(2, '0')} ${requestedStartUtc.hour.toString().padLeft(2, '0')}:${requestedStartUtc.minute.toString().padLeft(2, '0')} to ${requestedEndUtc.year}-${requestedEndUtc.month.toString().padLeft(2, '0')}-${requestedEndUtc.day.toString().padLeft(2, '0')} ${requestedEndUtc.hour.toString().padLeft(2, '0')}:${requestedEndUtc.minute.toString().padLeft(2, '0')}');
-      
-      // Use the normalized UTC times for comparison
-      // Note: We're comparing UTC times that were created from local times
-      // by treating the local date/time components as UTC
-      final overlaps = requestedStartUtc.isBefore(periodEndUtc) && 
-                       requestedEndUtc.isAfter(periodStartUtc);
-      
-      // Also show raw comparison for debugging
-      debugPrint('  🔄 Overlap check:');
-      debugPrint('     ${requestedStartUtc.toIso8601String()} < ${periodEndUtc.toIso8601String()} = ${requestedStartUtc.isBefore(periodEndUtc)}');
-      debugPrint('     ${requestedEndUtc.toIso8601String()} > ${periodStartUtc.toIso8601String()} = ${requestedEndUtc.isAfter(periodStartUtc)}');
-      debugPrint('     Result: $overlaps');
-      
+    // Expand recurring periods into concrete instances within the requested
+    // window (one day of slack on each side handles requests that straddle
+    // midnight from a recurring period that started just before/after).
+    final expansionStart = requestedStartUtc.subtract(const Duration(days: 1));
+    final expansionEnd = requestedEndUtc.add(const Duration(days: 1));
+    final instances = expandRecurringPeriods(periods, expansionStart, expansionEnd);
+
+    debugPrint(
+      '📋 Expanded into ${instances.length} concrete instances within ${expansionStart.toIso8601String()} – ${expansionEnd.toIso8601String()}',
+    );
+
+    // Check if requested time overlaps with any concrete instance
+    for (final instance in instances) {
+      final periodStartUtc = instance['start']!.toUtc();
+      final periodEndUtc = instance['end']!.toUtc();
+
+      final overlaps = requestedStartUtc.isBefore(periodEndUtc) &&
+          requestedEndUtc.isAfter(periodStartUtc);
+
       if (overlaps) {
         debugPrint('  ✅ Period overlaps! Checking for approved bookings...');
         
@@ -254,12 +254,16 @@ class ParkingSpotService {
         // Pending bookings also block to prevent double-booking
         final user = _supabase.auth.currentUser;
         if (user != null) {
-          // Check for overlapping approved and pending bookings manually
+          // Check for overlapping approved and pending bookings.
+          // Narrow server-side to bookings that could possibly overlap the
+          // requested window: end_time > requestedStart AND start_time < requestedEnd.
           final allBookings = await _supabase
               .from('booking_requests')
               .select('start_time, end_time, status')
               .eq('spot_id', spotId)
-              .inFilter('status', ['approved', 'pending']);
+              .inFilter('status', ['approved', 'pending'])
+              .gt('end_time', requestedStartUtc.toIso8601String())
+              .lt('start_time', requestedEndUtc.toIso8601String());
 
           bool hasBlockingBooking = false;
           if (allBookings.isNotEmpty) {
@@ -343,14 +347,15 @@ class ParkingSpotService {
     // Get all availability periods for this spot
     final periods = await getAvailabilityPeriods(spotId);
     
-    // Get all approved AND pending bookings for this spot
-    // Pending bookings should also be considered to prevent double-booking
-    // We'll get both and treat them the same way for availability calculation
+    // Get approved AND pending bookings that could overlap the search window.
+    // Pending bookings should also be considered to prevent double-booking.
     final allBookings = await _supabase
         .from('booking_requests')
         .select('start_time, end_time, status')
         .eq('spot_id', spotId)
-        .inFilter('status', ['approved', 'pending']);
+        .inFilter('status', ['approved', 'pending'])
+        .gt('end_time', searchStartUtc.toIso8601String())
+        .lt('start_time', searchEndUtc.toIso8601String());
     
     // Filter to only bookings that overlap with search range
     final relevantBookings = (allBookings as List).where((booking) {
@@ -407,13 +412,16 @@ class ParkingSpotService {
       });
     }
 
-    // Calculate available slots by subtracting bookings from periods
+    // Calculate available slots by subtracting bookings from periods.
+    // First expand recurring periods into concrete instances within the
+    // search window, so `weekly` / `weekdays` / etc. are respected.
     final availableSlots = <Map<String, DateTime>>[];
-    
-    for (final period in periods) {
-      final periodStartUtc = period.startTime.toUtc();
-      final periodEndUtc = period.endTime.toUtc();
-      
+    final instances = expandRecurringPeriods(periods, searchStartUtc, searchEndUtc);
+
+    for (final instance in instances) {
+      final periodStartUtc = instance['start']!.toUtc();
+      final periodEndUtc = instance['end']!.toUtc();
+
       // Skip periods outside search range
       if (periodEndUtc.isBefore(searchStartUtc) || periodStartUtc.isAfter(searchEndUtc)) {
         continue;
@@ -476,10 +484,10 @@ class ParkingSpotService {
   ///
   /// Non-recurring periods are returned as-is if they overlap the range.
   /// Recurring periods are expanded according to `recurringPattern`:
-  /// - `daily`: every day
-  /// - `weekly`: same weekday each week
-  /// - `weekdays`: Monday through Friday
-  /// - `weekends`: Saturday and Sunday
+  /// - keyword strings: `daily`, `weekly`, `weekdays`, `weekends`
+  /// - JSON object: `{"type":"weekly","days":["MON","WED","FRI"],"until":"2026-12-31T00:00:00Z"}`
+  ///   - `days` is optional; if absent, defaults to the original weekday
+  ///   - `until` is optional; if absent, recurs indefinitely
   ///
   /// An instance is included if it overlaps `[rangeStart, rangeEnd)`.
   List<Map<String, DateTime>> expandRecurringPeriods(
@@ -487,6 +495,16 @@ class ParkingSpotService {
     DateTime rangeStart,
     DateTime rangeEnd,
   ) {
+    const dayNameToWeekday = <String, int>{
+      'MON': DateTime.monday,
+      'TUE': DateTime.tuesday,
+      'WED': DateTime.wednesday,
+      'THU': DateTime.thursday,
+      'FRI': DateTime.friday,
+      'SAT': DateTime.saturday,
+      'SUN': DateTime.sunday,
+    };
+
     final result = <Map<String, DateTime>>[];
 
     bool overlapsRange(DateTime start, DateTime end) {
@@ -501,8 +519,36 @@ class ParkingSpotService {
         continue;
       }
 
-      final pattern = period.recurringPattern ?? 'weekly';
+      final patternRaw = period.recurringPattern ?? 'weekly';
       final duration = period.endTime.difference(period.startTime);
+
+      // Try to parse as JSON; fall back to legacy keyword string.
+      String type = patternRaw;
+      Set<int>? days;
+      DateTime? until;
+
+      final trimmed = patternRaw.trim();
+      if (trimmed.startsWith('{')) {
+        try {
+          final decoded = jsonDecode(trimmed);
+          if (decoded is Map) {
+            type = (decoded['type'] as String?) ?? 'weekly';
+            final daysRaw = decoded['days'];
+            if (daysRaw is List && daysRaw.isNotEmpty) {
+              days = daysRaw
+                  .map((d) => dayNameToWeekday[d.toString().toUpperCase()])
+                  .whereType<int>()
+                  .toSet();
+            }
+            final untilRaw = decoded['until'];
+            if (untilRaw is String && untilRaw.isNotEmpty) {
+              until = DateTime.tryParse(untilRaw);
+            }
+          }
+        } catch (_) {
+          // Malformed JSON — fall through with raw string as type.
+        }
+      }
 
       // Iterate day by day from the period's start date up to rangeEnd,
       // anchored to the period's original start time-of-day.
@@ -515,15 +561,19 @@ class ParkingSpotService {
         period.startTime.second,
       );
 
-      while (!cursor.isAfter(rangeEnd)) {
+      final hardStop = until != null && until.isBefore(rangeEnd) ? until : rangeEnd;
+
+      while (!cursor.isAfter(hardStop)) {
         final weekday = cursor.weekday;
         bool include = false;
-        switch (pattern) {
+        switch (type) {
           case 'daily':
             include = true;
             break;
           case 'weekly':
-            include = weekday == period.startTime.weekday;
+            include = days != null
+                ? days.contains(weekday)
+                : weekday == period.startTime.weekday;
             break;
           case 'weekdays':
             include = weekday >= DateTime.monday && weekday <= DateTime.friday;

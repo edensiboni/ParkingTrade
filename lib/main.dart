@@ -8,6 +8,7 @@ import 'config/supabase_config.dart';
 import 'config/dev_auth_config.dart';
 import 'firebase_initializer_stub.dart' if (dart.library.io) 'firebase_initializer.dart' as firebase_init;
 import 'services/auth_service.dart';
+import 'services/navigation_service.dart';
 import 'services/notification_service_stub.dart' if (dart.library.io) 'services/notification_service.dart';
 import 'screens/auth/dev_auth_screen.dart';
 import 'screens/auth/phone_auth_screen.dart';
@@ -81,6 +82,7 @@ class ParkingTradeApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Parking Trade',
+      navigatorKey: rootNavigatorKey,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,

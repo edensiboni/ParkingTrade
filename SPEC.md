@@ -79,9 +79,15 @@ Capabilities:
 
 ### 3.4 Building Admin
 
-Currently **not implemented as a first-class in-app role**.
+Implemented as a first-class in-app role via `profiles.role = 'admin'` (migration `006_building_admin_role.sql`). The first user to join a building that requires approval is auto-promoted to admin by the `join-building` edge function.
 
-Current behavior implies that someone must be able to approve or reject pending users, but there is no formal admin UI yet. Approval is currently assumed to happen manually or through future tooling.
+Capabilities:
+
+- View pending members in their building
+- Approve, reject, or revoke membership via the `manage-member` edge function
+- Actions are written to `admin_audit_log` (migration `009`)
+
+The admin UI lives in `AdminDashboardScreen` with two tabs: pending requests and all members.
 
 ## 4. High-Level Architecture
 
@@ -313,10 +319,7 @@ Users who joined a building that requires approval are routed to `PendingApprova
 - User is informed their account is awaiting approval
 - User can refresh status
 - User can sign out
-
-**Current limitation:**
-
-- No admin approval UI is implemented yet
+- A building admin can approve or reject the request from `AdminDashboardScreen`; the pending user receives a push notification when their status changes
 
 ### 7.4 Add and Manage Parking Spots
 
@@ -957,9 +960,10 @@ Push notifications are not required for core functionality, but are highly valua
 
 **Current state:**
 
-- Client scaffolding exists
-- FCM token persistence appears incomplete
-- Full push delivery pipeline is not yet implemented
+- FCM tokens are persisted in `user_fcm_tokens` (migration `011`) with per-device upsert on app start
+- Push sends use FCM HTTP v1 with a Firebase service account; helper in `supabase/functions/_shared/push.ts` caches the OAuth token
+- Push is sent on: new booking request (to lender), booking approved (to borrower), booking rejected (to borrower), new chat message (to the other participant), and membership status changes (to the member)
+- Notification taps deep-link into `BookingDetailScreen` or `ChatScreen` based on the payload's `type` field, handled via a global `navigatorKey`. Cold-start launches are also handled via `getInitialMessage()`.
 
 ## 15. Non-Functional Requirements
 
@@ -998,74 +1002,65 @@ The current architecture should support future additions such as:
 ### 16.1 Implemented or Substantially Present
 
 - Phone OTP authentication
-- Building join flow
-- Profile-based app routing
+- Building join flow (canonical path: `join-building` edge function)
+- Profile-based app routing, including a dedicated `RejectedScreen`
 - Parking spots CRUD
 - Active/inactive spot control
-- Availability periods
-- Booking request flow
-- Booking approval and rejection
-- Booking-scoped chat
+- Availability periods (one-time and weekly recurring)
+- Booking request flow (canonical path: `create-booking-request` edge function)
+- Booking approval and rejection (`approve-booking` edge function)
+- Booking-scoped chat (canonical path: `send-chat-message` edge function)
 - RLS-based access control
 - DB-level overlap prevention for approved bookings
+- Building admin role + admin dashboard (pending + all members, with revoke)
+- Admin audit log
+- FCM token persistence and server-side push for booking events, chat messages, and membership updates
+- Notification tap deep-linking to booking detail or chat
 
 ### 16.2 Partially Implemented
 
-- Available marketplace UX
-- Slot computation UX
-- Notification client scaffolding
-- Some backend flows split between direct DB access and edge functions
+- Available marketplace UX (two discovery flows coexist: time-first and spot-list)
+- Slot computation UX (works, but presentation could be richer)
 
 ### 16.3 Stubbed / TODO
 
-- Building admin role and approval UI
-- Persisting FCM tokens
-- Sending actual push notifications
-- Recurring availability behavior
-- Unified canonical backend path for all critical flows
-- Rejected-user experience definition
+- More advanced recurrence patterns beyond weekly (e.g. monthly, custom intervals, exceptions)
+- Calendar-style availability view
+- Deep linking into chat from push when the chat is the recipient's primary action (currently goes to booking detail first for non-chat events)
 
 ## 17. Known Gaps and Design Improvements
 
-### 17.1 Admin Approval Workflow
+### 17.1 Recurrence Depth
 
-Missing:
+Weekly recurrence is supported via a JSON pattern stored in `spot_availability_periods.recurring_pattern` (shape: `{"type":"weekly","days":["MON","WED"],"until":"ISO?"}`). Future extensions could include:
 
-- Building admin role
-- Admin dashboard
-- Pending user approval/rejection UI
-- Approval audit trail
+- monthly and custom-interval recurrences
+- recurrence exceptions / cancellations
+- a calendar-style availability UI
 
-### 17.2 Notification Pipeline
+### 17.2 Discovery UX
 
-Missing:
+Two discovery flows currently coexist (time-first and spot-list). A definitive product decision on the primary flow would simplify the UX and let the secondary flow be removed or demoted.
 
-- Token storage in backend
-- Event-driven push sends
-- Deep linking from notifications
+### 17.3 Admin Tooling Depth
 
-### 17.3 Backend Flow Consistency
+Current admin tooling covers membership. Future work could include:
 
-Needs standardization for:
+- moderation tools for booking disputes
+- spot-level admin actions (force-deactivate, transfer ownership)
+- building-level settings (rename, regenerate invite code) exposed in-app
 
-- building join flow
-- booking creation flow
+### 17.4 Chat Quality-of-Life
 
-### 17.4 Recurring Availability
+Potential improvements:
 
-Missing:
+- read receipts
+- typing indicators
+- unread-message badges rolled up to the home screen
 
-- recurrence UI
-- recurrence evaluation logic
-- recurring conflict handling
+### 17.5 Analytics / Observability
 
-### 17.5 Product UX Clarification
-
-Needs clearer product decisions around:
-
-- primary discovery flow
-- rejected user experience
-- admin operational model
+No user-facing analytics yet; worth adding event logging (booking created, approved, cancelled, chat sent) for product iteration.
 
 ## 18. Concise Product Summary
 
