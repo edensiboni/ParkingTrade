@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/admin_service.dart';
 import '../../services/parking_spot_service.dart';
 import '../../services/auth_service.dart';
 import '../../models/parking_spot.dart';
@@ -6,6 +7,7 @@ import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/status_chip.dart';
+import '../admin/admin_dashboard_screen.dart';
 import 'add_spot_screen.dart';
 import 'manage_availability_screen.dart';
 import '../bookings/bookings_screen.dart';
@@ -20,10 +22,13 @@ class ParkingSpotsScreen extends StatefulWidget {
 class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
   final _spotService = ParkingSpotService();
   final _authService = AuthService();
+  final _adminService = AdminService();
   List<ParkingSpot> _spots = [];
   bool _isLoading = true;
   String? _buildingId;
   String? _displayName;
+  bool _isAdmin = false;
+  int _pendingAdminCount = 0;
 
   @override
   void initState() {
@@ -37,6 +42,7 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
       final profile = await _authService.getCurrentProfile();
       _buildingId = profile?.buildingId;
       _displayName = profile?.displayName;
+      _isAdmin = profile?.isAdmin ?? false;
 
       final spots = await _spotService.getUserSpots();
       if (!mounted) return;
@@ -44,11 +50,34 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
         _spots = spots;
         _isLoading = false;
       });
+
+      // Best-effort pending count for admins — non-blocking.
+      if (_isAdmin) {
+        _refreshAdminPendingCount();
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
       AppSnack.error(context, 'Could not load spots: $e');
     }
+  }
+
+  Future<void> _refreshAdminPendingCount() async {
+    try {
+      final pending = await _adminService.getPendingMembers();
+      if (!mounted) return;
+      setState(() => _pendingAdminCount = pending.length);
+    } catch (_) {
+      // Silent — the main screen keeps loading.
+    }
+  }
+
+  Future<void> _openAdminDashboard() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+    );
+    if (!mounted) return;
+    _refreshAdminPendingCount();
   }
 
   Future<void> _toggleSpotActive(ParkingSpot spot) async {
@@ -108,6 +137,19 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
       appBar: AppBar(
         title: const Text('My parking'),
         actions: [
+          if (_isAdmin)
+            IconButton(
+              icon: _pendingAdminCount > 0
+                  ? Badge.count(
+                      count: _pendingAdminCount,
+                      backgroundColor: scheme.error,
+                      textColor: scheme.onError,
+                      child: const Icon(Icons.shield_outlined),
+                    )
+                  : const Icon(Icons.shield_outlined),
+              tooltip: 'Building admin',
+              onPressed: _openAdminDashboard,
+            ),
           IconButton(
             icon: const Icon(Icons.directions_car_outlined),
             tooltip: 'Bookings',

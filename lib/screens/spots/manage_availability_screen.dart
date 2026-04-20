@@ -5,6 +5,10 @@ import 'package:intl/intl.dart';
 import '../../services/parking_spot_service.dart';
 import '../../models/parking_spot.dart';
 import '../../models/spot_availability_period.dart';
+import '../../widgets/app_snack.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/skeleton.dart';
+import '../../widgets/status_chip.dart';
 
 class ManageAvailabilityScreen extends StatefulWidget {
   final ParkingSpot spot;
@@ -45,9 +49,7 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading periods: $e')),
-        );
+        AppSnack.error(context, 'Could not load periods: $e');
       }
     }
   }
@@ -105,9 +107,7 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
 
     if (!endDateTime.isAfter(startDateTime)) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('End time must be after start time')),
-      );
+      AppSnack.error(context, 'End time must be after start time');
       return;
     }
 
@@ -125,15 +125,11 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       );
       _loadPeriods();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Availability period added')),
-        );
+        AppSnack.success(context, 'Availability added');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        AppSnack.error(context, 'Could not add availability: $e');
       }
     }
   }
@@ -141,24 +137,28 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
   Future<void> _showAddSheet() async {
     final choice = await showModalBottomSheet<String>(
       context: context,
+      showDragHandle: true,
       builder: (context) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.event),
-                title: const Text('One-time availability'),
-                subtitle: const Text('Specific date and time range'),
-                onTap: () => Navigator.of(context).pop('once'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.event_repeat),
-                title: const Text('Weekly recurring'),
-                subtitle: const Text('Same days and hours every week'),
-                onTap: () => Navigator.of(context).pop('weekly'),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.event_rounded),
+                  title: const Text('One-time availability'),
+                  subtitle: const Text('Open this spot for a specific window'),
+                  onTap: () => Navigator.of(context).pop('once'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.event_repeat_rounded),
+                  title: const Text('Weekly recurring'),
+                  subtitle: const Text('Same days and hours every week'),
+                  onTap: () => Navigator.of(context).pop('weekly'),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -239,15 +239,11 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       );
       _loadPeriods();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Recurring availability added')),
-        );
+        AppSnack.success(context, 'Recurring availability added');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        AppSnack.error(context, 'Could not add availability: $e');
       }
     }
   }
@@ -359,16 +355,21 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Availability Period'),
-        content: const Text('Are you sure you want to delete this availability period?'),
+        title: const Text('Remove this window?'),
+        content: const Text(
+            'Future bookings inside this window will no longer be possible. '
+            'Existing approved bookings aren\'t affected.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: const Text('Keep it'),
           ),
-          TextButton(
+          FilledButton.tonal(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+            style: FilledButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Remove'),
           ),
         ],
       ),
@@ -380,116 +381,153 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       await _spotService.deleteAvailabilityPeriod(period.id);
       _loadPeriods();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Availability period deleted')),
-        );
+        AppSnack.success(context, 'Window removed');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        AppSnack.error(context, 'Could not remove: $e');
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Availability: ${widget.spot.spotIdentifier}'),
+        title: Text('Spot ${widget.spot.spotIdentifier}'),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Set when your parking spot is available for others to book.',
-                        style: TextStyle(fontSize: 16),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _periods.isEmpty
-                            ? 'No availability periods set. Your spot is always available for booking.'
-                            : 'Your spot is only available during the periods below.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
+          ? const SkeletonList(count: 4)
+          : RefreshIndicator(
+              onRefresh: _loadPeriods,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'When is this spot free?',
+                          style: theme.textTheme.titleMedium,
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_periods.isEmpty)
-                  Expanded(
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.calendar_today,
-                            size: 64,
-                            color: Colors.grey[400],
+                        const SizedBox(height: 6),
+                        Text(
+                          _periods.isEmpty
+                              ? 'No windows yet — your spot is open for booking any time it\'s active.'
+                              : 'Neighbors can only request times that fall inside the windows below.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
                           ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'No availability periods',
-                            style: TextStyle(fontSize: 18),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Add a period to restrict when your spot can be booked',
-                            style: TextStyle(color: Colors.grey[600]),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: _periods.length,
-                      itemBuilder: (context, index) {
-                        final period = _periods[index];
-                        final title = period.isRecurring
-                            ? '${DateFormat('HH:mm').format(period.startTime)} – ${DateFormat('HH:mm').format(period.endTime)}'
-                            : '${DateFormat('MMM dd, yyyy HH:mm').format(period.startTime)} - ${DateFormat('MMM dd, yyyy HH:mm').format(period.endTime)}';
-                        final recurrence = _describeRecurrence(period);
-                        final durationLabel = _formatDuration(period.startTime, period.endTime);
-                        final subtitle = recurrence.isEmpty
-                            ? durationLabel
-                            : '$recurrence · $durationLabel';
-                        return Card(
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          child: ListTile(
-                            leading: Icon(
-                              period.isRecurring ? Icons.event_repeat : Icons.access_time,
-                            ),
-                            title: Text(title),
-                            subtitle: Text(subtitle),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _deletePeriod(period),
-                            ),
-                          ),
-                        );
-                      },
+                        ),
+                      ],
                     ),
                   ),
-              ],
+                  const SizedBox(height: 16),
+                  if (_periods.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 24),
+                      child: EmptyState(
+                        icon: Icons.event_available_rounded,
+                        title: 'No windows set',
+                        message:
+                            'Add a window to restrict when neighbors can book this spot.',
+                      ),
+                    )
+                  else
+                    ..._periods.map((period) {
+                      final title = period.isRecurring
+                          ? '${DateFormat('HH:mm').format(period.startTime)} – ${DateFormat('HH:mm').format(period.endTime)}'
+                          : '${DateFormat('MMM d, y · HH:mm').format(period.startTime)}  →  ${DateFormat('MMM d, y · HH:mm').format(period.endTime)}';
+                      final recurrence = _describeRecurrence(period);
+                      final durationLabel =
+                          _formatDuration(period.startTime, period.endTime);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: scheme.primaryContainer
+                                        .withValues(alpha: 0.5),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Icon(
+                                    period.isRecurring
+                                        ? Icons.event_repeat_rounded
+                                        : Icons.schedule_rounded,
+                                    color: scheme.primary,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(title,
+                                          style: theme.textTheme.titleMedium),
+                                      const SizedBox(height: 4),
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 4,
+                                        children: [
+                                          if (recurrence.isNotEmpty)
+                                            StatusChip(
+                                              label: recurrence,
+                                              tone: StatusTone.info,
+                                              icon: Icons.event_repeat_rounded,
+                                            )
+                                          else
+                                            const StatusChip(
+                                              label: 'One-time',
+                                              tone: StatusTone.neutral,
+                                              icon: Icons.event_rounded,
+                                            ),
+                                          StatusChip(
+                                            label: durationLabel,
+                                            tone: StatusTone.neutral,
+                                            icon: Icons.timelapse_rounded,
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Remove window',
+                                  icon: Icon(Icons.delete_outline_rounded,
+                                      color: scheme.error),
+                                  onPressed: () => _deletePeriod(period),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                ],
+              ),
             ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddSheet,
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Add window'),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );

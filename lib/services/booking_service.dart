@@ -3,6 +3,31 @@ import '../models/booking_request.dart';
 import '../models/parking_spot.dart';
 import '../services/parking_spot_service.dart';
 
+/// Enriched view of a booking with the joined context a human actually
+/// wants to see: the physical spot identifier and the counterparty's
+/// display name. Two light extra reads on top of `getBookingById`, but
+/// worth it — SPEC §8.4 says users interact by display name, not UUID.
+class BookingDetails {
+  final BookingRequest booking;
+  final String? spotIdentifier;
+  final String? borrowerDisplayName;
+  final String? lenderDisplayName;
+
+  const BookingDetails({
+    required this.booking,
+    this.spotIdentifier,
+    this.borrowerDisplayName,
+    this.lenderDisplayName,
+  });
+
+  /// The other party's display name from the current user's perspective.
+  String? counterpartyNameFor(String currentUserId) {
+    if (currentUserId == booking.borrowerId) return lenderDisplayName;
+    if (currentUserId == booking.lenderId) return borrowerDisplayName;
+    return null;
+  }
+}
+
 class BookingService {
   final SupabaseClient _supabase = Supabase.instance.client;
   final _spotService = ParkingSpotService();
@@ -135,6 +160,110 @@ class BookingService {
 
     if (response == null) return null;
     return BookingRequest.fromJson(response);
+  }
+
+  /// Fetch a booking alongside the joined human context (spot identifier,
+  /// borrower + lender display names). Returns null if the booking itself
+  /// is missing; missing joined rows (e.g. a deleted profile) just come
+  /// back as null fields inside [BookingDetails].
+  Future<BookingDetails?> getBookingDetails(String bookingId) async {
+    final booking = await getBookingById(bookingId);
+    if (booking == null) return null;
+
+    // Fire the side reads in parallel; each is best-effort.
+    final results = await Future.wait([
+      _fetchSpotIdentifier(booking.spotId),
+      _fetchDisplayName(booking.borrowerId),
+      _fetchDisplayName(booking.lenderId),
+    ]);
+
+    return BookingDetails(
+      booking: booking,
+      spotIdentifier: results[0],
+      borrowerDisplayName: results[1],
+      lenderDisplayName: results[2],
+    );
+  }
+
+  Future<String?> _fetchSpotIdentifier(String spotId) async {
+    try {
+      final row = await _supabase
+          .from('parking_spots')
+          .select('spot_identifier')
+          .eq('id', spotId)
+          .maybeSingle();
+      return row?['spot_identifier'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _fetchDisplayName(String profileId) async {
+    try {
+      final row = await _supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', profileId)
+          .maybeSingle();
+      return row?['display_name'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Batch the joined reads for a list of bookings — one query per table
+  /// instead of N per row. Returns a map keyed by [BookingRequest.id].
+  Future<Map<String, BookingDetails>> getDetailsForBookings(
+      List<BookingRequest> bookings) async {
+    if (bookings.isEmpty) return const {};
+
+    final spotIds = bookings.map((b) => b.spotId).toSet().toList();
+    final profileIds = <String>{
+      for (final b in bookings) ...[b.borrowerId, b.lenderId],
+    }.toList();
+
+    final spotMap = <String, String>{};
+    final nameMap = <String, String>{};
+
+    try {
+      final spotRows = await _supabase
+          .from('parking_spots')
+          .select('id, spot_identifier')
+          .inFilter('id', spotIds);
+      for (final row in (spotRows as List)) {
+        final id = row['id'] as String?;
+        final ident = row['spot_identifier'] as String?;
+        if (id != null && ident != null) spotMap[id] = ident;
+      }
+    } catch (_) {
+      // Leave spotMap empty — the UI falls back to "Parking booking".
+    }
+
+    try {
+      final nameRows = await _supabase
+          .from('profiles')
+          .select('id, display_name')
+          .inFilter('id', profileIds);
+      for (final row in (nameRows as List)) {
+        final id = row['id'] as String?;
+        final name = row['display_name'] as String?;
+        if (id != null && name != null && name.isNotEmpty) {
+          nameMap[id] = name;
+        }
+      }
+    } catch (_) {
+      // Leave nameMap empty — the UI falls back gracefully.
+    }
+
+    return {
+      for (final b in bookings)
+        b.id: BookingDetails(
+          booking: b,
+          spotIdentifier: spotMap[b.spotId],
+          borrowerDisplayName: nameMap[b.borrowerId],
+          lenderDisplayName: nameMap[b.lenderId],
+        ),
+    };
   }
 
   // Cancel booking

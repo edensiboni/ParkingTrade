@@ -6,39 +6,55 @@ class RejectedScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final authService = AuthService();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Access Denied'),
+        title: const Text('Access denied'),
         automaticallyImplyLeading: false,
       ),
-      body: Center(
+      body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.block,
-                size: 80,
-                color: Colors.red[300],
+              const Spacer(),
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: scheme.errorContainer.withValues(alpha: 0.6),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.block_rounded,
+                  size: 44,
+                  color: scheme.error,
+                ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Membership Rejected',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              Text(
+                'Membership not approved',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Your request to join this building was not approved. '
-                'Please contact the building administrator if you believe this is an error.',
-                style: TextStyle(fontSize: 16),
+              const SizedBox(height: 12),
+              Text(
+                'The admin for this building declined your request. '
+                'If this looks wrong, reach out to them directly — they can '
+                're-invite you any time.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 32),
-              TextButton(
+              const Spacer(),
+              FilledButton.tonalIcon(
                 onPressed: () async {
                   final navigator = Navigator.of(context);
                   await authService.signOut();
@@ -46,7 +62,11 @@ class RejectedScreen extends StatelessWidget {
                     navigator.pushReplacementNamed('/auth');
                   }
                 },
-                child: const Text('Sign Out'),
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('Sign out'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
               ),
             ],
           ),

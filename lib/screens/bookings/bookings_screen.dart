@@ -8,7 +8,6 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/status_chip.dart';
 import 'booking_detail_screen.dart';
-import 'request_spot_screen.dart';
 import 'available_spots_screen.dart';
 
 class BookingsScreen extends StatefulWidget {
@@ -24,12 +23,13 @@ class _BookingsScreenState extends State<BookingsScreen>
   late TabController _tabController;
   List<BookingRequest> _myBookings = [];
   List<BookingRequest> _pendingRequests = [];
+  Map<String, BookingDetails> _detailsById = const {};
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadBookings();
   }
 
@@ -54,10 +54,18 @@ class _BookingsScreenState extends State<BookingsScreen>
         _bookingService.getUserBookings(),
         _bookingService.getPendingBookingsForLender(),
       ]);
+      // Merge both lists (unique by id) so we fetch joined data in one batch.
+      final merged = <String, BookingRequest>{};
+      for (final b in [...myBookings, ...pendingRequests]) {
+        merged[b.id] = b;
+      }
+      final details = await _bookingService
+          .getDetailsForBookings(merged.values.toList());
       if (!mounted) return;
       setState(() {
         _myBookings = myBookings;
         _pendingRequests = pendingRequests;
+        _detailsById = details;
         _isLoading = false;
       });
     } catch (e) {
@@ -68,11 +76,16 @@ class _BookingsScreenState extends State<BookingsScreen>
   }
 
   Future<void> _cancelBooking(BookingRequest booking) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    final isBorrower = booking.borrowerId == userId;
+    final details = _detailsById[booking.id];
+    final counterparty = details?.counterpartyNameFor(userId ?? '') ??
+        (isBorrower ? 'The lender' : 'The borrower');
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancel booking?'),
-        content: const Text('The lender will be notified.'),
+        content: Text('$counterparty will be notified.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -155,6 +168,17 @@ class _BookingsScreenState extends State<BookingsScreen>
     final scheme = theme.colorScheme;
     final dateFmt = DateFormat('EEE MMM d • h:mm a');
 
+    final details = _detailsById[booking.id];
+    final isBorrower = booking.borrowerId == user?.id;
+    final title = details?.spotIdentifier != null
+        ? 'Spot ${details!.spotIdentifier}'
+        : 'Parking booking';
+    final counterpartyName = details?.counterpartyNameFor(user?.id ?? '');
+    final counterpartyRole = isBorrower ? 'Lender' : 'Borrower';
+    final subtitle = counterpartyName != null
+        ? '$counterpartyRole · $counterpartyName'
+        : null;
+
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -189,11 +213,10 @@ class _BookingsScreenState extends State<BookingsScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Parking booking',
-                            style: theme.textTheme.titleMedium),
+                        Text(title, style: theme.textTheme.titleMedium),
                         const SizedBox(height: 2),
                         Text(
-                          dateFmt.format(booking.startTime.toLocal()),
+                          subtitle ?? dateFmt.format(booking.startTime.toLocal()),
                           style: theme.textTheme.bodySmall?.copyWith(
                               color: scheme.onSurfaceVariant),
                         ),
@@ -246,18 +269,19 @@ class _BookingsScreenState extends State<BookingsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final pendingLabel = _pendingRequests.isEmpty
+        ? 'Pending'
+        : 'Pending (${_pendingRequests.length})';
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bookings'),
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: const [
-            Tab(text: 'Available'),
-            Tab(text: 'My bookings'),
-            Tab(text: 'Pending'),
-            Tab(text: 'Request'),
+          tabs: [
+            const Tab(text: 'Available'),
+            const Tab(text: 'My bookings'),
+            Tab(text: pendingLabel),
           ],
         ),
       ),
@@ -272,7 +296,6 @@ class _BookingsScreenState extends State<BookingsScreen>
           ),
           _buildMyBookingsList(),
           _buildPendingList(),
-          RequestSpotScreen(onBookingCreated: _loadBookings),
         ],
       ),
     );

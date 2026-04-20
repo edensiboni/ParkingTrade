@@ -19,7 +19,7 @@ class BookingDetailScreen extends StatefulWidget {
 class _BookingDetailScreenState extends State<BookingDetailScreen> {
   final _bookingService = BookingService();
   final _authService = AuthService();
-  BookingRequest? _booking;
+  BookingDetails? _details;
   bool _isLoading = true;
   bool _isProcessing = false;
 
@@ -32,10 +32,10 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   Future<void> _loadBooking() async {
     setState(() => _isLoading = true);
     try {
-      final booking = await _bookingService.getBookingById(widget.bookingId);
+      final details = await _bookingService.getBookingDetails(widget.bookingId);
       if (!mounted) return;
       setState(() {
-        _booking = booking;
+        _details = details;
         _isLoading = false;
       });
     } catch (e) {
@@ -46,11 +46,11 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   }
 
   Future<void> _approveBooking(bool approve) async {
-    if (_booking == null) return;
+    if (_details == null) return;
     setState(() => _isProcessing = true);
     try {
       await _bookingService.approveBooking(
-        bookingId: _booking!.id,
+        bookingId: _details!.booking.id,
         approve: approve,
       );
       if (mounted) Navigator.of(context).pop(true);
@@ -61,12 +61,17 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   }
 
   Future<void> _cancelBooking() async {
-    if (_booking == null) return;
+    if (_details == null) return;
+    final isLender = _isLender();
+    final counterparty = _details!.counterpartyNameFor(
+          _authService.currentUser?.id ?? '',
+        ) ??
+        (isLender ? 'the borrower' : 'the lender');
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancel booking?'),
-        content: const Text('The other party will be notified.'),
+        content: Text('$counterparty will be notified.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -85,7 +90,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     if (confirmed != true) return;
 
     try {
-      await _bookingService.cancelBooking(_booking!.id);
+      await _bookingService.cancelBooking(_details!.booking.id);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) AppSnack.error(context, 'Error: $e');
@@ -93,8 +98,9 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   }
 
   bool _isLender() {
-    if (_booking == null) return false;
-    return _authService.currentUser?.id == _booking!.lenderId;
+    final d = _details;
+    if (d == null) return false;
+    return _authService.currentUser?.id == d.booking.lenderId;
   }
 
   ({String label, StatusTone tone, IconData icon}) _statusVisual(
@@ -142,7 +148,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
       );
     }
 
-    if (_booking == null) {
+    if (_details == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Booking')),
         body: const Center(child: Text('Booking not found')),
@@ -151,11 +157,20 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
 
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final b = _booking!;
+    final d = _details!;
+    final b = d.booking;
     final isLender = _isLender();
     final vis = _statusVisual(b.status);
     final dateFmt = DateFormat('EEE MMM d, y');
     final timeFmt = DateFormat('h:mm a');
+
+    final spotLabel = d.spotIdentifier != null
+        ? 'Spot ${d.spotIdentifier}'
+        : 'Parking booking';
+    final counterpartyLabel = isLender
+        ? (d.borrowerDisplayName ?? 'Borrower')
+        : (d.lenderDisplayName ?? 'Lender');
+    final counterpartyRole = isLender ? 'Borrower' : 'Lender';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Booking')),
@@ -165,29 +180,26 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                _HeaderCard(
+                  spotLabel: spotLabel,
+                  counterpartyLabel: counterpartyLabel,
+                  counterpartyRole: counterpartyRole,
+                  status: vis,
+                ),
+                const SizedBox(height: 16),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Text(
-                              'Status',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const Spacer(),
-                            StatusChip(
-                              label: vis.label,
-                              tone: vis.tone,
-                              icon: vis.icon,
-                            ),
-                          ],
+                        Text(
+                          'When',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 16),
                         _TimeRow(
                           label: 'Starts',
                           date: dateFmt.format(b.startTime.toLocal()),
@@ -269,6 +281,77 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _HeaderCard extends StatelessWidget {
+  final String spotLabel;
+  final String counterpartyLabel;
+  final String counterpartyRole;
+  final ({String label, StatusTone tone, IconData icon}) status;
+
+  const _HeaderCard({
+    required this.spotLabel,
+    required this.counterpartyLabel,
+    required this.counterpartyRole,
+    required this.status,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(Icons.local_parking_rounded,
+                      color: scheme.primary),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(spotLabel, style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$counterpartyRole · $counterpartyLabel',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: StatusChip(
+                label: status.label,
+                tone: status.tone,
+                icon: status.icon,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

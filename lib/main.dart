@@ -15,6 +15,7 @@ import 'screens/auth/dev_auth_screen.dart';
 import 'screens/auth/phone_auth_screen.dart';
 import 'screens/building/join_building_screen.dart';
 import 'screens/building/pending_approval_screen.dart';
+import 'screens/building/rejected_screen.dart';
 import 'screens/spots/parking_spots_screen.dart';
 import 'models/profile.dart';
 
@@ -93,6 +94,7 @@ class ParkingTradeApp extends StatelessWidget {
             : const PhoneAuthScreen(),
         '/join-building': (context) => const JoinBuildingScreen(),
         '/pending-approval': (context) => const PendingApprovalScreen(),
+        '/rejected': (context) => const RejectedScreen(),
         '/home': (context) => const ParkingSpotsScreen(),
       },
     );
@@ -188,6 +190,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
         Navigator.of(context).pushReplacementNamed('/join-building');
       } else if (profile.status == ProfileStatus.pending) {
         Navigator.of(context).pushReplacementNamed('/pending-approval');
+      } else if (profile.status == ProfileStatus.rejected) {
+        Navigator.of(context).pushReplacementNamed('/rejected');
       } else if (profile.status == ProfileStatus.approved) {
         Navigator.of(context).pushReplacementNamed('/home');
       } else {
