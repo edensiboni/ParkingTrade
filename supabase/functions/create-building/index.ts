@@ -1,5 +1,8 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// Pinned npm: specifier + Deno.serve keep us off esm.sh / deno.land/std,
+// both of which have flaked during deploys (esm.sh 522, deno.land outages).
+import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
+
+const serve = Deno.serve
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

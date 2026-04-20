@@ -38,7 +38,16 @@ jobs:
 
       - name: Deploy Edge Functions
         run: |
-          for fn in join-building create-building approve-booking create-booking-request places-autocomplete; do
+          # Keep this list in sync with supabase/functions/* (excluding _shared).
+          for fn in \
+            approve-booking \
+            create-booking-request \
+            create-building \
+            join-building \
+            manage-member \
+            places-autocomplete \
+            send-chat-message \
+          ; do
             echo "Deploying $fn..."
             supabase functions deploy "$fn"
           done

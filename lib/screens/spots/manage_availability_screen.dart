@@ -204,6 +204,10 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     final days = await _pickWeekdays(startDate.weekday);
     if (!mounted || days == null || days.isEmpty) return;
 
+    // Pick an optional "repeat until" end date.
+    final untilResult = await _pickRepeatUntil(startDate);
+    if (!mounted || untilResult.isCancelled) return;
+
     // Build start/end DateTimes on the anchor date.
     final anchor = DateTime(
       startDate.year,
@@ -224,9 +228,20 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       endAnchor = endAnchor.add(const Duration(days: 1));
     }
 
+    final untilDate = untilResult.date;
     final pattern = jsonEncode({
       'type': 'weekly',
       'days': days.toList()..sort(),
+      // Expansion reads `until` as UTC — store end-of-day so the last day is
+      // inclusive. Forever is encoded by omitting the key.
+      if (untilDate != null)
+        'until': DateTime.utc(
+          untilDate.year,
+          untilDate.month,
+          untilDate.day,
+          23,
+          59,
+        ).toIso8601String(),
     });
 
     try {
@@ -314,6 +329,65 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     );
   }
 
+  /// Ask the user how long the recurrence should last. Three outcomes:
+  ///   - `_UntilResult.cancelled` — caller should abort;
+  ///   - `_UntilResult.forever` — recurs indefinitely (no `until` key written);
+  ///   - `_UntilResult.date(d)` — stop repeating after `d`.
+  Future<_UntilResult> _pickRepeatUntil(DateTime anchor) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Repeat until',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.all_inclusive_rounded),
+                  title: const Text('Forever'),
+                  subtitle: const Text('Keeps repeating until you remove it'),
+                  onTap: () => Navigator.of(context).pop('forever'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.event_busy_rounded),
+                  title: const Text('Pick an end date'),
+                  subtitle: const Text('Stop repeating after this date'),
+                  onTap: () => Navigator.of(context).pop('date'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (choice == null) return const _UntilResult.cancelled();
+    if (choice == 'forever') return const _UntilResult.forever();
+
+    if (!mounted) return const _UntilResult.cancelled();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: anchor.add(const Duration(days: 30)),
+      firstDate: anchor,
+      lastDate: anchor.add(const Duration(days: 365 * 2)),
+      helpText: 'Repeat until',
+    );
+    if (picked == null) return const _UntilResult.cancelled();
+    return _UntilResult.date(picked);
+  }
+
   String _describeRecurrence(SpotAvailabilityPeriod period) {
     if (!period.isRecurring) return '';
     final raw = period.recurringPattern ?? '';
@@ -323,6 +397,17 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
         final decoded = jsonDecode(trimmed);
         if (decoded is Map) {
           final type = decoded['type']?.toString() ?? 'weekly';
+
+          // Optional "until" suffix shown as "until Apr 30".
+          String untilSuffix = '';
+          final untilRaw = decoded['until'];
+          if (untilRaw is String && untilRaw.isNotEmpty) {
+            final untilDate = DateTime.tryParse(untilRaw)?.toLocal();
+            if (untilDate != null) {
+              untilSuffix = ' · until ${DateFormat('MMM d').format(untilDate)}';
+            }
+          }
+
           if (type == 'weekly') {
             final daysRaw = decoded['days'];
             if (daysRaw is List && daysRaw.isNotEmpty) {
@@ -338,11 +423,11 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
               final days = daysRaw
                   .map((d) => labels[d.toString().toUpperCase()] ?? d.toString())
                   .join(', ');
-              return 'Weekly · $days';
+              return 'Weekly · $days$untilSuffix';
             }
-            return 'Weekly';
+            return 'Weekly$untilSuffix';
           }
-          return 'Repeats: $type';
+          return 'Repeats: $type$untilSuffix';
         }
       } catch (_) {
         // Fall through to raw pattern.
@@ -543,4 +628,25 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       return '${duration.inMinutes} minute${duration.inMinutes > 1 ? 's' : ''}';
     }
   }
+}
+
+/// Tri-state return from the "repeat until" picker. Using an explicit type
+/// instead of `DateTime?` lets us distinguish user-cancelled from "forever"
+/// without overloading `null`.
+class _UntilResult {
+  final bool isCancelled;
+  final bool isForever;
+  final DateTime? date;
+
+  const _UntilResult._(
+      {required this.isCancelled,
+      required this.isForever,
+      required this.date});
+
+  const _UntilResult.cancelled()
+      : this._(isCancelled: true, isForever: false, date: null);
+  const _UntilResult.forever()
+      : this._(isCancelled: false, isForever: true, date: null);
+  const _UntilResult.date(DateTime d)
+      : this._(isCancelled: false, isForever: false, date: d);
 }

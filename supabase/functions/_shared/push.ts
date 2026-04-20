@@ -1,4 +1,5 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// Pinned npm: specifier keeps us off esm.sh during deploys.
+import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
 
 let _cachedAccessToken: string | null = null
 let _tokenExpiresAt = 0
