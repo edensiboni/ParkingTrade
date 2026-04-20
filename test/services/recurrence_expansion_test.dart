@@ -9,7 +9,7 @@ void main() {
     service = ParkingSpotService();
   });
 
-  SpotAvailabilityPeriod _makePeriod({
+  SpotAvailabilityPeriod makePeriod({
     required DateTime start,
     required DateTime end,
     bool recurring = false,
@@ -28,7 +28,7 @@ void main() {
 
   group('expandRecurringPeriods', () {
     test('non-recurring period returned as-is', () {
-      final period = _makePeriod(
+      final period = makePeriod(
         start: DateTime.utc(2025, 6, 1, 10),
         end: DateTime.utc(2025, 6, 1, 12),
       );
@@ -45,7 +45,7 @@ void main() {
     });
 
     test('weekly recurrence generates correct instances', () {
-      final period = _makePeriod(
+      final period = makePeriod(
         start: DateTime.utc(2025, 6, 1, 10), // Sunday
         end: DateTime.utc(2025, 6, 1, 12),
         recurring: true,
@@ -64,7 +64,7 @@ void main() {
     });
 
     test('daily recurrence generates correct instances', () {
-      final period = _makePeriod(
+      final period = makePeriod(
         start: DateTime.utc(2025, 6, 1, 9),
         end: DateTime.utc(2025, 6, 1, 10),
         recurring: true,
@@ -82,7 +82,7 @@ void main() {
 
     test('weekdays pattern skips weekends', () {
       // 2025-06-02 is Monday
-      final period = _makePeriod(
+      final period = makePeriod(
         start: DateTime.utc(2025, 6, 2, 9),
         end: DateTime.utc(2025, 6, 2, 17),
         recurring: true,
@@ -106,7 +106,7 @@ void main() {
 
     test('weekends pattern only includes Sat/Sun', () {
       // 2025-06-07 is Saturday
-      final period = _makePeriod(
+      final period = makePeriod(
         start: DateTime.utc(2025, 6, 7, 9),
         end: DateTime.utc(2025, 6, 7, 17),
         recurring: true,
@@ -129,7 +129,7 @@ void main() {
     });
 
     test('periods outside search range are excluded', () {
-      final period = _makePeriod(
+      final period = makePeriod(
         start: DateTime.utc(2025, 6, 1, 10),
         end: DateTime.utc(2025, 6, 1, 12),
         recurring: true,

@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/firebase_options_web.dart';
 import 'config/supabase_config.dart';
+import 'theme/app_theme.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service_web.dart';
 import 'screens/auth/phone_auth_screen.dart';
@@ -39,7 +40,7 @@ void main() async {
     debugPrint('### MAIN STARTED (web) ###');
 
     if (!SupabaseConfig.isConfigured) {
-      runApp(ErrorApp(
+      runApp(const ErrorApp(
         'Supabase configuration is missing.\n\n'
         'Please set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY\n'
         '(or SUPABASE_ANON_KEY for backward compatibility)\n'
@@ -48,7 +49,7 @@ void main() async {
       return;
     }
 
-    final supabaseUrl = SupabaseConfig.supabaseUrl;
+    const supabaseUrl = SupabaseConfig.supabaseUrl;
     final supabasePublishableKey = SupabaseConfig.supabasePublishableKey;
     debugPrint('Supabase URL = $supabaseUrl');
     if (SupabaseConfig.isPlaceholder) {
@@ -95,10 +96,8 @@ class ParkingTradeApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Parking Trade',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
+      debugShowCheckedModeBanner: false,
       home: const AuthWrapper(),
       routes: {
         '/auth': (context) => const PhoneAuthScreen(),

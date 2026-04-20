@@ -148,7 +148,7 @@ class ParkingSpotService {
     // Debug: Print what we're storing
     debugPrint('💾 Storing availability period:');
     debugPrint('   Input (local): ${startTime.toLocal()} to ${endTime.toLocal()}');
-    debugPrint('   Converting to UTC (same wall clock): ${utcStart} to ${utcEnd}');
+    debugPrint('   Converting to UTC (same wall clock): $utcStart to $utcEnd');
     debugPrint('   ISO string: ${utcStart.toIso8601String()} to ${utcEnd.toIso8601String()}');
     
     final response = await _supabase

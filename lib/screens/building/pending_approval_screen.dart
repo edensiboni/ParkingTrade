@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../models/profile.dart';
+import '../../widgets/empty_state.dart';
 
 class PendingApprovalScreen extends StatefulWidget {
   const PendingApprovalScreen({super.key});
@@ -11,6 +12,7 @@ class PendingApprovalScreen extends StatefulWidget {
 
 class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
   final _authService = AuthService();
+  bool _checking = false;
 
   @override
   void initState() {
@@ -19,14 +21,17 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
   }
 
   Future<void> _checkStatus() async {
-    final profile = await _authService.getCurrentProfile();
-    if (profile != null) {
-      if (profile.status == ProfileStatus.approved) {
-        // Navigate to main app
-        if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/home');
-        }
+    if (_checking) return;
+    setState(() => _checking = true);
+    try {
+      final profile = await _authService.getCurrentProfile();
+      if (!mounted) return;
+      if (profile?.status == ProfileStatus.approved) {
+        Navigator.of(context).pushReplacementNamed('/home');
+        return;
       }
+    } finally {
+      if (mounted) setState(() => _checking = false);
     }
   }
 
@@ -34,39 +39,33 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pending Approval'),
+        title: const Text('Pending approval'),
         automaticallyImplyLeading: false,
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+      body: SafeArea(
+        child: EmptyState(
+          icon: Icons.hourglass_top_rounded,
+          title: 'Waiting on your building admin',
+          message:
+              'We\'ve sent your request. You\'ll get access as soon as it\'s approved.',
+          action: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.pending_actions,
-                size: 80,
-                color: Theme.of(context).colorScheme.primary,
+              FilledButton.icon(
+                onPressed: _checking ? null : _checkStatus,
+                icon: _checking
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.refresh_rounded),
+                label: const Text('Check again'),
               ),
-              const SizedBox(height: 24),
-              const Text(
-                'Your request is pending approval',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Please wait while the building administrator reviews your request.',
-                style: TextStyle(fontSize: 16),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton.icon(
-                onPressed: _checkStatus,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Check Status'),
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               TextButton(
                 onPressed: () async {
                   final navigator = Navigator.of(context);
@@ -75,7 +74,7 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
                     navigator.pushReplacementNamed('/auth');
                   }
                 },
-                child: const Text('Sign Out'),
+                child: const Text('Sign out'),
               ),
             ],
           ),
@@ -84,4 +83,3 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
     );
   }
 }
-

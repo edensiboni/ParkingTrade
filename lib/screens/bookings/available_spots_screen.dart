@@ -3,6 +3,9 @@ import 'package:intl/intl.dart';
 import '../../services/booking_service.dart';
 import '../../services/parking_spot_service.dart';
 import '../../models/parking_spot.dart';
+import '../../widgets/app_snack.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/skeleton.dart';
 
 class AvailableSpotsScreen extends StatefulWidget {
   final VoidCallback? onBookingCreated;
@@ -34,11 +37,13 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
 
     try {
       final spots = await _bookingService.getAvailableSpots();
+      if (!mounted) return;
       setState(() {
         _spots = spots;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _errorMessage = e.toString().replaceAll('Exception: ', '');
@@ -56,9 +61,12 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
       return;
     }
 
+    final theme = Theme.of(context);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.6,
         minChildSize: 0.3,
@@ -66,43 +74,45 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
         expand: false,
         builder: (context, scrollController) {
           return Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
                 Text(
-                  'Available Slots — ${spot.spotIdentifier}',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                  'Pick a time',
+                  style: theme.textTheme.titleLarge,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Spot ${spot.spotIdentifier}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 16),
                 Expanded(
-                  child: ListView.builder(
+                  child: ListView.separated(
                     controller: scrollController,
                     itemCount: slots.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final slot = slots[index];
                       final start = slot['start']!;
                       final end = slot['end']!;
-                      final fmt = DateFormat('MMM dd, HH:mm');
+                      final fmt = DateFormat('EEE MMM d • h:mm a');
                       return Card(
                         child: ListTile(
-                          leading: const Icon(Icons.access_time, color: Colors.green),
-                          title: Text('${fmt.format(start.toLocal())} — ${fmt.format(end.toLocal())}'),
-                          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                          leading: CircleAvatar(
+                            backgroundColor: theme.colorScheme.primaryContainer
+                                .withValues(alpha: 0.5),
+                            foregroundColor: theme.colorScheme.primary,
+                            child: const Icon(Icons.schedule_rounded),
+                          ),
+                          title: Text(fmt.format(start.toLocal())),
+                          subtitle: Text(
+                            'until ${fmt.format(end.toLocal())}',
+                          ),
+                          trailing: const Icon(Icons.arrow_forward_ios, size: 14),
                           onTap: () {
                             Navigator.of(context).pop();
                             _showTimePickerForSlot(spot, start, end);
@@ -132,17 +142,23 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          final fmt = DateFormat('MMM dd, yyyy HH:mm');
+          final fmt = DateFormat('EEE MMM d • h:mm a');
           return AlertDialog(
-            title: Text('Book ${spot.spotIdentifier}'),
+            title: Text('Book spot ${spot.spotIdentifier}'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Select your booking window:'),
+                Text(
+                  'Within ${fmt.format(slotStart.toLocal())} → ${fmt.format(slotEnd.toLocal())}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
                 const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: () async {
+                _TimeField(
+                  icon: Icons.play_arrow_rounded,
+                  label: 'Starts',
+                  value: fmt.format(selectedStart),
+                  onTap: () async {
                     final date = await showDatePicker(
                       context: context,
                       initialDate: selectedStart,
@@ -156,18 +172,17 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
                     );
                     if (time == null) return;
                     setDialogState(() {
-                      selectedStart = DateTime(
-                        date.year, date.month, date.day,
-                        time.hour, time.minute,
-                      );
+                      selectedStart = DateTime(date.year, date.month, date.day,
+                          time.hour, time.minute);
                     });
                   },
-                  icon: const Icon(Icons.play_arrow),
-                  label: Text('Start: ${fmt.format(selectedStart)}'),
                 ),
                 const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () async {
+                _TimeField(
+                  icon: Icons.stop_rounded,
+                  label: 'Ends',
+                  value: fmt.format(selectedEnd),
+                  onTap: () async {
                     final date = await showDatePicker(
                       context: context,
                       initialDate: selectedEnd,
@@ -181,14 +196,10 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
                     );
                     if (time == null) return;
                     setDialogState(() {
-                      selectedEnd = DateTime(
-                        date.year, date.month, date.day,
-                        time.hour, time.minute,
-                      );
+                      selectedEnd = DateTime(date.year, date.month, date.day,
+                          time.hour, time.minute);
                     });
                   },
-                  icon: const Icon(Icons.stop),
-                  label: Text('End: ${fmt.format(selectedEnd)}'),
                 ),
               ],
             ),
@@ -197,9 +208,9 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
                 onPressed: () => Navigator.of(context).pop(false),
                 child: const Text('Cancel'),
               ),
-              ElevatedButton(
+              FilledButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Request'),
+                child: const Text('Send request'),
               ),
             ],
           );
@@ -216,22 +227,13 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
         endTime: selectedEnd,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Booking request sent!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppSnack.success(context, 'Request sent');
         widget.onBookingCreated?.call();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppSnack.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     }
   }
@@ -244,16 +246,24 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          final fmt = DateFormat('MMM dd, yyyy HH:mm');
+          final fmt = DateFormat('EEE MMM d • h:mm a');
           return AlertDialog(
-            title: Text('Book ${spot.spotIdentifier}'),
+            title: Text('Book spot ${spot.spotIdentifier}'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('This spot is always available. Choose your times:'),
+                Text(
+                  'This spot is always available. Choose your window.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
                 const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: () async {
+                _TimeField(
+                  icon: Icons.play_arrow_rounded,
+                  label: 'Starts',
+                  value: startTime == null ? null : fmt.format(startTime!),
+                  placeholder: 'Select start',
+                  onTap: () async {
                     final now = DateTime.now();
                     final date = await showDatePicker(
                       context: context,
@@ -268,20 +278,18 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
                     );
                     if (time == null) return;
                     setDialogState(() {
-                      startTime = DateTime(
-                        date.year, date.month, date.day,
-                        time.hour, time.minute,
-                      );
+                      startTime = DateTime(date.year, date.month, date.day,
+                          time.hour, time.minute);
                     });
                   },
-                  icon: const Icon(Icons.play_arrow),
-                  label: Text(startTime == null
-                      ? 'Select start time'
-                      : 'Start: ${fmt.format(startTime!)}'),
                 ),
                 const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () async {
+                _TimeField(
+                  icon: Icons.stop_rounded,
+                  label: 'Ends',
+                  value: endTime == null ? null : fmt.format(endTime!),
+                  placeholder: 'Select end',
+                  onTap: () async {
                     final initial = startTime ?? DateTime.now();
                     final date = await showDatePicker(
                       context: context,
@@ -293,21 +301,14 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
                     final time = await showTimePicker(
                       context: context,
                       initialTime: TimeOfDay.fromDateTime(
-                        initial.add(const Duration(hours: 1)),
-                      ),
+                          initial.add(const Duration(hours: 1))),
                     );
                     if (time == null) return;
                     setDialogState(() {
-                      endTime = DateTime(
-                        date.year, date.month, date.day,
-                        time.hour, time.minute,
-                      );
+                      endTime = DateTime(date.year, date.month, date.day,
+                          time.hour, time.minute);
                     });
                   },
-                  icon: const Icon(Icons.stop),
-                  label: Text(endTime == null
-                      ? 'Select end time'
-                      : 'End: ${fmt.format(endTime!)}'),
                 ),
               ],
             ),
@@ -316,11 +317,11 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
                 onPressed: () => Navigator.of(context).pop(false),
                 child: const Text('Cancel'),
               ),
-              ElevatedButton(
+              FilledButton(
                 onPressed: startTime != null && endTime != null
                     ? () => Navigator.of(context).pop(true)
                     : null,
-                child: const Text('Request'),
+                child: const Text('Send request'),
               ),
             ],
           );
@@ -339,22 +340,13 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
         endTime: endTime!,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Booking request sent!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        AppSnack.success(context, 'Request sent');
         widget.onBookingCreated?.call();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppSnack.error(
+            context, e.toString().replaceAll('Exception: ', ''));
       }
     }
   }
@@ -362,65 +354,170 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SkeletonList(count: 4);
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(_errorMessage!, style: const TextStyle(color: Colors.grey)),
-            const SizedBox(height: 16),
-            ElevatedButton(onPressed: _loadSpots, child: const Text('Retry')),
-          ],
+      return EmptyState(
+        icon: Icons.wifi_off_rounded,
+        title: 'Couldn\'t load spots',
+        message: _errorMessage,
+        action: FilledButton.icon(
+          onPressed: _loadSpots,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Try again'),
         ),
       );
     }
 
     if (_spots.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.local_parking, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            const Text('No available spots right now'),
-            const SizedBox(height: 8),
-            const Text(
-              'Check back later or use the Request Spot tab',
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _loadSpots,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Refresh'),
-            ),
-          ],
+      return EmptyState(
+        icon: Icons.local_parking_rounded,
+        title: 'No open spots right now',
+        message:
+            'Check back later, or post a request in the "Request spot" tab.',
+        action: FilledButton.icon(
+          onPressed: _loadSpots,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Refresh'),
         ),
       );
     }
 
     return RefreshIndicator(
       onRefresh: _loadSpots,
-      child: ListView.builder(
+      child: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: _spots.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final spot = _spots[index];
-          return Card(
-            child: ListTile(
-              leading: const Icon(Icons.local_parking, color: Colors.green),
-              title: Text(spot.spotIdentifier),
-              subtitle: const Text('Tap to view slots & book'),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () => _showBookingDialog(spot),
-            ),
+          return _AvailableSpotCard(
+            spot: spot,
+            onTap: () => _showBookingDialog(spot),
           );
         },
+      ),
+    );
+  }
+}
+
+class _AvailableSpotCard extends StatelessWidget {
+  final ParkingSpot spot;
+  final VoidCallback onTap;
+  const _AvailableSpotCard({required this.spot, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                alignment: Alignment.center,
+                child: Icon(Icons.local_parking_rounded,
+                    color: scheme.primary),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Spot ${spot.spotIdentifier}',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Tap to view available windows',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios,
+                  size: 14, color: scheme.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TimeField extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String? value;
+  final String? placeholder;
+  final VoidCallback onTap;
+
+  const _TimeField({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.value,
+    this.placeholder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: scheme.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value ?? placeholder ?? '—',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: value == null
+                          ? scheme.onSurfaceVariant
+                          : scheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.edit_calendar_outlined,
+                size: 18, color: scheme.onSurfaceVariant),
+          ],
+        ),
       ),
     );
   }

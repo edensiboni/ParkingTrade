@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/booking_service.dart';
 import '../../models/booking_request.dart';
-import '../../models/profile.dart';
+import '../../widgets/app_snack.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/skeleton.dart';
+import '../../widgets/status_chip.dart';
 import 'booking_detail_screen.dart';
 import 'request_spot_screen.dart';
 import 'available_spots_screen.dart';
@@ -14,7 +18,8 @@ class BookingsScreen extends StatefulWidget {
   State<BookingsScreen> createState() => _BookingsScreenState();
 }
 
-class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProviderStateMixin {
+class _BookingsScreenState extends State<BookingsScreen>
+    with SingleTickerProviderStateMixin {
   final _bookingService = BookingService();
   late TabController _tabController;
   List<BookingRequest> _myBookings = [];
@@ -28,11 +33,10 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
     _loadBookings();
   }
 
-  // Method to switch to My Bookings tab (called after booking)
   void switchToMyBookings() {
     if (mounted) {
-      _tabController.animateTo(1); // Switch to My Bookings tab (index 1)
-      _loadBookings(); // Refresh bookings
+      _tabController.animateTo(1);
+      _loadBookings();
     }
   }
 
@@ -43,30 +47,23 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
   }
 
   Future<void> _loadBookings() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final [myBookings, pendingRequests] = await Future.wait([
         _bookingService.getUserBookings(),
         _bookingService.getPendingBookingsForLender(),
       ]);
-
+      if (!mounted) return;
       setState(() {
         _myBookings = myBookings;
         _pendingRequests = pendingRequests;
         _isLoading = false;
       });
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading bookings: $e')),
-        );
-      }
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      AppSnack.error(context, 'Could not load bookings: $e');
     }
   }
 
@@ -74,16 +71,19 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Cancel Booking'),
-        content: const Text('Are you sure you want to cancel this booking?'),
+        title: const Text('Cancel booking?'),
+        content: const Text('The lender will be notified.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('No'),
+            child: const Text('Keep it'),
           ),
-          TextButton(
+          FilledButton.tonal(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Yes, Cancel'),
+            style: FilledButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Cancel booking'),
           ),
         ],
       ),
@@ -94,133 +94,154 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
     try {
       await _bookingService.cancelBooking(booking.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Booking cancelled successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        _loadBookings(); // Refresh the list
+        AppSnack.success(context, 'Booking cancelled');
+        _loadBookings();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error cancelling booking: ${e.toString().replaceAll('Exception: ', '')}'),
-            backgroundColor: Colors.red,
-          ),
+        AppSnack.error(
+            context,
+            'Could not cancel: ${e.toString().replaceAll('Exception: ', '')}');
+      }
+    }
+  }
+
+  _StatusDescriptor _describeStatus(BookingRequest booking) {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    final isBorrower = booking.borrowerId == userId;
+    switch (booking.status) {
+      case BookingStatus.pending:
+        return _StatusDescriptor(
+          label: isBorrower ? 'Waiting for approval' : 'Needs your review',
+          tone: StatusTone.warning,
+          icon: Icons.hourglass_top_rounded,
         );
-      }
+      case BookingStatus.approved:
+        return _StatusDescriptor(
+          label: isBorrower ? 'Approved' : 'You approved',
+          tone: StatusTone.success,
+          icon: Icons.check_circle_outline,
+        );
+      case BookingStatus.rejected:
+        return _StatusDescriptor(
+          label: isBorrower ? 'Declined' : 'You declined',
+          tone: StatusTone.danger,
+          icon: Icons.cancel_outlined,
+        );
+      case BookingStatus.cancelled:
+        return _StatusDescriptor(
+          label: 'Cancelled',
+          tone: StatusTone.neutral,
+          icon: Icons.block_rounded,
+        );
+      case BookingStatus.completed:
+        return _StatusDescriptor(
+          label: 'Completed',
+          tone: StatusTone.info,
+          icon: Icons.done_all_rounded,
+        );
     }
   }
 
-  String _getBookingStatusText(BookingRequest booking, Profile? currentProfile) {
-    if (booking.borrowerId == currentProfile?.id) {
-      switch (booking.status) {
-        case BookingStatus.pending:
-          return 'Waiting for approval';
-        case BookingStatus.approved:
-          return 'Approved';
-        case BookingStatus.rejected:
-          return 'Rejected';
-        case BookingStatus.cancelled:
-          return 'Cancelled';
-        case BookingStatus.completed:
-          return 'Completed';
-      }
-    } else {
-      switch (booking.status) {
-        case BookingStatus.pending:
-          return 'Pending your approval';
-        case BookingStatus.approved:
-          return 'Approved by you';
-        case BookingStatus.rejected:
-          return 'Rejected by you';
-        case BookingStatus.cancelled:
-          return 'Cancelled';
-        case BookingStatus.completed:
-          return 'Completed';
-      }
-    }
-  }
-
-  Widget _buildBookingItem(BookingRequest booking, {bool showCancel = false}) {
+  Widget _buildBookingCard(BookingRequest booking, {bool showCancel = false}) {
     final user = Supabase.instance.client.auth.currentUser;
-    final canCancel = showCancel && 
-        booking.borrowerId == user?.id && 
-        (booking.status == BookingStatus.pending || booking.status == BookingStatus.approved);
+    final canCancel = showCancel &&
+        booking.borrowerId == user?.id &&
+        (booking.status == BookingStatus.pending ||
+            booking.status == BookingStatus.approved);
+
+    final status = _describeStatus(booking);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dateFmt = DateFormat('EEE MMM d • h:mm a');
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: ListTile(
-        title: const Text('Spot Booking'),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(
-              '${booking.startTime.toString().substring(0, 16)} - ${booking.endTime.toString().substring(0, 16)}',
-            ),
-            Text(_getBookingStatusText(booking, null)),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (canCancel)
-              IconButton(
-                icon: const Icon(Icons.cancel, color: Colors.red),
-                onPressed: () => _cancelBooking(booking),
-                tooltip: 'Cancel Booking',
-              ),
-            Icon(
-              _getStatusIcon(booking.status),
-              color: _getStatusColor(booking.status),
-            ),
-          ],
-        ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
         onTap: () async {
           final result = await Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => BookingDetailScreen(bookingId: booking.id),
             ),
           );
-          if (result == true) {
-            _loadBookings();
-          }
+          if (result == true) _loadBookings();
         },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(Icons.local_parking_rounded,
+                        size: 20, color: scheme.primary),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Parking booking',
+                            style: theme.textTheme.titleMedium),
+                        const SizedBox(height: 2),
+                        Text(
+                          dateFmt.format(booking.startTime.toLocal()),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  StatusChip(
+                    label: status.label,
+                    tone: status.tone,
+                    icon: status.icon,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.schedule_rounded,
+                      size: 16, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '${dateFmt.format(booking.startTime.toLocal())}  →  ${dateFmt.format(booking.endTime.toLocal())}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant),
+                    ),
+                  ),
+                ],
+              ),
+              if (canCancel) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => _cancelBooking(booking),
+                    icon: Icon(Icons.close_rounded,
+                        size: 18, color: scheme.error),
+                    label: Text(
+                      'Cancel',
+                      style: TextStyle(color: scheme.error),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
-  }
-
-  IconData _getStatusIcon(BookingStatus status) {
-    switch (status) {
-      case BookingStatus.pending:
-        return Icons.pending;
-      case BookingStatus.approved:
-        return Icons.check_circle;
-      case BookingStatus.rejected:
-        return Icons.cancel;
-      case BookingStatus.cancelled:
-        return Icons.cancel_outlined;
-      case BookingStatus.completed:
-        return Icons.done_all;
-    }
-  }
-
-  Color _getStatusColor(BookingStatus status) {
-    switch (status) {
-      case BookingStatus.pending:
-        return Colors.orange;
-      case BookingStatus.approved:
-        return Colors.green;
-      case BookingStatus.rejected:
-        return Colors.red;
-      case BookingStatus.cancelled:
-        return Colors.grey;
-      case BookingStatus.completed:
-        return Colors.blue;
-    }
   }
 
   @override
@@ -231,74 +252,81 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
+          tabAlignment: TabAlignment.start,
           tabs: const [
-            Tab(text: 'Available Spots'),
-            Tab(text: 'My Bookings'),
+            Tab(text: 'Available'),
+            Tab(text: 'My bookings'),
             Tab(text: 'Pending'),
-            Tab(text: 'Request Spot'),
+            Tab(text: 'Request'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          // Available Spots Tab (NEW - First tab)
           AvailableSpotsScreen(
             onBookingCreated: () {
               _loadBookings();
               switchToMyBookings();
             },
           ),
-
-          // My Bookings Tab
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _myBookings.isEmpty
-                  ? const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.book_outlined, size: 64, color: Colors.grey),
-                          SizedBox(height: 16),
-                          Text('No bookings yet'),
-                          SizedBox(height: 8),
-                          Text(
-                            'Book a spot from Available Spots tab',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadBookings,
-                      child: ListView.builder(
-                        itemCount: _myBookings.length,
-                        itemBuilder: (context, index) {
-                          return _buildBookingItem(_myBookings[index], showCancel: true);
-                        },
-                      ),
-                    ),
-
-          // Pending Requests Tab (for lenders)
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _pendingRequests.isEmpty
-                  ? const Center(child: Text('No pending requests'))
-                  : RefreshIndicator(
-                      onRefresh: _loadBookings,
-                      child: ListView.builder(
-                        itemCount: _pendingRequests.length,
-                        itemBuilder: (context, index) {
-                          return _buildBookingItem(_pendingRequests[index]);
-                        },
-                      ),
-                    ),
-
-          // Request Spot Tab
+          _buildMyBookingsList(),
+          _buildPendingList(),
           RequestSpotScreen(onBookingCreated: _loadBookings),
         ],
       ),
     );
   }
+
+  Widget _buildMyBookingsList() {
+    if (_isLoading) return const SkeletonList(count: 3);
+    if (_myBookings.isEmpty) {
+      return const EmptyState(
+        icon: Icons.event_note_rounded,
+        title: 'No bookings yet',
+        message: 'Book a spot from the Available tab to see it here.',
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadBookings,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _myBookings.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, i) =>
+            _buildBookingCard(_myBookings[i], showCancel: true),
+      ),
+    );
+  }
+
+  Widget _buildPendingList() {
+    if (_isLoading) return const SkeletonList(count: 3);
+    if (_pendingRequests.isEmpty) {
+      return const EmptyState(
+        icon: Icons.inbox_rounded,
+        title: 'Inbox zero',
+        message: 'No requests waiting on your approval.',
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadBookings,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _pendingRequests.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, i) => _buildBookingCard(_pendingRequests[i]),
+      ),
+    );
+  }
 }
 
+class _StatusDescriptor {
+  final String label;
+  final StatusTone tone;
+  final IconData icon;
+  _StatusDescriptor({
+    required this.label,
+    required this.tone,
+    required this.icon,
+  });
+}

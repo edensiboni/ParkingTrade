@@ -40,10 +40,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       });
     } catch (e) {
       setState(() {
-        // Clean up error message - remove "Exception: " prefix if present
-        String errorMsg = e.toString();
-        errorMsg = errorMsg.replaceAll('Exception: ', '');
-        _errorMessage = errorMsg;
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;
       });
     }
@@ -51,9 +48,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   Future<void> _verifyOtp() async {
     if (_otpController.text.trim().isEmpty) {
-      setState(() {
-        _errorMessage = 'Please enter OTP';
-      });
+      setState(() => _errorMessage = 'Please enter the code');
       return;
     }
 
@@ -67,13 +62,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         _phoneController.text.trim(),
         _otpController.text.trim(),
       );
-      
-      // OTP verified successfully
-      // Navigation will be handled by auth state listener in main.dart
-      // Don't reset loading state here - let navigation happen
       if (response.user != null) {
-        // User is signed in, wait for navigation
-        // The AuthWrapper will handle navigation based on profile
+        // AuthWrapper handles routing.
       }
     } catch (e) {
       setState(() {
@@ -90,7 +80,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     });
     try {
       await _authService.signInWithGoogle();
-      // On web, browser redirects away; on mobile, auth state will update. Don't reset loading here.
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -103,135 +92,252 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sign In'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (!_isOtpSent) ...[
-                  OutlinedButton.icon(
-                    onPressed: _isLoading ? null : _signInWithGoogle,
-                    icon: const Icon(Icons.g_mobiledata, size: 24),
-                    label: const Text('Continue with Google'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Expanded(child: Divider(color: Theme.of(context).colorScheme.outline)),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          'or',
-                          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 32,
+                  maxWidth: 440,
+                ),
+                child: Center(
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 24),
+                        _Hero(scheme: scheme, theme: theme),
+                        const SizedBox(height: 40),
+                        if (!_isOtpSent)
+                          _buildPhoneStep(theme, scheme)
+                        else
+                          _buildOtpStep(theme, scheme),
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: 16),
+                          _ErrorBanner(message: _errorMessage!),
+                        ],
+                        const SizedBox(height: 24),
+                        Text(
+                          'By continuing, you agree to share your phone with your building community.',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
                         ),
-                      ),
-                      Expanded(child: Divider(color: Theme.of(context).colorScheme.outline)),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Sign in with Phone',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone Number',
-                      hintText: '+1234567890',
-                      prefixIcon: Icon(Icons.phone),
+                        const SizedBox(height: 16),
+                      ],
                     ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your phone number';
-                      }
-                      // Validate E.164 format (must start with +)
-                      final trimmed = value.trim();
-                      if (!trimmed.startsWith('+')) {
-                        return 'Phone number must start with + (e.g., +1234567890)';
-                      }
-                      // Basic E.164 validation: + followed by 1-15 digits
-                      final phoneRegex = RegExp(r'^\+\d{1,15}$');
-                      if (!phoneRegex.hasMatch(trimmed)) {
-                        return 'Invalid phone format. Use E.164 format: +1234567890';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _sendOtp,
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Send OTP'),
-                  ),
-                ] else ...[
-                const Text(
-                  'Enter the OTP sent to your phone',
-                  style: TextStyle(fontSize: 16),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _otpController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'OTP',
-                    prefixIcon: Icon(Icons.lock),
                   ),
                 ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _verifyOtp,
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Verify OTP'),
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _isOtpSent = false;
-                      _otpController.clear();
-                    });
-                  },
-                  child: const Text('Change Phone Number'),
-                ),
-              ],
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  _errorMessage!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
   }
+
+  Widget _buildPhoneStep(ThemeData theme, ColorScheme scheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _isLoading ? null : _signInWithGoogle,
+          icon: const Icon(Icons.g_mobiledata, size: 28),
+          label: const Text('Continue with Google'),
+        ),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            Expanded(
+              child: Divider(color: scheme.outlineVariant),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'or',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Divider(color: scheme.outlineVariant),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        TextFormField(
+          controller: _phoneController,
+          keyboardType: TextInputType.phone,
+          autofillHints: const [AutofillHints.telephoneNumber],
+          decoration: const InputDecoration(
+            labelText: 'Phone number',
+            hintText: '+1 555 123 4567',
+            prefixIcon: Icon(Icons.phone_outlined),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter your phone number';
+            }
+            final trimmed = value.trim();
+            if (!trimmed.startsWith('+')) {
+              return 'Must start with country code, e.g. +1';
+            }
+            final phoneRegex = RegExp(r'^\+\d{1,15}$');
+            if (!phoneRegex.hasMatch(trimmed)) {
+              return 'Digits only after the + sign';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed: _isLoading ? null : _sendOtp,
+          child: _isLoading
+              ? const _ButtonSpinner()
+              : const Text('Send code'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOtpStep(ThemeData theme, ColorScheme scheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Enter the 6-digit code',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'We sent it to ${_phoneController.text.trim()}',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 24),
+        TextFormField(
+          controller: _otpController,
+          keyboardType: TextInputType.number,
+          textAlign: TextAlign.center,
+          autofillHints: const [AutofillHints.oneTimeCode],
+          style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 8),
+          decoration: const InputDecoration(
+            hintText: '••••••',
+          ),
+        ),
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed: _isLoading ? null : _verifyOtp,
+          child: _isLoading
+              ? const _ButtonSpinner()
+              : const Text('Verify & continue'),
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: _isLoading
+              ? null
+              : () {
+                  setState(() {
+                    _isOtpSent = false;
+                    _otpController.clear();
+                    _errorMessage = null;
+                  });
+                },
+          child: const Text('Use a different phone number'),
+        ),
+      ],
+    );
+  }
 }
 
+class _Hero extends StatelessWidget {
+  final ColorScheme scheme;
+  final ThemeData theme;
+  const _Hero({required this.scheme, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            color: scheme.primaryContainer.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Icon(Icons.local_parking, size: 36, color: scheme.primary),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          'Welcome to ParkingTrade',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Swap spots with your neighbors.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ButtonSpinner extends StatelessWidget {
+  const _ButtonSpinner();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      height: 20,
+      width: 20,
+      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+  const _ErrorBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.errorContainer.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, size: 18, color: scheme.onErrorContainer),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: scheme.onErrorContainer),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

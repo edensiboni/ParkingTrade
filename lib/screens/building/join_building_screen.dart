@@ -5,8 +5,12 @@ import '../../models/building.dart';
 import '../../services/address_autocomplete_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/building_service.dart';
+import '../../widgets/app_snack.dart';
+import '../../widgets/section_header.dart';
 import 'pending_approval_screen.dart';
 import '../spots/parking_spots_screen.dart';
+
+enum _JoinMode { code, search, create }
 
 class JoinBuildingScreen extends StatefulWidget {
   const JoinBuildingScreen({super.key});
@@ -26,6 +30,7 @@ class _JoinBuildingScreenState extends State<JoinBuildingScreen> {
   final _authService = AuthService();
   final _addressService = AddressAutocompleteService();
 
+  _JoinMode _mode = _JoinMode.code;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -54,16 +59,12 @@ class _JoinBuildingScreenState extends State<JoinBuildingScreen> {
     super.dispose();
   }
 
-  void _onSearchBuildingChanged() {
-    _runBuildingSearch();
-  }
+  void _onSearchBuildingChanged() => _runBuildingSearch();
 
   Future<void> _runBuildingSearch() async {
     final query = _searchBuildingController.text.trim();
     if (query.isEmpty) {
-      setState(() {
-        _buildingSearchResults = [];
-      });
+      setState(() => _buildingSearchResults = []);
       return;
     }
     setState(() => _buildingSearchLoading = true);
@@ -236,9 +237,7 @@ class _JoinBuildingScreenState extends State<JoinBuildingScreen> {
   void _copyInviteCode() {
     if (_createdInviteCode != null) {
       Clipboard.setData(ClipboardData(text: _createdInviteCode!));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invite code copied')),
-      );
+      AppSnack.success(context, 'Invite code copied');
     }
   }
 
@@ -247,200 +246,73 @@ class _JoinBuildingScreenState extends State<JoinBuildingScreen> {
     if (_createSuccess && _createdInviteCode != null) {
       return _buildCreateSuccessContent();
     }
+
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Your building'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Join your building or create one.',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 24),
-
-                // --- Join: I have an invite code ---
-                const Text(
-                  'I have an invite code',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _inviteCodeController,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                    labelText: 'Invite Code',
-                    hintText: 'ABC123',
-                    prefixIcon: Icon(Icons.key),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Find your building',
+                    style: theme.textTheme.headlineSmall,
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter an invite code';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _displayNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Display name (optional)',
-                    hintText: 'How others will see you',
-                    prefixIcon: Icon(Icons.person),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _joinWithCode,
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Join with code'),
-                ),
-                const SizedBox(height: 24),
-
-                // --- Join: Find my building ---
-                const Text(
-                  'Find my building',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _searchBuildingController,
-                  decoration: const InputDecoration(
-                    hintText: 'Search by building name',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                  onSubmitted: (_) => _runBuildingSearch(),
-                ),
-                if (_buildingSearchLoading)
-                  const Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (_searchBuildingController.text.trim().isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  if (_buildingSearchResults.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Text(
-                        'No buildings found. Create one below.',
-                        style: TextStyle(fontStyle: FontStyle.italic),
-                      ),
-                    )
-                  else
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _buildingSearchResults.length,
-                      itemBuilder: (context, index) {
-                        final b = _buildingSearchResults[index];
-                        return ListTile(
-                          title: Text(b.name),
-                          subtitle: b.approvalRequired
-                              ? const Text('Requires approval to join')
-                              : null,
-                          trailing: const Icon(Icons.arrow_forward),
-                          onTap: () => _joinWithBuilding(b),
-                        );
-                      },
-                    ),
-                ],
-                const SizedBox(height: 24),
-
-                // --- Create new building ---
-                const Text(
-                  'First here? Create your building',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                if (!AddressAutocompleteService.isAvailable)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 8.0),
-                    child: Text(
-                      'On mobile: add PLACES_API_KEY for address autocomplete. Web uses the server.',
-                      style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Join with an invite code, search your address, or start a new one.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
                     ),
                   ),
-                if (AddressAutocompleteService.isAvailable)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 4.0),
-                    child: Text(
-                      'Type 3+ characters to see address suggestions.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                  const SizedBox(height: 20),
+                  _ModeSelector(
+                    current: _mode,
+                    onChanged: (m) => setState(() {
+                      _mode = m;
+                      _errorMessage = null;
+                    }),
+                  ),
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: _displayNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Display name (optional)',
+                      hintText: 'How neighbors will see you',
+                      prefixIcon: Icon(Icons.person_outline),
                     ),
                   ),
-                Stack(
-                  children: [
-                    TextFormField(
-                      controller: _createBuildingNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Building name or address',
-                        hintText: 'e.g. 123 Main St',
-                        prefixIcon: Icon(Icons.location_on),
-                      ),
-                      onTap: () {
-                        if (_addressSuggestions.isNotEmpty) {
-                          setState(() => _showAddressSuggestions = true);
+                  const SizedBox(height: 20),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 200),
+                    child: Builder(
+                      builder: (_) {
+                        switch (_mode) {
+                          case _JoinMode.code:
+                            return _buildCodeSection(theme, scheme);
+                          case _JoinMode.search:
+                            return _buildSearchSection(theme, scheme);
+                          case _JoinMode.create:
+                            return _buildCreateSection(theme, scheme);
                         }
                       },
                     ),
-                    if (_showAddressSuggestions && _addressSuggestions.isNotEmpty)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: 56,
-                        child: Material(
-                          elevation: 4,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 200),
-                            child: ListView.builder(
-                              shrinkWrap: true,
-                              itemCount: _addressSuggestions.length,
-                              itemBuilder: (context, index) {
-                                final s = _addressSuggestions[index];
-                                return ListTile(
-                                  dense: true,
-                                  title: Text(s.displayText),
-                                  onTap: () {
-                                    _createBuildingNameController.text =
-                                        s.displayText;
-                                    setState(() {
-                                      _addressSuggestions = [];
-                                      _showAddressSuggestions = false;
-                                    });
-                                  },
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  onPressed: _isLoading ? null : _createBuilding,
-                  child: const Text('Create building'),
-                ),
-                if (_errorMessage != null) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    _errorMessage!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
-                    textAlign: TextAlign.center,
                   ),
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 16),
+                    _ErrorBanner(message: _errorMessage!),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -448,44 +320,364 @@ class _JoinBuildingScreenState extends State<JoinBuildingScreen> {
     );
   }
 
-  Widget _buildCreateSuccessContent() {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Building created')),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.check_circle, color: Colors.green, size: 64),
-            const SizedBox(height: 24),
-            const Text(
-              'Building created. Share this code with neighbors:',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16),
+  Widget _buildCodeSection(ThemeData theme, ColorScheme scheme) {
+    return Column(
+      key: const ValueKey('code'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionHeader(
+          title: 'Enter your invite code',
+          subtitle: 'Ask your building admin for a 6-character code.',
+          icon: Icons.vpn_key_outlined,
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _inviteCodeController,
+          textCapitalization: TextCapitalization.characters,
+          style: theme.textTheme.titleMedium?.copyWith(letterSpacing: 3),
+          decoration: const InputDecoration(
+            labelText: 'Invite code',
+            hintText: 'ABC123',
+            prefixIcon: Icon(Icons.key_outlined),
+          ),
+          validator: (value) {
+            if (_mode != _JoinMode.code) return null;
+            if (value == null || value.isEmpty) {
+              return 'Please enter an invite code';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed: _isLoading ? null : _joinWithCode,
+          child: _isLoading
+              ? const _ButtonSpinner()
+              : const Text('Join building'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchSection(ThemeData theme, ColorScheme scheme) {
+    return Column(
+      key: const ValueKey('search'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionHeader(
+          title: 'Search by building name',
+          subtitle: 'We\'ll match against buildings already on ParkingTrade.',
+          icon: Icons.search_outlined,
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _searchBuildingController,
+          decoration: const InputDecoration(
+            hintText: 'e.g. Skyline Towers',
+            prefixIcon: Icon(Icons.search),
+          ),
+          onSubmitted: (_) => _runBuildingSearch(),
+        ),
+        const SizedBox(height: 8),
+        if (_buildingSearchLoading)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(
+              child: SizedBox(
+                height: 24,
+                width: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             ),
-            const SizedBox(height: 16),
-            SelectableText(
-              _createdInviteCode!,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 4,
+          )
+        else if (_searchBuildingController.text.trim().isNotEmpty) ...[
+          if (_buildingSearchResults.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      size: 18, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'No matches yet. Try creating your building.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
-              textAlign: TextAlign.center,
+                ],
+              ),
+            )
+          else
+            Column(
+              children: [
+                for (final b in _buildingSearchResults)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Card(
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor:
+                              scheme.primaryContainer.withValues(alpha: 0.5),
+                          foregroundColor: scheme.primary,
+                          child: const Icon(Icons.apartment),
+                        ),
+                        title: Text(b.name),
+                        subtitle: b.approvalRequired
+                            ? const Text('Requires approval to join')
+                            : const Text('Open to join'),
+                        trailing: const Icon(Icons.arrow_forward, size: 18),
+                        onTap: _isLoading ? null : () => _joinWithBuilding(b),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: _copyInviteCode,
-              icon: const Icon(Icons.copy),
-              label: const Text('Copy code'),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCreateSection(ThemeData theme, ColorScheme scheme) {
+    return Column(
+      key: const ValueKey('create'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionHeader(
+          title: 'Create your building',
+          subtitle:
+              'Be the first from your building. We\'ll generate an invite code for your neighbors.',
+          icon: Icons.apartment_outlined,
+        ),
+        const SizedBox(height: 12),
+        Stack(
+          children: [
+            TextFormField(
+              controller: _createBuildingNameController,
+              decoration: const InputDecoration(
+                labelText: 'Building name or address',
+                hintText: 'e.g. 123 Main St',
+                prefixIcon: Icon(Icons.location_on_outlined),
+              ),
+              onTap: () {
+                if (_addressSuggestions.isNotEmpty) {
+                  setState(() => _showAddressSuggestions = true);
+                }
+              },
             ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: _continueAfterCreate,
-              child: const Text('Continue'),
-            ),
+            if (_showAddressSuggestions && _addressSuggestions.isNotEmpty)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 60,
+                child: Material(
+                  elevation: 4,
+                  borderRadius: BorderRadius.circular(12),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      itemCount: _addressSuggestions.length,
+                      itemBuilder: (context, index) {
+                        final s = _addressSuggestions[index];
+                        return ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.place_outlined, size: 18),
+                          title: Text(s.displayText),
+                          onTap: () {
+                            _createBuildingNameController.text = s.displayText;
+                            setState(() {
+                              _addressSuggestions = [];
+                              _showAddressSuggestions = false;
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
+        if (AddressAutocompleteService.isAvailable)
+          Padding(
+            padding: const EdgeInsets.only(top: 6.0, left: 4.0),
+            child: Text(
+              'Type 3+ characters for address suggestions.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: _isLoading ? null : _createBuilding,
+          icon: _isLoading
+              ? const _ButtonSpinner()
+              : const Icon(Icons.add_home_outlined),
+          label: const Text('Create building'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCreateSuccessContent() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Building created')),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer.withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(Icons.check_rounded,
+                    size: 48, color: scheme.primary),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'You\'re all set',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Share this invite code with your neighbors so they can join.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: scheme.outlineVariant),
+                ),
+                child: Center(
+                  child: SelectableText(
+                    _createdInviteCode!,
+                    style: theme.textTheme.displaySmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 8,
+                      color: scheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _copyInviteCode,
+                icon: const Icon(Icons.copy_rounded),
+                label: const Text('Copy code'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: _continueAfterCreate,
+                child: const Text('Continue to your spots'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ModeSelector extends StatelessWidget {
+  final _JoinMode current;
+  final ValueChanged<_JoinMode> onChanged;
+
+  const _ModeSelector({required this.current, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<_JoinMode>(
+      segments: const [
+        ButtonSegment(
+          value: _JoinMode.code,
+          icon: Icon(Icons.vpn_key_outlined, size: 18),
+          label: Text('Code'),
+        ),
+        ButtonSegment(
+          value: _JoinMode.search,
+          icon: Icon(Icons.search, size: 18),
+          label: Text('Search'),
+        ),
+        ButtonSegment(
+          value: _JoinMode.create,
+          icon: Icon(Icons.add_home_outlined, size: 18),
+          label: Text('Create'),
+        ),
+      ],
+      selected: {current},
+      showSelectedIcon: false,
+      onSelectionChanged: (s) => onChanged(s.first),
+      style: ButtonStyle(
+        textStyle: WidgetStateProperty.all(
+          Theme.of(context).textTheme.labelLarge,
+        ),
+      ),
+    );
+  }
+}
+
+class _ButtonSpinner extends StatelessWidget {
+  const _ButtonSpinner();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      height: 20,
+      width: 20,
+      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+  const _ErrorBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.errorContainer.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, size: 18, color: scheme.onErrorContainer),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: scheme.onErrorContainer),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -211,7 +211,7 @@ class _RequestSpotScreenState extends State<RequestSpotScreen> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<ParkingSpot>(
-              value: _selectedSpot,
+              initialValue: _selectedSpot,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.local_parking),

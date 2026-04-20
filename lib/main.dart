@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/supabase_config.dart';
 import 'config/dev_auth_config.dart';
+import 'theme/app_theme.dart';
 import 'firebase_initializer_stub.dart' if (dart.library.io) 'firebase_initializer.dart' as firebase_init;
 import 'services/auth_service.dart';
 import 'services/navigation_service.dart';
@@ -42,7 +43,7 @@ void main() async {
   }
 
   // ✅ DEBUG: Print Supabase configuration being used at runtime
-  final supabaseUrl = SupabaseConfig.supabaseUrl;
+  const supabaseUrl = SupabaseConfig.supabaseUrl;
   final supabasePublishableKey = SupabaseConfig.supabasePublishableKey;
 
   debugPrint('================ Supabase Runtime Config ================');
@@ -83,10 +84,8 @@ class ParkingTradeApp extends StatelessWidget {
     return MaterialApp(
       title: 'Parking Trade',
       navigatorKey: rootNavigatorKey,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
+      debugShowCheckedModeBanner: false,
       home: const AuthWrapper(),
       routes: {
         '/auth': (context) => DevAuthConfig.isEnabled
