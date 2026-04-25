@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/admin_service.dart';
@@ -25,7 +27,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadData();
   }
 
@@ -184,6 +186,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   : 'Pending (${_pendingMembers.length})',
             ),
             Tab(text: 'Members (${_allMembers.length})'),
+            const Tab(text: 'Bulk Import'),
           ],
         ),
       ),
@@ -192,6 +195,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         children: [
           _buildPendingList(),
           _buildAllMembersList(),
+          _BulkImportTab(adminService: _adminService),
         ],
       ),
     );
@@ -367,6 +371,183 @@ class _MemberCard extends StatelessWidget {
     );
   }
 }
+
+// ─── Bulk Import Tab ─────────────────────────────────────────────────────────
+
+class _BulkImportTab extends StatefulWidget {
+  final AdminService adminService;
+  const _BulkImportTab({required this.adminService});
+
+  @override
+  State<_BulkImportTab> createState() => _BulkImportTabState();
+}
+
+class _BulkImportTabState extends State<_BulkImportTab> {
+  final _jsonController = TextEditingController();
+  bool _isImporting = false;
+
+  static const _placeholder = '''[
+  {
+    "apartment_identifier": "101",
+    "phones": ["+972501234567"],
+    "parking_spots": ["A1"]
+  }
+]''';
+
+  @override
+  void dispose() {
+    _jsonController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _runImport() async {
+    final raw = _jsonController.text.trim();
+    if (raw.isEmpty) {
+      AppSnack.error(context, 'Please paste a JSON array before importing.');
+      return;
+    }
+
+    List<Map<String, dynamic>> data;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) throw const FormatException('Root must be a JSON array');
+      data = decoded.cast<Map<String, dynamic>>();
+    } catch (e) {
+      AppSnack.error(context, 'Invalid JSON: ${e.toString()}');
+      return;
+    }
+
+    setState(() => _isImporting = true);
+    try {
+      final result = await widget.adminService.bulkImport(data);
+      if (!mounted) return;
+
+      final imported = (result['imported'] as List?)?.length ?? 0;
+      final errs = result['errors'] as List?;
+
+      if (errs != null && errs.isNotEmpty) {
+        AppSnack.error(
+          context,
+          '$imported apartment(s) imported. ${errs.length} error(s) — check logs.',
+        );
+      } else {
+        AppSnack.success(
+          context,
+          'Successfully imported $imported apartment(s).',
+        );
+        _jsonController.clear();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isImporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header card
+          Card(
+            color: scheme.secondaryContainer.withValues(alpha: 0.4),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.upload_file_rounded,
+                          color: scheme.secondary, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Bulk Import',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: scheme.secondary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Paste a JSON array of apartments to create them along with their residents and parking spots in one go.',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: scheme.onSecondaryContainer),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // JSON input
+          Text('JSON Payload', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _jsonController,
+            maxLines: 14,
+            decoration: InputDecoration(
+              hintText: _placeholder,
+              hintStyle: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+                fontFamily: 'monospace',
+              ),
+              border: const OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
+            style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+            keyboardType: TextInputType.multiline,
+          ),
+          const SizedBox(height: 16),
+
+          // Import button
+          FilledButton.icon(
+            onPressed: _isImporting ? null : _runImport,
+            icon: _isImporting
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: scheme.onPrimary,
+                    ),
+                  )
+                : const Icon(Icons.cloud_upload_rounded),
+            label: Text(_isImporting ? 'Importing…' : 'Import'),
+          ),
+          const SizedBox(height: 24),
+
+          // Format reference
+          Text('Expected format', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              _placeholder,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(fontFamily: 'monospace', fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Avatar helper ────────────────────────────────────────────────────────────
 
 class _Avatar extends StatelessWidget {
   final String? name;

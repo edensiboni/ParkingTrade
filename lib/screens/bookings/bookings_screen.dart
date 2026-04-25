@@ -24,6 +24,7 @@ class _BookingsScreenState extends State<BookingsScreen>
   List<BookingRequest> _myBookings = [];
   List<BookingRequest> _pendingRequests = [];
   Map<String, BookingDetails> _detailsById = const {};
+  String? _currentApartmentId;
   bool _isLoading = true;
 
   @override
@@ -50,6 +51,14 @@ class _BookingsScreenState extends State<BookingsScreen>
     setState(() => _isLoading = true);
 
     try {
+      // Resolve the user's apartment once, then load bookings in parallel.
+      final aptRow = await Supabase.instance.client
+          .from('profiles')
+          .select('apartment_id')
+          .eq('id', Supabase.instance.client.auth.currentUser!.id)
+          .maybeSingle();
+      _currentApartmentId = aptRow?['apartment_id'] as String?;
+
       final [myBookings, pendingRequests] = await Future.wait([
         _bookingService.getUserBookings(),
         _bookingService.getPendingBookingsForLender(),
@@ -76,10 +85,10 @@ class _BookingsScreenState extends State<BookingsScreen>
   }
 
   Future<void> _cancelBooking(BookingRequest booking) async {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
-    final isBorrower = booking.borrowerId == userId;
+    final aptId = _currentApartmentId ?? '';
+    final isBorrower = booking.borrowerApartmentId == aptId;
     final details = _detailsById[booking.id];
-    final counterparty = details?.counterpartyNameFor(userId ?? '') ??
+    final counterparty = details?.counterpartyNameFor(aptId) ??
         (isBorrower ? 'The lender' : 'The borrower');
     final confirmed = await showDialog<bool>(
       context: context,
@@ -120,8 +129,7 @@ class _BookingsScreenState extends State<BookingsScreen>
   }
 
   _StatusDescriptor _describeStatus(BookingRequest booking) {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
-    final isBorrower = booking.borrowerId == userId;
+    final isBorrower = booking.borrowerApartmentId == (_currentApartmentId ?? '');
     switch (booking.status) {
       case BookingStatus.pending:
         return _StatusDescriptor(
@@ -157,9 +165,10 @@ class _BookingsScreenState extends State<BookingsScreen>
   }
 
   Widget _buildBookingCard(BookingRequest booking, {bool showCancel = false}) {
-    final user = Supabase.instance.client.auth.currentUser;
+    final aptId = _currentApartmentId ?? '';
+    final isBorrower = booking.borrowerApartmentId == aptId;
     final canCancel = showCancel &&
-        booking.borrowerId == user?.id &&
+        isBorrower &&
         (booking.status == BookingStatus.pending ||
             booking.status == BookingStatus.approved);
 
@@ -169,11 +178,10 @@ class _BookingsScreenState extends State<BookingsScreen>
     final dateFmt = DateFormat('EEE MMM d • h:mm a');
 
     final details = _detailsById[booking.id];
-    final isBorrower = booking.borrowerId == user?.id;
     final title = details?.spotIdentifier != null
         ? 'Spot ${details!.spotIdentifier}'
         : 'Parking booking';
-    final counterpartyName = details?.counterpartyNameFor(user?.id ?? '');
+    final counterpartyName = details?.counterpartyNameFor(aptId);
     final counterpartyRole = isBorrower ? 'Lender' : 'Borrower';
     final subtitle = counterpartyName != null
         ? '$counterpartyRole · $counterpartyName'

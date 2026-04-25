@@ -20,6 +20,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   final _bookingService = BookingService();
   final _authService = AuthService();
   BookingDetails? _details;
+  String? _currentApartmentId;
   bool _isLoading = true;
   bool _isProcessing = false;
 
@@ -32,10 +33,16 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   Future<void> _loadBooking() async {
     setState(() => _isLoading = true);
     try {
-      final details = await _bookingService.getBookingDetails(widget.bookingId);
+      // Load booking details and current user's apartment in parallel.
+      final results = await Future.wait([
+        _bookingService.getBookingDetails(widget.bookingId),
+        _authService.getCurrentProfile(),
+      ]);
       if (!mounted) return;
       setState(() {
-        _details = details;
+        _details = results[0] as BookingDetails?;
+        _currentApartmentId =
+            (results[1] as dynamic)?.apartmentId as String?;
         _isLoading = false;
       });
     } catch (e) {
@@ -64,7 +71,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     if (_details == null) return;
     final isLender = _isLender();
     final counterparty = _details!.counterpartyNameFor(
-          _authService.currentUser?.id ?? '',
+          _currentApartmentId ?? '',
         ) ??
         (isLender ? 'the borrower' : 'the lender');
     final confirmed = await showDialog<bool>(
@@ -99,8 +106,8 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
 
   bool _isLender() {
     final d = _details;
-    if (d == null) return false;
-    return _authService.currentUser?.id == d.booking.lenderId;
+    if (d == null || _currentApartmentId == null) return false;
+    return _currentApartmentId == d.booking.lenderApartmentId;
   }
 
   ({String label, StatusTone tone, IconData icon}) _statusVisual(

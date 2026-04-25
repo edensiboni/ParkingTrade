@@ -8,7 +8,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/status_chip.dart';
 import '../admin/admin_dashboard_screen.dart';
-import 'add_spot_screen.dart';
+import 'manage_apartment_screen.dart';
 import 'manage_availability_screen.dart';
 import '../bookings/bookings_screen.dart';
 
@@ -25,9 +25,9 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
   final _adminService = AdminService();
   List<ParkingSpot> _spots = [];
   bool _isLoading = true;
-  String? _buildingId;
   String? _displayName;
   bool _isAdmin = false;
+  bool _isApartmentAdmin = false;
   int _pendingAdminCount = 0;
 
   @override
@@ -40,9 +40,9 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
     setState(() => _isLoading = true);
     try {
       final profile = await _authService.getCurrentProfile();
-      _buildingId = profile?.buildingId;
       _displayName = profile?.displayName;
       _isAdmin = profile?.isAdmin ?? false;
+      _isApartmentAdmin = profile?.isApartmentAdmin ?? false;
 
       final spots = await _spotService.getUserSpots();
       if (!mounted) return;
@@ -51,7 +51,7 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
         _isLoading = false;
       });
 
-      // Best-effort pending count for admins — non-blocking.
+      // Best-effort pending count for building admins — non-blocking.
       if (_isAdmin) {
         _refreshAdminPendingCount();
       }
@@ -78,6 +78,12 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
     );
     if (!mounted) return;
     _refreshAdminPendingCount();
+  }
+
+  Future<void> _openManageApartment() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ManageApartmentScreen()),
+    );
   }
 
   Future<void> _toggleSpotActive(ParkingSpot spot) async {
@@ -117,16 +123,6 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
     }
   }
 
-  Future<void> _openAddSpot() async {
-    if (_buildingId == null) return;
-    final result = await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => AddSpotScreen(buildingId: _buildingId!),
-      ),
-    );
-    if (result == true) _loadSpots();
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -149,6 +145,12 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
                   : const Icon(Icons.shield_outlined),
               tooltip: 'Building admin',
               onPressed: _openAdminDashboard,
+            ),
+          if (_isApartmentAdmin)
+            IconButton(
+              icon: const Icon(Icons.manage_accounts_outlined),
+              tooltip: 'Manage apartment',
+              onPressed: _openManageApartment,
             ),
           IconButton(
             icon: const Icon(Icons.directions_car_outlined),
@@ -184,19 +186,14 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
         child: _isLoading
             ? const SkeletonList(count: 4)
             : _spots.isEmpty
-                ? EmptyState(
+                ? const EmptyState(
                     icon: Icons.local_parking_rounded,
-                    title: 'No spots yet',
+                    title: 'No spots assigned',
                     message:
-                        'Add your parking spot to start swapping with neighbors.',
-                    action: FilledButton.icon(
-                      onPressed: _buildingId == null ? null : _openAddSpot,
-                      icon: const Icon(Icons.add_rounded),
-                      label: const Text('Add parking spot'),
-                    ),
+                        'Your parking spot will appear here once it has been assigned to your apartment.',
                   )
                 : ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                     children: [
                       _SummaryBanner(
                         scheme: scheme,
@@ -226,13 +223,6 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
                     ],
                   ),
       ),
-      floatingActionButton: _spots.isEmpty
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _buildingId == null ? null : _openAddSpot,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add spot'),
-            ),
     );
   }
 }
@@ -352,8 +342,7 @@ class _SpotCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     StatusChip(
                       label: active ? 'Active' : 'Inactive',
-                      tone:
-                          active ? StatusTone.success : StatusTone.neutral,
+                      tone: active ? StatusTone.success : StatusTone.neutral,
                       icon: active
                           ? Icons.check_circle_outline
                           : Icons.pause_circle_outline,

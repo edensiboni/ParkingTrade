@@ -20,10 +20,11 @@ class BookingDetails {
     this.lenderDisplayName,
   });
 
-  /// The other party's display name from the current user's perspective.
-  String? counterpartyNameFor(String currentUserId) {
-    if (currentUserId == booking.borrowerId) return lenderDisplayName;
-    if (currentUserId == booking.lenderId) return borrowerDisplayName;
+  /// The other party's display name from the current user's apartment's perspective.
+  /// Pass the current user's [apartmentId].
+  String? counterpartyNameFor(String currentApartmentId) {
+    if (currentApartmentId == booking.borrowerApartmentId) return lenderDisplayName;
+    if (currentApartmentId == booking.lenderApartmentId) return borrowerDisplayName;
     return null;
   }
 }
@@ -106,44 +107,57 @@ class BookingService {
     return BookingRequest.fromJson(response.data['booking']);
   }
 
-  // Get user's bookings (as borrower or lender)
-  Future<List<BookingRequest>> getUserBookings() async {
+  /// Resolve the current user's apartment_id. Returns null if the profile
+  /// has no apartment assigned yet.
+  Future<String?> _currentApartmentId() async {
     final user = _supabase.auth.currentUser;
-    if (user == null) throw Exception('Not authenticated');
+    if (user == null) return null;
+    final row = await _supabase
+        .from('profiles')
+        .select('apartment_id')
+        .eq('id', user.id)
+        .maybeSingle();
+    return row?['apartment_id'] as String?;
+  }
+
+  // Get user's bookings (as borrower or lender apartment)
+  Future<List<BookingRequest>> getUserBookings() async {
+    final apartmentId = await _currentApartmentId();
+    if (apartmentId == null) throw Exception('User has no apartment assigned');
 
     final response = await _supabase
         .from('booking_requests')
         .select()
-        .or('borrower_id.eq.${user.id},lender_id.eq.${user.id}')
+        .or('borrower_apartment_id.eq.$apartmentId,lender_apartment_id.eq.$apartmentId')
         .order('created_at', ascending: false);
 
     return (response as List).map((json) => BookingRequest.fromJson(json)).toList();
   }
 
-  // Get pending bookings for lender
+  // Get pending bookings where the user's apartment is the lender
   Future<List<BookingRequest>> getPendingBookingsForLender() async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) throw Exception('Not authenticated');
+    final apartmentId = await _currentApartmentId();
+    if (apartmentId == null) throw Exception('User has no apartment assigned');
 
     final response = await _supabase
         .from('booking_requests')
         .select()
-        .eq('lender_id', user.id)
+        .eq('lender_apartment_id', apartmentId)
         .eq('status', 'pending')
         .order('created_at', ascending: false);
 
     return (response as List).map((json) => BookingRequest.fromJson(json)).toList();
   }
 
-  // Get active bookings
+  // Get active bookings for the user's apartment
   Future<List<BookingRequest>> getActiveBookings() async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) throw Exception('Not authenticated');
+    final apartmentId = await _currentApartmentId();
+    if (apartmentId == null) throw Exception('User has no apartment assigned');
 
     final response = await _supabase
         .from('booking_requests')
         .select()
-        .or('borrower_id.eq.${user.id},lender_id.eq.${user.id}')
+        .or('borrower_apartment_id.eq.$apartmentId,lender_apartment_id.eq.$apartmentId')
         .inFilter('status', ['pending', 'approved'])
         .order('start_time', ascending: true);
 
@@ -163,9 +177,8 @@ class BookingService {
   }
 
   /// Fetch a booking alongside the joined human context (spot identifier,
-  /// borrower + lender display names). Returns null if the booking itself
-  /// is missing; missing joined rows (e.g. a deleted profile) just come
-  /// back as null fields inside [BookingDetails].
+  /// borrower + lender apartment identifiers). Returns null if the booking
+  /// itself is missing.
   Future<BookingDetails?> getBookingDetails(String bookingId) async {
     final booking = await getBookingById(bookingId);
     if (booking == null) return null;
@@ -173,8 +186,8 @@ class BookingService {
     // Fire the side reads in parallel; each is best-effort.
     final results = await Future.wait([
       _fetchSpotIdentifier(booking.spotId),
-      _fetchDisplayName(booking.borrowerId),
-      _fetchDisplayName(booking.lenderId),
+      _fetchApartmentIdentifier(booking.borrowerApartmentId),
+      _fetchApartmentIdentifier(booking.lenderApartmentId),
     ]);
 
     return BookingDetails(
@@ -198,14 +211,16 @@ class BookingService {
     }
   }
 
-  Future<String?> _fetchDisplayName(String profileId) async {
+  /// Fetch the human-readable identifier for an apartment (e.g. "4B").
+  Future<String?> _fetchApartmentIdentifier(String apartmentId) async {
+    if (apartmentId.isEmpty) return null;
     try {
       final row = await _supabase
-          .from('profiles')
-          .select('display_name')
-          .eq('id', profileId)
+          .from('apartments')
+          .select('identifier')
+          .eq('id', apartmentId)
           .maybeSingle();
-      return row?['display_name'] as String?;
+      return row?['identifier'] as String?;
     } catch (_) {
       return null;
     }
@@ -218,12 +233,15 @@ class BookingService {
     if (bookings.isEmpty) return const {};
 
     final spotIds = bookings.map((b) => b.spotId).toSet().toList();
-    final profileIds = <String>{
-      for (final b in bookings) ...[b.borrowerId, b.lenderId],
+    final apartmentIds = <String>{
+      for (final b in bookings) ...[
+        if (b.borrowerApartmentId.isNotEmpty) b.borrowerApartmentId,
+        if (b.lenderApartmentId.isNotEmpty) b.lenderApartmentId,
+      ],
     }.toList();
 
     final spotMap = <String, String>{};
-    final nameMap = <String, String>{};
+    final aptMap = <String, String>{};
 
     try {
       final spotRows = await _supabase
@@ -239,20 +257,22 @@ class BookingService {
       // Leave spotMap empty — the UI falls back to "Parking booking".
     }
 
-    try {
-      final nameRows = await _supabase
-          .from('profiles')
-          .select('id, display_name')
-          .inFilter('id', profileIds);
-      for (final row in (nameRows as List)) {
-        final id = row['id'] as String?;
-        final name = row['display_name'] as String?;
-        if (id != null && name != null && name.isNotEmpty) {
-          nameMap[id] = name;
+    if (apartmentIds.isNotEmpty) {
+      try {
+        final aptRows = await _supabase
+            .from('apartments')
+            .select('id, identifier')
+            .inFilter('id', apartmentIds);
+        for (final row in (aptRows as List)) {
+          final id = row['id'] as String?;
+          final ident = row['identifier'] as String?;
+          if (id != null && ident != null && ident.isNotEmpty) {
+            aptMap[id] = ident;
+          }
         }
+      } catch (_) {
+        // Leave aptMap empty — the UI falls back gracefully.
       }
-    } catch (_) {
-      // Leave nameMap empty — the UI falls back gracefully.
     }
 
     return {
@@ -260,22 +280,23 @@ class BookingService {
         b.id: BookingDetails(
           booking: b,
           spotIdentifier: spotMap[b.spotId],
-          borrowerDisplayName: nameMap[b.borrowerId],
-          lenderDisplayName: nameMap[b.lenderId],
+          borrowerDisplayName: aptMap[b.borrowerApartmentId],
+          lenderDisplayName: aptMap[b.lenderApartmentId],
         ),
     };
   }
 
   // Cancel booking
   Future<void> cancelBooking(String bookingId) async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) throw Exception('Not authenticated');
+    final apartmentId = await _currentApartmentId();
+    if (apartmentId == null) throw Exception('Not authenticated or no apartment');
 
-    // Get booking to verify ownership
+    // Get booking to verify the user's apartment is a party to it.
     final booking = await getBookingById(bookingId);
     if (booking == null) throw Exception('Booking not found');
 
-    if (booking.borrowerId != user.id && booking.lenderId != user.id) {
+    if (booking.borrowerApartmentId != apartmentId &&
+        booking.lenderApartmentId != apartmentId) {
       throw Exception('Not authorized to cancel this booking');
     }
 
@@ -285,8 +306,8 @@ class BookingService {
         .eq('id', bookingId);
   }
 
-  // Get available parking spots in building
-  // Optionally filter by time period to show only spots available during that time
+  // Get available parking spots in building, excluding the user's own apartment's spots.
+  // Optionally filter by time period to show only spots available during that time.
   Future<List<ParkingSpot>> getAvailableSpots({
     DateTime? startTime,
     DateTime? endTime,
@@ -294,25 +315,34 @@ class BookingService {
     final user = _supabase.auth.currentUser;
     if (user == null) throw Exception('Not authenticated');
 
-    final profileResponse = await _supabase
+    // Resolve both apartment_id and building_id via a single join query.
+    final profileRow = await _supabase
         .from('profiles')
-        .select('building_id')
+        .select('apartment_id, apartments(building_id)')
         .eq('id', user.id)
         .single();
 
-    final buildingId = profileResponse['building_id'] as String?;
-    if (buildingId == null) throw Exception('User not in a building');
+    final apartmentId = profileRow['apartment_id'] as String?;
+    final buildingId =
+        (profileRow['apartments'] as Map<String, dynamic>?)?['building_id']
+            as String?;
 
+    if (apartmentId == null || buildingId == null) {
+      throw Exception('User not assigned to an apartment');
+    }
+
+    // Fetch active spots in the same building, excluding the user's own apartment.
     final response = await _supabase
         .from('parking_spots')
         .select()
         .eq('building_id', buildingId)
         .eq('is_active', true)
-        .neq('resident_id', user.id); // Exclude user's own spots
+        .neq('apartment_id', apartmentId); // Exclude own apartment's spots
 
-    final allSpots = (response as List).map((json) => ParkingSpot.fromJson(json)).toList();
+    final allSpots =
+        (response as List).map((json) => ParkingSpot.fromJson(json)).toList();
 
-    // If time period is specified, filter by availability
+    // If time period is specified, filter by availability.
     if (startTime != null && endTime != null) {
       final availableSpots = <ParkingSpot>[];
       for (final spot in allSpots) {

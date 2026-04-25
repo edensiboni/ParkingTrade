@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -15,10 +16,12 @@ import 'theme/app_theme.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service_web.dart';
 import 'screens/auth/phone_auth_screen.dart';
-import 'screens/building/join_building_screen.dart';
+import 'screens/auth/create_building_screen.dart';
+import 'screens/auth/not_registered_screen.dart';
 import 'screens/building/pending_approval_screen.dart';
 import 'screens/building/rejected_screen.dart';
 import 'screens/spots/parking_spots_screen.dart';
+import 'screens/admin/admin_dashboard_screen.dart';
 import 'models/profile.dart';
 
 void main() async {
@@ -102,10 +105,15 @@ class ParkingTradeApp extends StatelessWidget {
       home: const AuthWrapper(),
       routes: {
         '/auth': (context) => const PhoneAuthScreen(),
-        '/join-building': (context) => const JoinBuildingScreen(),
+        '/setup': (context) => CreateBuildingScreen(
+              onCreated: () =>
+                  Navigator.of(context).pushReplacementNamed('/auth'),
+            ),
+        '/not-registered': (context) => const NotRegisteredScreen(),
         '/pending-approval': (context) => const PendingApprovalScreen(),
         '/rejected': (context) => const RejectedScreen(),
         '/home': (context) => const ParkingSpotsScreen(),
+        '/admin': (context) => const AdminDashboardScreen(),
       },
     );
   }
@@ -169,11 +177,13 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final _authService = AuthService();
   bool _isLoading = true;
+  bool _isSetupMode = false;
   StreamSubscription<AuthState>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
+    _isSetupMode = _detectSetupMode();
     _checkAuth();
     _authSubscription = _authService.authStateChanges.listen(
       (state) {
@@ -198,9 +208,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
     super.dispose();
   }
 
+  /// Returns true when the URL contains `mode=setup` (web only).
+  bool _detectSetupMode() {
+    if (!kIsWeb) return false;
+    try {
+      final uri = Uri.base;
+      return uri.queryParameters['mode'] == 'setup';
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _checkAuth() async {
-    final user = _authService.currentUser;
-    if (user != null) {
+    // Use currentSession (not just currentUser) so we confirm a valid,
+    // persisted session exists before bypassing the phone auth screen.
+    final session = _authService.currentSession;
+    if (session != null) {
       await _navigateBasedOnProfile();
     } else {
       setState(() {
@@ -210,8 +233,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _handleAuthChange(AuthState state) async {
-    if (state.event == AuthChangeEvent.signedIn) {
-      await _navigateBasedOnProfile();
+    if (state.event == AuthChangeEvent.signedIn ||
+        state.event == AuthChangeEvent.initialSession ||
+        state.event == AuthChangeEvent.tokenRefreshed) {
+      // On app restart with a persisted session the SDK fires initialSession.
+      // tokenRefreshed fires when the access token is silently renewed.
+      // In all these cases we want to route based on the user's profile.
+      if (_authService.currentSession != null) {
+        await _navigateBasedOnProfile();
+      } else if (state.event == AuthChangeEvent.initialSession) {
+        // initialSession fired but session is null → no stored session, show auth.
+        if (mounted) setState(() => _isLoading = false);
+      }
     } else if (state.event == AuthChangeEvent.signedOut) {
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil(
@@ -231,22 +264,24 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
       if (!mounted) return;
 
-      if (profile == null) {
-        Navigator.of(context).pushReplacementNamed('/join-building');
+      // No pre-created profile found for this phone number
+      if (profile == null || profile.apartmentId == null) {
+        Navigator.of(context).pushReplacementNamed('/not-registered');
         if (mounted) setState(() => _isLoading = false);
         return;
       }
 
-      if (profile.buildingId == null) {
-        Navigator.of(context).pushReplacementNamed('/join-building');
+      // Profile is linked to an apartment — route based on role then status
+      if (profile.isAdmin) {
+        // Building admins always go to the Admin Dashboard
+        Navigator.of(context).pushReplacementNamed('/admin');
       } else if (profile.status == ProfileStatus.pending) {
         Navigator.of(context).pushReplacementNamed('/pending-approval');
       } else if (profile.status == ProfileStatus.rejected) {
         Navigator.of(context).pushReplacementNamed('/rejected');
-      } else if (profile.status == ProfileStatus.approved) {
-        Navigator.of(context).pushReplacementNamed('/home');
       } else {
-        Navigator.of(context).pushReplacementNamed('/join-building');
+        // approved regular member → go to parking spots
+        Navigator.of(context).pushReplacementNamed('/home');
       }
 
       if (mounted) setState(() => _isLoading = false);
@@ -256,7 +291,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
       if (user == null && mounted) {
         Navigator.of(context).pushReplacementNamed('/auth');
       } else if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/join-building');
+        // Authenticated but profile fetch failed — treat as not registered
+        Navigator.of(context).pushReplacementNamed('/not-registered');
       }
       if (mounted) setState(() => _isLoading = false);
     }
@@ -269,6 +305,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
+
+    // Hidden admin-onboarding mode: ?mode=setup
+    if (_isSetupMode) {
+      return CreateBuildingScreen(
+        onCreated: () {
+          // Clear setup mode and go to standard login
+          if (mounted) {
+            setState(() => _isSetupMode = false);
+          }
+        },
+      );
+    }
+
     return const PhoneAuthScreen();
   }
 }

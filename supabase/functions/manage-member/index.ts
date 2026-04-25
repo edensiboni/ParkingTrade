@@ -61,10 +61,10 @@ serve(async (req) => {
       )
     }
 
-    // Verify caller is an admin
+    // Verify caller is a building admin — resolve their building via apartment join.
     const { data: adminProfile, error: adminError } = await supabaseClient
       .from('profiles')
-      .select('id, building_id, role, status')
+      .select('id, role, status, apartment_id, apartments(building_id)')
       .eq('id', user.id)
       .single()
 
@@ -82,10 +82,12 @@ serve(async (req) => {
       )
     }
 
-    // Get the target member
+    const adminBuildingId = (adminProfile.apartments as any)?.building_id
+
+    // Get the target member — resolve their building via apartment join.
     const { data: memberProfile, error: memberError } = await supabaseClient
       .from('profiles')
-      .select('id, building_id, status, display_name')
+      .select('id, status, display_name, apartment_id, apartments(building_id)')
       .eq('id', member_id)
       .single()
 
@@ -96,8 +98,10 @@ serve(async (req) => {
       )
     }
 
-    // Verify same building
-    if (memberProfile.building_id !== adminProfile.building_id) {
+    const memberBuildingId = (memberProfile.apartments as any)?.building_id
+
+    // Verify same building.
+    if (memberBuildingId !== adminBuildingId) {
       return new Response(
         JSON.stringify({ error: 'Member is not in your building' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -168,7 +172,7 @@ serve(async (req) => {
     await supabaseClient.from('admin_audit_log').insert({
       admin_id: user.id,
       target_id: member_id,
-      building_id: adminProfile.building_id,
+      building_id: adminBuildingId,
       action,
       old_status: memberProfile.status,
       new_status: newStatus,

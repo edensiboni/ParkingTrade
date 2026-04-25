@@ -77,10 +77,10 @@ serve(async (req) => {
       )
     }
 
-    // Get borrower profile to check building membership
+    // Get borrower profile — must have an apartment and be approved.
     const { data: borrowerProfile, error: borrowerError } = await supabaseClient
       .from('profiles')
-      .select('id, building_id, status')
+      .select('id, apartment_id, status, apartments(building_id)')
       .eq('id', user.id)
       .single()
 
@@ -91,17 +91,19 @@ serve(async (req) => {
       )
     }
 
-    if (!borrowerProfile.building_id || borrowerProfile.status !== 'approved') {
+    if (!borrowerProfile.apartment_id || borrowerProfile.status !== 'approved') {
       return new Response(
         JSON.stringify({ error: 'Borrower must be an approved member of a building' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Get parking spot with owner info
+    const borrowerBuildingId = (borrowerProfile.apartments as any)?.building_id
+
+    // Get parking spot with its apartment info.
     const { data: spot, error: spotError } = await supabaseClient
       .from('parking_spots')
-      .select('id, resident_id, building_id, is_active')
+      .select('id, apartment_id, building_id, is_active, apartments(building_id)')
       .eq('id', spot_id)
       .single()
 
@@ -112,7 +114,7 @@ serve(async (req) => {
       )
     }
 
-    // Verify spot is active
+    // Verify spot is active.
     if (!spot.is_active) {
       return new Response(
         JSON.stringify({ error: 'Parking spot is not active' }),
@@ -120,29 +122,45 @@ serve(async (req) => {
       )
     }
 
-    // Verify borrower and lender are in the same building
-    if (spot.building_id !== borrowerProfile.building_id) {
+    // Verify borrower and spot are in the same building.
+    const spotBuildingId = spot.building_id ?? (spot.apartments as any)?.building_id
+    if (spotBuildingId !== borrowerBuildingId) {
       return new Response(
         JSON.stringify({ error: 'Borrower and spot must be in the same building' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Prevent self-booking
-    if (spot.resident_id === user.id) {
+    // Prevent self-booking (same apartment).
+    if (spot.apartment_id === borrowerProfile.apartment_id) {
       return new Response(
-        JSON.stringify({ error: 'Cannot request your own parking spot' }),
+        JSON.stringify({ error: 'Cannot request your own apartment\'s parking spot' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Create booking request
+    // Find a representative profile in the lender apartment to receive the push notification.
+    // Prefer apartment admins; fall back to any approved member.
+    const { data: lenderProfiles } = await supabaseClient
+      .from('profiles')
+      .select('id, is_apartment_admin, receives_push_notifications')
+      .eq('apartment_id', spot.apartment_id)
+      .eq('status', 'approved')
+
+    const lenderPushRecipient = lenderProfiles?.find(
+      (p: any) => p.is_apartment_admin && p.receives_push_notifications
+    ) ?? lenderProfiles?.find(
+      (p: any) => p.receives_push_notifications
+    ) ?? lenderProfiles?.[0]
+
+    // Create booking request with apartment-scoped parties.
     const { data: bookingRequest, error: insertError } = await supabaseClient
       .from('booking_requests')
       .insert({
         spot_id: spot_id,
-        borrower_id: user.id,
-        lender_id: spot.resident_id,
+        borrower_apartment_id: borrowerProfile.apartment_id,
+        lender_apartment_id: spot.apartment_id,
+        created_by_profile_id: user.id,
         start_time: start_time,
         end_time: end_time,
         status: 'pending'
@@ -157,13 +175,15 @@ serve(async (req) => {
       )
     }
 
-    await sendPushToUser(
-      supabaseClient,
-      spot.resident_id,
-      'New booking request',
-      'Someone requested your parking spot.',
-      { booking_id: bookingRequest.id, type: 'booking_request' }
-    )
+    if (lenderPushRecipient) {
+      await sendPushToUser(
+        supabaseClient,
+        lenderPushRecipient.id,
+        'New booking request',
+        'Someone requested your parking spot.',
+        { booking_id: bookingRequest.id, type: 'booking_request' }
+      )
+    }
 
     return new Response(
       JSON.stringify({ 

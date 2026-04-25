@@ -7,6 +7,9 @@ class AuthService {
 
   User? get currentUser => _supabase.auth.currentUser;
 
+  /// Returns the current session, or null if no valid session exists.
+  Session? get currentSession => _supabase.auth.currentSession;
+
   Stream<AuthState> get authStateChanges => _supabase.auth.onAuthStateChange;
 
   /// Sign in with Google OAuth. On web, redirects to Google then back to app origin; session is restored when the app loads at the redirect URL.
@@ -120,7 +123,7 @@ class AuthService {
       return Profile.fromJson(response);
     } catch (e) {
       // If profile doesn't exist or there's an error, return null
-      // This allows new users to proceed to join-building screen
+      // Return null so the app routes to the not-registered screen
       return null;
     }
   }

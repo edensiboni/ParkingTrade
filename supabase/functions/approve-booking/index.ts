@@ -66,18 +66,18 @@ serve(async (req) => {
       )
     }
 
-    // Get the booking request with spot and lender info
+    // Get the booking request with apartment-scoped party info.
     const { data: booking, error: bookingError } = await supabaseClient
       .from('booking_requests')
       .select(`
         id,
         spot_id,
-        borrower_id,
-        lender_id,
+        borrower_apartment_id,
+        lender_apartment_id,
+        created_by_profile_id,
         start_time,
         end_time,
-        status,
-        parking_spots!inner(resident_id)
+        status
       `)
       .eq('id', booking_id)
       .single()
@@ -89,10 +89,23 @@ serve(async (req) => {
       )
     }
 
-    // Verify the user is the lender (owner of the spot)
-    if (booking.parking_spots.resident_id !== user.id) {
+    // Verify the caller belongs to the lender apartment (any approved member may approve).
+    const { data: callerProfile, error: callerError } = await supabaseClient
+      .from('profiles')
+      .select('apartment_id, status')
+      .eq('id', user.id)
+      .single()
+
+    if (callerError || !callerProfile) {
       return new Response(
-        JSON.stringify({ error: 'Only the spot owner can approve/reject bookings' }),
+        JSON.stringify({ error: 'Caller profile not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (callerProfile.apartment_id !== booking.lender_apartment_id || callerProfile.status !== 'approved') {
+      return new Response(
+        JSON.stringify({ error: 'Only a member of the lender apartment can approve/reject bookings' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -135,22 +148,29 @@ serve(async (req) => {
       )
     }
 
-    if (action === 'approve') {
-      await sendPushToUser(
-        supabaseClient,
-        booking.borrower_id,
-        'Booking approved',
-        'Your parking spot request was approved.',
-        { booking_id: booking_id, type: 'booking_approved' }
-      )
-    } else {
-      await sendPushToUser(
-        supabaseClient,
-        booking.borrower_id,
-        'Booking declined',
-        'Your parking spot request was declined.',
-        { booking_id: booking_id, type: 'booking_rejected' }
-      )
+    // Send push to members of the borrower apartment who opted in.
+    const { data: borrowerProfiles } = await supabaseClient
+      .from('profiles')
+      .select('id, receives_push_notifications')
+      .eq('apartment_id', booking.borrower_apartment_id)
+      .eq('status', 'approved')
+
+    const pushTitle = action === 'approve' ? 'Booking approved' : 'Booking declined'
+    const pushBody = action === 'approve'
+      ? 'Your parking spot request was approved.'
+      : 'Your parking spot request was declined.'
+    const pushType = action === 'approve' ? 'booking_approved' : 'booking_rejected'
+
+    for (const recipient of (borrowerProfiles ?? [])) {
+      if (recipient.receives_push_notifications) {
+        await sendPushToUser(
+          supabaseClient,
+          recipient.id,
+          pushTitle,
+          pushBody,
+          { booking_id: booking_id, type: pushType }
+        )
+      }
     }
 
     return new Response(

@@ -1,8 +1,12 @@
 class BookingRequest {
   final String id;
   final String spotId;
-  final String borrowerId;
-  final String lenderId;
+  /// Apartment requesting to borrow the spot (replaces borrower profile id).
+  final String borrowerApartmentId;
+  /// Apartment lending the spot (replaces lender profile id).
+  final String lenderApartmentId;
+  /// The specific profile (user) who created this request.
+  final String? createdByProfileId;
   final DateTime startTime;
   final DateTime endTime;
   final BookingStatus status;
@@ -12,8 +16,9 @@ class BookingRequest {
   BookingRequest({
     required this.id,
     required this.spotId,
-    required this.borrowerId,
-    required this.lenderId,
+    required this.borrowerApartmentId,
+    required this.lenderApartmentId,
+    this.createdByProfileId,
     required this.startTime,
     required this.endTime,
     required this.status,
@@ -25,8 +30,11 @@ class BookingRequest {
     return BookingRequest(
       id: json['id'] as String,
       spotId: json['spot_id'] as String,
-      borrowerId: json['borrower_id'] as String,
-      lenderId: json['lender_id'] as String,
+      borrowerApartmentId:
+          (json['borrower_apartment_id'] as String?) ?? '',
+      lenderApartmentId:
+          (json['lender_apartment_id'] as String?) ?? '',
+      createdByProfileId: json['created_by_profile_id'] as String?,
       startTime: DateTime.parse(json['start_time'] as String),
       endTime: DateTime.parse(json['end_time'] as String),
       status: BookingStatus.fromString(json['status'] as String),
@@ -39,14 +47,33 @@ class BookingRequest {
     return {
       'id': id,
       'spot_id': spotId,
-      'borrower_id': borrowerId,
-      'lender_id': lenderId,
+      'borrower_apartment_id': borrowerApartmentId,
+      'lender_apartment_id': lenderApartmentId,
+      if (createdByProfileId != null)
+        'created_by_profile_id': createdByProfileId,
       'start_time': startTime.toIso8601String(),
       'end_time': endTime.toIso8601String(),
       'status': status.toString(),
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
+  }
+
+  BookingRequest copyWith({
+    BookingStatus? status,
+  }) {
+    return BookingRequest(
+      id: id,
+      spotId: spotId,
+      borrowerApartmentId: borrowerApartmentId,
+      lenderApartmentId: lenderApartmentId,
+      createdByProfileId: createdByProfileId,
+      startTime: startTime,
+      endTime: endTime,
+      status: status ?? this.status,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
   }
 }
 
@@ -90,4 +117,3 @@ enum BookingStatus {
     }
   }
 }
-

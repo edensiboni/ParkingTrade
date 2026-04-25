@@ -13,7 +13,7 @@ import 'services/navigation_service.dart';
 import 'services/notification_service_stub.dart' if (dart.library.io) 'services/notification_service.dart';
 import 'screens/auth/dev_auth_screen.dart';
 import 'screens/auth/phone_auth_screen.dart';
-import 'screens/building/join_building_screen.dart';
+import 'screens/auth/not_registered_screen.dart';
 import 'screens/building/pending_approval_screen.dart';
 import 'screens/building/rejected_screen.dart';
 import 'screens/spots/parking_spots_screen.dart';
@@ -92,7 +92,7 @@ class ParkingTradeApp extends StatelessWidget {
         '/auth': (context) => DevAuthConfig.isEnabled
             ? const DevAuthScreen()
             : const PhoneAuthScreen(),
-        '/join-building': (context) => const JoinBuildingScreen(),
+        '/not-registered': (context) => const NotRegisteredScreen(),
         '/pending-approval': (context) => const PendingApprovalScreen(),
         '/rejected': (context) => const RejectedScreen(),
         '/home': (context) => const ParkingSpotsScreen(),
@@ -141,8 +141,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _checkAuth() async {
-    final user = _authService.currentUser;
-    if (user != null) {
+    // Use currentSession (not just currentUser) so we confirm a valid,
+    // persisted session exists before bypassing the phone auth screen.
+    final session = _authService.currentSession;
+    if (session != null) {
       await _navigateBasedOnProfile();
     } else {
       setState(() {
@@ -152,8 +154,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _handleAuthChange(AuthState state) async {
-    if (state.event == AuthChangeEvent.signedIn) {
-      await _navigateBasedOnProfile();
+    if (state.event == AuthChangeEvent.signedIn ||
+        state.event == AuthChangeEvent.initialSession ||
+        state.event == AuthChangeEvent.tokenRefreshed) {
+      // On app restart with a persisted session the SDK fires initialSession.
+      // tokenRefreshed fires when the access token is silently renewed.
+      // In all these cases we want to route based on the user's profile.
+      if (_authService.currentSession != null) {
+        await _navigateBasedOnProfile();
+      } else if (state.event == AuthChangeEvent.initialSession) {
+        // initialSession fired but session is null → no stored session, show auth.
+        if (mounted) setState(() => _isLoading = false);
+      }
     } else if (state.event == AuthChangeEvent.signedOut) {
       if (mounted) {
         // Use pushNamedAndRemoveUntil to clear navigation stack
@@ -174,9 +186,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
       if (!mounted) return;
 
-      // New user or no profile - go to join building
-      if (profile == null) {
-        Navigator.of(context).pushReplacementNamed('/join-building');
+      // No pre-created profile found for this phone number
+      if (profile == null || profile.apartmentId == null) {
+        Navigator.of(context).pushReplacementNamed('/not-registered');
         if (mounted) {
           setState(() {
             _isLoading = false;
@@ -185,19 +197,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return;
       }
 
-      // User has profile - navigate based on status
-      if (profile.buildingId == null) {
-        Navigator.of(context).pushReplacementNamed('/join-building');
-      } else if (profile.status == ProfileStatus.pending) {
+      // Profile is linked to an apartment — route based on status
+      if (profile.status == ProfileStatus.pending) {
         Navigator.of(context).pushReplacementNamed('/pending-approval');
       } else if (profile.status == ProfileStatus.rejected) {
         Navigator.of(context).pushReplacementNamed('/rejected');
-      } else if (profile.status == ProfileStatus.approved) {
-        Navigator.of(context).pushReplacementNamed('/home');
       } else {
-        Navigator.of(context).pushReplacementNamed('/join-building');
+        // approved (or any other status) → go straight to parking spots
+        Navigator.of(context).pushReplacementNamed('/home');
       }
-      
+
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -205,21 +214,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
       }
     } catch (e) {
       debugPrint('Error navigating based on profile: $e');
-      // Only navigate back to auth if there's a real error (not just missing profile)
-      // Check if user is still authenticated
       final user = _authService.currentUser;
       if (user == null) {
-        // User is not authenticated, go to auth
         if (mounted) {
           Navigator.of(context).pushReplacementNamed('/auth');
         }
       } else {
-        // User is authenticated but profile fetch failed - try join building
+        // Authenticated but profile fetch failed — treat as not registered
         if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/join-building');
+          Navigator.of(context).pushReplacementNamed('/not-registered');
         }
       }
-      
+
       if (mounted) {
         setState(() {
           _isLoading = false;

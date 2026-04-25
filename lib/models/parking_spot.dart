@@ -1,6 +1,7 @@
 class ParkingSpot {
   final String id;
-  final String residentId;
+  /// The apartment that owns this spot (replaces [residentId]).
+  final String apartmentId;
   final String buildingId;
   final String spotIdentifier;
   final bool isActive;
@@ -8,7 +9,7 @@ class ParkingSpot {
 
   ParkingSpot({
     required this.id,
-    required this.residentId,
+    required this.apartmentId,
     required this.buildingId,
     required this.spotIdentifier,
     required this.isActive,
@@ -18,7 +19,8 @@ class ParkingSpot {
   factory ParkingSpot.fromJson(Map<String, dynamic> json) {
     return ParkingSpot(
       id: json['id'] as String,
-      residentId: json['resident_id'] as String,
+      // apartment_id is the new FK; fall back to empty string if row not yet migrated
+      apartmentId: (json['apartment_id'] as String?) ?? '',
       buildingId: json['building_id'] as String,
       spotIdentifier: json['spot_identifier'] as String,
       isActive: json['is_active'] as bool,
@@ -29,12 +31,25 @@ class ParkingSpot {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'resident_id': residentId,
+      'apartment_id': apartmentId,
       'building_id': buildingId,
       'spot_identifier': spotIdentifier,
       'is_active': isActive,
       'created_at': createdAt.toIso8601String(),
     };
   }
-}
 
+  ParkingSpot copyWith({
+    String? apartmentId,
+    bool? isActive,
+  }) {
+    return ParkingSpot(
+      id: id,
+      apartmentId: apartmentId ?? this.apartmentId,
+      buildingId: buildingId,
+      spotIdentifier: spotIdentifier,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt,
+    );
+  }
+}

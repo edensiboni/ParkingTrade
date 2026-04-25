@@ -13,17 +13,29 @@ class ParkingSpotService {
     final user = _supabase.auth.currentUser;
     if (user == null) throw Exception('Not authenticated');
 
+    // Resolve the user's apartment_id first, then fetch spots for that apartment.
+    final profileRow = await _supabase
+        .from('profiles')
+        .select('apartment_id')
+        .eq('id', user.id)
+        .single();
+    final apartmentId = profileRow['apartment_id'] as String?;
+    if (apartmentId == null) return [];
+
     final response = await _supabase
         .from('parking_spots')
         .select()
-        .eq('resident_id', user.id)
+        .eq('apartment_id', apartmentId)
         .order('created_at', ascending: false);
 
     return (response as List).map((json) => ParkingSpot.fromJson(json)).toList();
   }
 
   // Add a new parking spot
+  // [apartmentId] is the owning apartment; [buildingId] is retained for the
+  // DB column that still exists during the transition period.
   Future<ParkingSpot> addSpot({
+    required String apartmentId,
     required String buildingId,
     required String spotIdentifier,
   }) async {
@@ -33,7 +45,7 @@ class ParkingSpotService {
     final response = await _supabase
         .from('parking_spots')
         .insert({
-          'resident_id': user.id,
+          'apartment_id': apartmentId,
           'building_id': buildingId,
           'spot_identifier': spotIdentifier,
           'is_active': true,
@@ -104,15 +116,22 @@ class ParkingSpotService {
     final user = _supabase.auth.currentUser;
     if (user == null) throw Exception('Not authenticated');
 
-    // Verify user owns the spot
+    // Verify the spot belongs to the user's apartment.
+    final profileRow = await _supabase
+        .from('profiles')
+        .select('apartment_id')
+        .eq('id', user.id)
+        .single();
+    final userApartmentId = profileRow['apartment_id'] as String?;
+
     final spot = await _supabase
         .from('parking_spots')
-        .select('resident_id')
+        .select('apartment_id')
         .eq('id', spotId)
         .single();
 
-    if (spot['resident_id'] != user.id) {
-      throw Exception('You can only set availability for your own spots');
+    if (spot['apartment_id'] != userApartmentId) {
+      throw Exception('You can only set availability for your own apartment\'s spots');
     }
 
     // CRITICAL FIX: Treat the input DateTime as a "naive" local time

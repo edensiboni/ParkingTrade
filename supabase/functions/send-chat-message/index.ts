@@ -51,7 +51,7 @@ serve(async (req) => {
 
     const { data: booking, error: bookingError } = await supabaseClient
       .from('booking_requests')
-      .select('id, borrower_id, lender_id')
+      .select('id, borrower_apartment_id, lender_apartment_id')
       .eq('id', booking_id)
       .single()
 
@@ -62,7 +62,25 @@ serve(async (req) => {
       )
     }
 
-    if (booking.borrower_id !== user.id && booking.lender_id !== user.id) {
+    // Verify the sender belongs to one of the booking's apartments.
+    const { data: senderProfile, error: senderProfileError } = await supabaseClient
+      .from('profiles')
+      .select('apartment_id')
+      .eq('id', user.id)
+      .single()
+
+    if (senderProfileError || !senderProfile) {
+      return new Response(
+        JSON.stringify({ error: 'Sender profile not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const senderApartmentId = senderProfile.apartment_id
+    const isBorrower = senderApartmentId === booking.borrower_apartment_id
+    const isLender = senderApartmentId === booking.lender_apartment_id
+
+    if (!isBorrower && !isLender) {
       return new Response(
         JSON.stringify({ error: 'You are not a participant in this booking' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -86,26 +104,37 @@ serve(async (req) => {
       )
     }
 
-    const recipientId = booking.borrower_id === user.id
-      ? booking.lender_id
-      : booking.borrower_id
+    // Notify opted-in members of the recipient apartment.
+    const recipientApartmentId = isBorrower
+      ? booking.lender_apartment_id
+      : booking.borrower_apartment_id
 
-    const { data: senderProfile } = await supabaseClient
+    const { data: senderProfileForName } = await supabaseClient
       .from('profiles')
       .select('display_name')
       .eq('id', user.id)
       .single()
 
-    const senderName = senderProfile?.display_name ?? 'Someone'
+    const senderName = senderProfileForName?.display_name ?? 'Someone'
     const truncatedContent = content.length > 80 ? content.substring(0, 80) + '…' : content
 
-    await sendPushToUser(
-      supabaseClient,
-      recipientId,
-      `Message from ${senderName}`,
-      truncatedContent,
-      { type: 'chat_message', booking_id: booking.id },
-    )
+    const { data: recipientProfiles } = await supabaseClient
+      .from('profiles')
+      .select('id, receives_chat_notifications')
+      .eq('apartment_id', recipientApartmentId)
+      .eq('status', 'approved')
+
+    for (const recipient of (recipientProfiles ?? [])) {
+      if (recipient.receives_chat_notifications) {
+        await sendPushToUser(
+          supabaseClient,
+          recipient.id,
+          `Message from ${senderName}`,
+          truncatedContent,
+          { type: 'chat_message', booking_id: booking.id },
+        )
+      }
+    }
 
     return new Response(
       JSON.stringify({ success: true, message }),
