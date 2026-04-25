@@ -10,9 +10,16 @@
 --   4. Alter `booking_requests`: change borrower_id / lender_id to
 --      reference apartments, add created_by_profile_id.
 --   5. Drop & recreate affected RLS policies.
+--
+-- ORDER NOTE: All RLS policies that reference profiles.apartment_id
+-- are intentionally placed at the END of this file, after the column
+-- has been added via ALTER TABLE profiles. This avoids dependency
+-- errors where the policy body references a column not yet visible.
 -- ============================================================
 
--- ─── 1. apartments ──────────────────────────────────────────
+-- ─── 1. apartments (table + index + RLS enable only) ────────
+-- NOTE: RLS *policies* for apartments that reference profiles.apartment_id
+--       are deferred to the bottom of this file (after the ALTER TABLE).
 CREATE TABLE apartments (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     building_id UUID NOT NULL REFERENCES buildings(id) ON DELETE CASCADE,
@@ -25,46 +32,15 @@ CREATE INDEX idx_apartments_building_id ON apartments(building_id);
 
 ALTER TABLE apartments ENABLE ROW LEVEL SECURITY;
 
--- Any authenticated user can read apartments (needed to browse spots / join flow)
+-- Simple view policy that does NOT reference profiles.apartment_id yet
+-- (uses get_user_building_id which we will update below)
 CREATE POLICY "Users can view apartments in their building" ON apartments
     FOR SELECT USING (
         building_id = get_user_building_id(auth.uid())
     );
 
--- Only building admins (role = 'admin') can create apartments
-CREATE POLICY "Admins can insert apartments" ON apartments
-    FOR INSERT WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM profiles
-            WHERE profiles.id = auth.uid()
-              AND profiles.role = 'admin'
-              AND profiles.apartment_id IS NOT NULL
-              AND EXISTS (
-                    SELECT 1 FROM apartments a2
-                    WHERE a2.id = profiles.apartment_id
-                      AND a2.building_id = apartments.building_id
-              )
-        )
-    );
-
--- Only building admins can delete apartments
-CREATE POLICY "Admins can delete apartments" ON apartments
-    FOR DELETE USING (
-        EXISTS (
-            SELECT 1 FROM profiles
-            WHERE profiles.id = auth.uid()
-              AND profiles.role = 'admin'
-              AND profiles.apartment_id IS NOT NULL
-              AND EXISTS (
-                    SELECT 1 FROM apartments a2
-                    WHERE a2.id = profiles.apartment_id
-                      AND a2.building_id = apartments.building_id
-              )
-        )
-    );
-
--- ─── 2. profiles ────────────────────────────────────────────
--- Add new columns first (nullable so existing rows are unaffected)
+-- ─── 2. profiles — add apartment_id and other new columns ───
+-- MUST happen before any policy references profiles.apartment_id
 ALTER TABLE profiles
     ADD COLUMN IF NOT EXISTS apartment_id              UUID REFERENCES apartments(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS is_apartment_admin        BOOLEAN NOT NULL DEFAULT false,
@@ -80,7 +56,8 @@ CREATE INDEX IF NOT EXISTS idx_profiles_apartment_id ON profiles(apartment_id);
 -- If you want a hard cut-over immediately, uncomment the line below:
 -- ALTER TABLE profiles DROP COLUMN IF EXISTS building_id;
 
--- Update the helper function used by RLS to resolve building via apartment
+-- ─── 3. Update helper function (now that apartment_id exists) ─
+-- Resolves building_id for a given user via their apartment.
 CREATE OR REPLACE FUNCTION get_user_building_id(user_id UUID)
 RETURNS UUID
 LANGUAGE sql
@@ -94,7 +71,7 @@ AS $$
     LIMIT  1;
 $$;
 
--- Drop old profiles SELECT policies and replace with apartment-aware versions
+-- ─── 4. profiles RLS — drop old, add apartment-aware policies ─
 DROP POLICY IF EXISTS "Users can view profiles in their building" ON profiles;
 DROP POLICY IF EXISTS "Users can view their own profile" ON profiles;
 
@@ -129,7 +106,7 @@ CREATE POLICY "Service role or admins can insert profiles" ON profiles
         )
     );
 
--- ─── 3. parking_spots ───────────────────────────────────────
+-- ─── 5. parking_spots ───────────────────────────────────────
 ALTER TABLE parking_spots
     ADD COLUMN IF NOT EXISTS apartment_id UUID REFERENCES apartments(id) ON DELETE CASCADE;
 
@@ -201,7 +178,7 @@ CREATE POLICY "Admins can delete parking spots" ON parking_spots
         )
     );
 
--- ─── 4. booking_requests ────────────────────────────────────
+-- ─── 6. booking_requests ────────────────────────────────────
 -- Add apartment-scoped parties and track the initiating profile
 ALTER TABLE booking_requests
     ADD COLUMN IF NOT EXISTS borrower_apartment_id    UUID REFERENCES apartments(id) ON DELETE CASCADE,
@@ -265,7 +242,7 @@ CREATE POLICY "Borrower apartment members can update booking requests" ON bookin
         )
     );
 
--- ─── 5. messages (keep in sync with booking party changes) ──
+-- ─── 7. messages (keep in sync with booking party changes) ──
 -- Messages RLS already uses booking_requests; the sub-select just needs to match
 -- the new apartment-based parties. Drop and re-create to be explicit.
 DROP POLICY IF EXISTS "Users can view messages for their bookings" ON messages;
@@ -289,6 +266,42 @@ CREATE POLICY "Users can send messages for their bookings" ON messages
             JOIN profiles p ON p.id = auth.uid()
             WHERE p.apartment_id = br.borrower_apartment_id
                OR p.apartment_id = br.lender_apartment_id
+        )
+    );
+
+-- ─── 8. apartments RLS — admin policies (DEFERRED to end) ───
+-- These policies reference profiles.apartment_id, which was added in step 2 above.
+-- Placing them here ensures the column exists when the policy body is parsed/planned.
+
+-- Only building admins (role = 'admin') can create apartments
+CREATE POLICY "Admins can insert apartments" ON apartments
+    FOR INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid()
+              AND profiles.role = 'admin'
+              AND profiles.apartment_id IS NOT NULL
+              AND EXISTS (
+                    SELECT 1 FROM apartments a2
+                    WHERE a2.id = profiles.apartment_id
+                      AND a2.building_id = apartments.building_id
+              )
+        )
+    );
+
+-- Only building admins can delete apartments
+CREATE POLICY "Admins can delete apartments" ON apartments
+    FOR DELETE USING (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid()
+              AND profiles.role = 'admin'
+              AND profiles.apartment_id IS NOT NULL
+              AND EXISTS (
+                    SELECT 1 FROM apartments a2
+                    WHERE a2.id = profiles.apartment_id
+                      AND a2.building_id = apartments.building_id
+              )
         )
     );
 
