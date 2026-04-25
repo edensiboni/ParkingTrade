@@ -37,6 +37,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   Future<void> _sendOtp() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final sanitized = _normalisedPhone;
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -44,16 +46,36 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
     try {
       // Pass the normalised number so Supabase always receives clean E.164.
-      await _authService.signInWithPhone(_normalisedPhone);
+      await _authService.signInWithPhone(sanitized);
       setState(() {
         _isOtpSent = true;
         _isLoading = false;
       });
-    } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
-        _isLoading = false;
-      });
+    } on Exception catch (e) {
+      setState(() => _isLoading = false);
+
+      final message = e.toString().replaceAll('Exception: ', '');
+      // Check for 400-style errors surfaced from AuthService.
+      final is400 = message.contains('couldn\'t send') ||
+          message.contains('check your number') ||
+          message.contains('Failed to send');
+
+      final snackMessage = is400
+          ? 'Failed to send code to $sanitized. Please check your number.'
+          : message;
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(snackMessage),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+
+      // Also show inline so the user sees it without dismissing the snackbar.
+      setState(() => _errorMessage = snackMessage);
     }
   }
 
