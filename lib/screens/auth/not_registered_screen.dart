@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/auth_service.dart';
 
 class NotRegisteredScreen extends StatelessWidget {
   const NotRegisteredScreen({super.key});
 
   Future<void> _signOut(BuildContext context) async {
-    await Supabase.instance.client.auth.signOut();
+    final navigator = Navigator.of(context);
+    await AuthService().signOut();
+    navigator.pushNamedAndRemoveUntil('/auth', (route) => false);
   }
 
   @override
