@@ -7,8 +7,8 @@ void main() {
       final json = {
         'id': 'br-1',
         'spot_id': 'sp-1',
-        'borrower_id': 'u-1',
-        'lender_id': 'u-2',
+        'borrower_apartment_id': 'u-1',
+        'lender_apartment_id': 'u-2',
         'start_time': '2025-06-01T10:00:00Z',
         'end_time': '2025-06-01T12:00:00Z',
         'status': 'approved',
@@ -27,8 +27,8 @@ void main() {
       final booking = BookingRequest(
         id: 'x',
         spotId: 'y',
-        borrowerId: 'a',
-        lenderId: 'b',
+        borrowerApartmentId: 'a',
+        lenderApartmentId: 'b',
         startTime: DateTime.utc(2025, 6, 1, 10),
         endTime: DateTime.utc(2025, 6, 1, 12),
         status: BookingStatus.pending,
