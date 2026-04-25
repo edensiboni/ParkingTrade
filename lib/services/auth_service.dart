@@ -37,34 +37,57 @@ class AuthService {
     }
   }
 
+  /// Normalises a phone number to E.164 format:
+  /// 1. Strips all whitespace, dashes, dots, and parentheses.
+  /// 2. Converts a leading '0' to the Israeli country code '+972'.
+  static String normalisePhone(String raw) {
+    // Remove everything except digits and a leading '+'.
+    String cleaned = raw.trim();
+    // Strip spaces, dashes, dots, parentheses
+    cleaned = cleaned.replaceAll(RegExp(r'[\s\-().]+'), '');
+    // Auto-convert Israeli local format: 0XX → +972XX
+    if (cleaned.startsWith('0')) {
+      cleaned = '+972${cleaned.substring(1)}';
+    }
+    return cleaned;
+  }
+
   // Send OTP to phone number
   Future<void> signInWithPhone(String phone) async {
-    // Ensure phone is trimmed and in E.164 format
-    final trimmedPhone = phone.trim();
-    if (!trimmedPhone.startsWith('+')) {
-      throw Exception('Phone number must be in E.164 format (start with +)');
+    final normalisedPhone = normalisePhone(phone);
+
+    if (!normalisedPhone.startsWith('+')) {
+      throw Exception(
+        'Please enter your phone number starting with a country code, e.g. +972501234567',
+      );
     }
-    
+
     try {
       await _supabase.auth.signInWithOtp(
-        phone: trimmedPhone,
+        phone: normalisedPhone,
       );
     } on AuthException catch (e) {
-      // Provide more specific error messages
-      if (e.message.contains('Invalid phone number') || 
+      // 400 Bad Request from Supabase → phone number rejected
+      if (e.statusCode == '400' ||
+          e.message.contains('Invalid phone number') ||
           e.message.contains('phone')) {
-        throw Exception('Invalid phone number format. Please use E.164 format: +1234567890');
+        throw Exception(
+          'We couldn\'t send a code to that number. '
+          'Please double-check it and try again.',
+        );
       }
-      if (e.message.contains('sms_send_failed') || 
+      if (e.message.contains('sms_send_failed') ||
           e.message.contains('Twilio') ||
           e.message.contains('SMS')) {
-        throw Exception('Failed to send SMS. Please check your phone number and try again.');
+        throw Exception(
+          'Failed to send the SMS. Please check your number and try again.',
+        );
       }
-      // Re-throw with a cleaner message
-      throw Exception(e.message.isNotEmpty ? e.message : 'Failed to send OTP. Please try again.');
+      throw Exception(
+        e.message.isNotEmpty ? e.message : 'Failed to send code. Please try again.',
+      );
     } catch (e) {
-      // Handle other exceptions
-      throw Exception('Failed to send OTP: ${e.toString()}');
+      throw Exception('Failed to send code: ${e.toString()}');
     }
   }
 
@@ -82,8 +105,8 @@ class AuthService {
 
   // Verify OTP
   Future<AuthResponse> verifyOtp(String phone, String token) async {
-    // Ensure phone is trimmed
-    final trimmedPhone = phone.trim();
+    // Normalise so it always matches what was sent to Supabase
+    final trimmedPhone = normalisePhone(phone);
     
     try {
       return await _supabase.auth.verifyOTP(

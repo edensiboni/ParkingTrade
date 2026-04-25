@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 
+// ---------------------------------------------------------------------------
+// Phone normalisation is handled by AuthService.normalisePhone.
+// The screen sends the normalised number to the service so the OTP step and
+// the verification step always use the same E.164 string.
+// ---------------------------------------------------------------------------
+
 class PhoneAuthScreen extends StatefulWidget {
   const PhoneAuthScreen({super.key});
 
@@ -24,6 +30,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     super.dispose();
   }
 
+  /// Returns the normalised E.164 phone number from the text field.
+  String get _normalisedPhone =>
+      AuthService.normalisePhone(_phoneController.text);
+
   Future<void> _sendOtp() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -33,7 +43,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     });
 
     try {
-      await _authService.signInWithPhone(_phoneController.text.trim());
+      // Pass the normalised number so Supabase always receives clean E.164.
+      await _authService.signInWithPhone(_normalisedPhone);
       setState(() {
         _isOtpSent = true;
         _isLoading = false;
@@ -59,7 +70,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
     try {
       final response = await _authService.verifyOtp(
-        _phoneController.text.trim(),
+        _normalisedPhone,
         _otpController.text.trim(),
       );
       if (response.user != null) {
@@ -181,20 +192,20 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           autofillHints: const [AutofillHints.telephoneNumber],
           decoration: const InputDecoration(
             labelText: 'Phone number',
-            hintText: '+1 555 123 4567',
+            hintText: '05X-XXX-XXXX or +972 5X XXX XXXX',
             prefixIcon: Icon(Icons.phone_outlined),
           ),
           validator: (value) {
-            if (value == null || value.isEmpty) {
+            if (value == null || value.trim().isEmpty) {
               return 'Please enter your phone number';
             }
-            final trimmed = value.trim();
-            if (!trimmed.startsWith('+')) {
-              return 'Must start with country code, e.g. +1';
-            }
-            final phoneRegex = RegExp(r'^\+\d{1,15}$');
-            if (!phoneRegex.hasMatch(trimmed)) {
-              return 'Digits only after the + sign';
+            // Normalise first so we validate what will actually be sent.
+            final normalised = AuthService.normalisePhone(value);
+            // After normalisation the number must start with '+' and contain
+            // only digits (7–15 digits after the '+').
+            final e164Regex = RegExp(r'^\+\d{7,15}$');
+            if (!e164Regex.hasMatch(normalised)) {
+              return 'Enter a valid phone number, e.g. 050-123-4567';
             }
             return null;
           },
@@ -221,7 +232,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'We sent it to ${_phoneController.text.trim()}',
+          'We sent it to $_normalisedPhone',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
