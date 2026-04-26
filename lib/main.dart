@@ -257,3 +257,4 @@ class _AuthWrapperState extends State<AuthWrapper> {
     return DevAuthConfig.isEnabled ? const DevAuthScreen() : const PhoneAuthScreen();
   }
 }
+ 
