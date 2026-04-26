@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/profile.dart';
 
@@ -207,6 +207,44 @@ class AuthService {
     if (user == null) return false;
     return user.appMetadata['provider'] == 'google' ||
         (user.identities?.any((i) => i.provider == 'google') ?? false);
+  }
+
+  /// After a Google sign-in, if the profile's [display_name] is missing or
+  /// still the placeholder "Unnamed resident", replace it with the name that
+  /// Google provided in [user.userMetadata].
+  ///
+  /// Safe to call on every sign-in — it is a no-op when the name is already
+  /// set to something meaningful.
+  Future<void> syncGoogleDisplayName() async {
+    final user = currentUser;
+    if (user == null || !isGoogleUser) return;
+
+    final googleName = (user.userMetadata?['full_name'] as String?)?.trim();
+    if (googleName == null || googleName.isEmpty) return;
+
+    try {
+      final response = await _supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (response == null) return;
+
+      final existing = (response['display_name'] as String?)?.trim();
+      final needsUpdate =
+          existing == null || existing.isEmpty || existing == 'Unnamed resident';
+
+      if (needsUpdate) {
+        await _supabase
+            .from('profiles')
+            .update({'display_name': googleName})
+            .eq('id', user.id);
+      }
+    } catch (e) {
+      // Non-fatal — the name will be updated on the next sign-in.
+      debugPrint('syncGoogleDisplayName: $e');
+    }
   }
 }
 

@@ -80,14 +80,22 @@ void main() async {
     // localStorage.  Without this call the "Code verifier could not be found"
     // error occurs because the Supabase client hasn't yet exchanged the code.
     // The SDK's onAuthStateChange will fire signedIn once this completes.
+    //
+    // We skip the exchange if a valid session already exists — this prevents
+    // the "Code verifier could not be found" console noise that occurs when the
+    // page is reloaded after the code has already been consumed.
     if (kIsWeb) {
       final uri = Uri.base;
-      if (uri.queryParameters.containsKey('code')) {
+      final hasCode = uri.queryParameters.containsKey('code');
+      final alreadySignedIn =
+          Supabase.instance.client.auth.currentSession != null;
+      if (hasCode && !alreadySignedIn) {
         try {
           await Supabase.instance.client.auth.getSessionFromUrl(uri);
         } catch (e) {
-          debugPrint('OAuth code exchange failed: $e');
-          // Non-fatal — the auth state listener will route to /auth if needed.
+          // The code may have already been exchanged (e.g. fast double-load).
+          // This is non-fatal — the auth state listener will route correctly.
+          debugPrint('OAuth code exchange skipped or failed: $e');
         }
       }
     }
@@ -257,6 +265,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
       // tokenRefreshed fires when the access token is silently renewed.
       // In all these cases we want to route based on the user's profile.
       if (_authService.currentSession != null) {
+        // Sync Google display name so the dashboard always shows the real
+        // name from the user's Google account. Run on signedIn (fresh login)
+        // and initialSession (page reload with stored session) so the name
+        // is corrected even without a new login.
+        if (state.event == AuthChangeEvent.signedIn ||
+            state.event == AuthChangeEvent.initialSession) {
+          await _authService.syncGoogleDisplayName();
+        }
         await _navigateBasedOnProfile();
       } else if (state.event == AuthChangeEvent.initialSession) {
         // initialSession fired but session is null → no stored session, show auth.
