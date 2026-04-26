@@ -61,6 +61,16 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
     try {
       final supabase = Supabase.instance.client;
 
+      // Guard: ensure a valid session exists before calling the edge function.
+      // After a Google OAuth redirect the session may not be restored yet.
+      final session = supabase.auth.currentSession;
+      if (session == null) {
+        throw Exception(
+          'You are not signed in. Please sign in with Google first, '
+          'then return to this page to create your building.',
+        );
+      }
+
       final body = <String, dynamic>{
         'building_name': _buildingNameController.text.trim(),
         if (_address.isNotEmpty) 'address': _address,
@@ -68,9 +78,14 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
         if (_longitude != null) 'longitude': _longitude,
       };
 
+      // Explicitly pass the Authorization header so the edge function always
+      // receives a valid JWT even if the Supabase client hasn't auto-injected it
+      // (e.g. when the session was just restored from localStorage on web).
+      final accessToken = session.accessToken;
       final response = await supabase.functions.invoke(
         'create-building-admin',
         body: body,
+        headers: {'Authorization': 'Bearer $accessToken'},
       );
 
       final data = response.data as Map<String, dynamic>?;

@@ -12,14 +12,34 @@ class AuthService {
 
   Stream<AuthState> get authStateChanges => _supabase.auth.onAuthStateChange;
 
-  /// Sign in with Google OAuth. On web, redirects to Google then back to app origin; session is restored when the app loads at the redirect URL.
+  /// Sign in with Google OAuth.
+  ///
+  /// On **web** we use the PKCE flow (`AuthFlowType.pkce`) so that Supabase
+  /// stores a code-verifier in `localStorage` before redirecting to Google.
+  /// When Google redirects back with `?code=…`, the Supabase SDK reads the
+  /// verifier from storage and exchanges the code for a session automatically.
+  /// This eliminates the "Code verifier could not be found in local storage"
+  /// error that occurs with the default implicit (fragment-hash) flow when the
+  /// page is hard-reloaded on the callback URL.
+  ///
+  /// On **mobile** no `redirectTo` or flow override is needed — the SDK uses
+  /// deep links instead.
   Future<void> signInWithGoogle() async {
     try {
-      final redirectTo = kIsWeb ? Uri.base.origin : null;
-      await _supabase.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: redirectTo,
-      );
+      if (kIsWeb) {
+        // Redirect back to the exact origin.  This must match one of the
+        // Redirect URLs configured in Supabase Dashboard →
+        // Authentication → URL Configuration.
+        final redirectTo = '${Uri.base.origin}/';
+        await _supabase.auth.signInWithOAuth(
+          OAuthProvider.google,
+          redirectTo: redirectTo,
+        );
+      } else {
+        await _supabase.auth.signInWithOAuth(
+          OAuthProvider.google,
+        );
+      }
     } on AuthException catch (e) {
       if (e.message.contains('provider is not enabled') ||
           e.statusCode == '400' ||

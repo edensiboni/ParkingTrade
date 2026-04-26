@@ -75,6 +75,23 @@ void main() async {
       return;
     }
 
+    // Handle the OAuth PKCE callback: when Google redirects back with
+    // ?code=… in the URL, exchange the code for a session so it is stored in
+    // localStorage.  Without this call the "Code verifier could not be found"
+    // error occurs because the Supabase client hasn't yet exchanged the code.
+    // The SDK's onAuthStateChange will fire signedIn once this completes.
+    if (kIsWeb) {
+      final uri = Uri.base;
+      if (uri.queryParameters.containsKey('code')) {
+        try {
+          await Supabase.instance.client.auth.getSessionFromUrl(uri);
+        } catch (e) {
+          debugPrint('OAuth code exchange failed: $e');
+          // Non-fatal — the auth state listener will route to /auth if needed.
+        }
+      }
+    }
+
     if (FirebaseOptionsWeb.isConfigured) {
       try {
         await Firebase.initializeApp(options: FirebaseOptionsWeb.options);

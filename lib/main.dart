@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/supabase_config.dart';
 import 'config/dev_auth_config.dart';
+import 'config/places_config.dart';
 import 'theme/app_theme.dart';
 import 'firebase_initializer_stub.dart' if (dart.library.io) 'firebase_initializer.dart' as firebase_init;
 import 'services/auth_service.dart';
@@ -65,7 +66,19 @@ void main() async {
   await Supabase.initialize(
     url: supabaseUrl,
     anonKey: supabasePublishableKey, // Supabase SDK still uses 'anonKey' parameter name
+    // On web, use implicit flow so the OAuth callback does NOT require a PKCE
+    // code-verifier to be persisted in localStorage.  The verifier can be lost
+    // between the redirect and the callback page load (e.g. different tab,
+    // storage cleared, privacy mode), causing the
+    // "Code verifier could not be found in local storage" error.
+    // On mobile the default PKCE flow is safe and preferred.
+    authOptions: kIsWeb
+        ? const FlutterAuthClientOptions(authFlowType: AuthFlowType.implicit)
+        : const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
   );
+
+  // Warn if Places API key is absent (address autocomplete will degrade gracefully).
+  PlacesConfig.warnIfMissing();
 
   // Initialize notification service only on mobile (not supported on web)
   if (!kIsWeb) {

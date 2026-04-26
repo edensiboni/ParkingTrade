@@ -31,11 +31,32 @@
 
   <title>Parking Trade</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Preload Hebrew-capable fonts (Noto Sans Hebrew) so the Flutter HTML
+       renderer can fall back to them when CanvasKit's embedded Noto subset
+       doesn't cover Hebrew glyphs. This silences the
+       "Could not find a set of Noto fonts" console warning. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;700&display=swap" rel="stylesheet">
+
+  <!-- CanvasKit WASM — loaded so the Flutter CanvasKit renderer can resolve
+       Noto fonts without emitting "Could not find a set of Noto fonts" warnings.
+       Even when the HTML renderer is active this script is harmless; it is only
+       actually executed when Flutter's CanvasKit renderer initialises. -->
+  <script src="https://unpkg.com/canvaskit-wasm@0.39.1/bin/canvaskit.js"></script>
+
   <!-- Firebase SDK for web push (FCM). App is initialized from Dart when config is provided. -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
 </head>
 <body>
+  <!-- Use the Flutter HTML renderer so Hebrew text is handled by the browser's
+       native font stack (avoids the Noto font download + warning from CanvasKit).
+       To switch to CanvasKit for better canvas fidelity, change 'html' → 'canvaskit'. -->
+  <script>
+    window.flutterWebRenderer = "html";
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
