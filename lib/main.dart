@@ -116,7 +116,7 @@ class ParkingTradeApp extends StatelessWidget {
         '/phone-verification': (context) => const PhoneVerificationScreen(),
         '/setup': (context) => CreateBuildingScreen(
               onCreated: () => Navigator.of(context)
-                  .pushNamedAndRemoveUntil('/auth', (route) => false),
+                  .pushNamedAndRemoveUntil('/admin-dashboard', (route) => false),
             ),
       },
     );

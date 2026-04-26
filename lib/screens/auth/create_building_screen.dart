@@ -10,9 +10,9 @@ import '../../widgets/address_autocomplete_field.dart';
 /// the address — latitude and longitude are captured automatically when the
 /// user selects a suggestion.
 ///
-/// After the building is created, the admin logs in via the normal OTP flow;
-/// migration-014 automatically links the auth account to the pre-created
-/// admin profile.
+/// After the building is created, the admin is navigated directly to the
+/// AdminDashboard — no extra login step is needed since they are already
+/// authenticated via Google OAuth.
 class CreateBuildingScreen extends StatefulWidget {
   /// Called after a successful creation so the caller can navigate away.
   final VoidCallback onCreated;
@@ -94,10 +94,8 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
       }
 
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _success = true;
-      });
+      // Navigate directly to the admin dashboard — no intermediate success view.
+      widget.onCreated();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -160,7 +158,7 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Enter your building\'s name and address. After setup, log in with your phone number to access the admin dashboard.',
+          'Enter your building\'s name and address. Once created, you\'ll be taken straight to your admin dashboard.',
           style: theme.textTheme.bodyMedium
               ?.copyWith(color: colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
@@ -279,13 +277,13 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
             size: 72, color: colorScheme.primary),
         const SizedBox(height: 24),
         Text(
-          'Building Created!',
+          'Building Setup Complete!',
           style: theme.textTheme.headlineSmall,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 12),
         Text(
-          'Log in with your phone number to access the Admin Dashboard and start adding apartments.',
+          'Your building is ready. You can now start adding apartments and managing residents.',
           style: theme.textTheme.bodyMedium
               ?.copyWith(color: colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
@@ -293,7 +291,7 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
         const SizedBox(height: 36),
         FilledButton(
           onPressed: widget.onCreated,
-          child: const Text('Go to Login'),
+          child: const Text('Go to Dashboard'),
         ),
       ],
     );
