@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/profile.dart';
+import '../models/building.dart';
+import 'building_service.dart';
 
 class AdminService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -26,6 +28,15 @@ class AdminService {
     if (buildingId == null) throw Exception('Admin has no building assigned');
 
     return buildingId;
+  }
+
+  /// Returns the Building record for the current admin's building.
+  Future<Building> getAdminBuilding() async {
+    final buildingId = await _resolveAdminBuildingId();
+    final building =
+        await BuildingService().getBuildingById(buildingId);
+    if (building == null) throw Exception('Building not found');
+    return building;
   }
 
   Future<List<Profile>> getPendingMembers() async {

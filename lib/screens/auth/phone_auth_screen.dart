@@ -130,49 +130,42 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
     return Scaffold(
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight - 32,
-                  maxWidth: 440,
-                ),
-                child: Center(
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: 24),
-                        _Hero(scheme: scheme, theme: theme),
-                        const SizedBox(height: 40),
-                        if (!_isOtpSent)
-                          _buildPhoneStep(theme, scheme)
-                        else
-                          _buildOtpStep(theme, scheme),
-                        if (_errorMessage != null) ...[
-                          const SizedBox(height: 16),
-                          _ErrorBanner(message: _errorMessage!),
-                        ],
-                        const SizedBox(height: 24),
-                        Text(
-                          'By continuing, you agree to share your phone with your building community.',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 24),
+                    _Hero(scheme: scheme, theme: theme),
+                    const SizedBox(height: 40),
+                    if (!_isOtpSent)
+                      _buildPhoneStep(theme, scheme)
+                    else
+                      _buildOtpStep(theme, scheme),
+                    if (_errorMessage != null) ...[
+                      const SizedBox(height: 16),
+                      _ErrorBanner(message: _errorMessage!),
+                    ],
+                    const SizedBox(height: 24),
+                    Text(
+                      'By continuing, you agree to share your phone with your building community.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
               ),
-            );
-          },
+            ),
+          ),
         ),
       ),
     );

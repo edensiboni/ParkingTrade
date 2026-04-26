@@ -14,6 +14,9 @@ class Building {
   /// WGS-84 longitude from geocoding (optional).
   final double? longitude;
 
+  /// Total number of parking spots in the building (optional).
+  final int? totalParkingSpots;
+
   Building({
     required this.id,
     required this.name,
@@ -23,6 +26,7 @@ class Building {
     this.address,
     this.latitude,
     this.longitude,
+    this.totalParkingSpots,
   });
 
   factory Building.fromJson(Map<String, dynamic> json) {
@@ -35,6 +39,7 @@ class Building {
       address: json['address'] as String?,
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
+      totalParkingSpots: (json['total_parking_spots'] as num?)?.toInt(),
     );
   }
 
@@ -48,6 +53,7 @@ class Building {
       if (address != null) 'address': address,
       if (latitude != null) 'latitude': latitude,
       if (longitude != null) 'longitude': longitude,
+      if (totalParkingSpots != null) 'total_parking_spots': totalParkingSpots,
     };
   }
 }

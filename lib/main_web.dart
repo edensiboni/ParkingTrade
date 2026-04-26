@@ -131,14 +131,14 @@ class ParkingTradeApp extends StatelessWidget {
       routes: {
         '/auth': (context) => const PhoneAuthScreen(),
         '/setup': (context) => CreateBuildingScreen(
-              onCreated: () =>
-                  Navigator.of(context).pushReplacementNamed('/auth'),
+              onCreated: () => Navigator.of(context)
+                  .pushNamedAndRemoveUntil('/admin-dashboard', (route) => false),
             ),
         '/not-registered': (context) => const NotRegisteredScreen(),
         '/pending-approval': (context) => const PendingApprovalScreen(),
         '/rejected': (context) => const RejectedScreen(),
         '/home': (context) => const ParkingSpotsScreen(),
-        '/admin': (context) => const AdminDashboardScreen(),
+        '/admin-dashboard': (context) => const AdminDashboardScreen(),
       },
     );
   }
@@ -249,6 +249,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
     // persisted session exists before bypassing the phone auth screen.
     final session = _authService.currentSession;
     if (session != null) {
+      // If we are in setup mode, stay on the setup screen — don't route away.
+      if (_isSetupMode) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
       await _navigateBasedOnProfile();
     } else {
       setState(() {
@@ -272,6 +277,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
         if (state.event == AuthChangeEvent.signedIn ||
             state.event == AuthChangeEvent.initialSession) {
           await _authService.syncGoogleDisplayName();
+        }
+        // If setup mode is active, stay on the setup screen — don't route away.
+        if (_isSetupMode) {
+          if (mounted) setState(() => _isLoading = false);
+          return;
         }
         await _navigateBasedOnProfile();
       } else if (state.event == AuthChangeEvent.initialSession) {
@@ -297,17 +307,26 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
       if (!mounted) return;
 
-      // No pre-created profile found for this phone number
+      // Google-OAuth users who have no profile or no apartment assigned yet
+      // are either brand-new admins or need to complete setup.
+      // Route them to the setup screen if they authenticated via Google;
+      // otherwise show the "not registered" screen (they need an admin to
+      // pre-authorise their unit).
       if (profile == null || profile.apartmentId == null) {
-        Navigator.of(context).pushReplacementNamed('/not-registered');
+        if (_authService.isGoogleUser) {
+          // Google-OAuth user with no building/profile → send to setup flow.
+          Navigator.of(context).pushReplacementNamed('/setup');
+        } else {
+          Navigator.of(context).pushReplacementNamed('/not-registered');
+        }
         if (mounted) setState(() => _isLoading = false);
         return;
       }
 
-      // Profile is linked to an apartment — route based on role then status
+      // Profile is linked to an apartment — route based on role then status.
       if (profile.isAdmin) {
-        // Building admins always go to the Admin Dashboard
-        Navigator.of(context).pushReplacementNamed('/admin');
+        // Building admins always go to the Admin Dashboard.
+        Navigator.of(context).pushReplacementNamed('/admin-dashboard');
       } else if (profile.status == ProfileStatus.pending) {
         Navigator.of(context).pushReplacementNamed('/pending-approval');
       } else if (profile.status == ProfileStatus.rejected) {
@@ -324,7 +343,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       if (user == null && mounted) {
         Navigator.of(context).pushReplacementNamed('/auth');
       } else if (mounted) {
-        // Authenticated but profile fetch failed — treat as not registered
+        // Authenticated but profile fetch failed — treat as not registered.
         Navigator.of(context).pushReplacementNamed('/not-registered');
       }
       if (mounted) setState(() => _isLoading = false);
@@ -339,13 +358,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
 
-    // Hidden admin-onboarding mode: ?mode=setup
+    // Admin-onboarding mode: ?mode=setup
+    // Show the building-creation form. On success, navigate to the dashboard.
     if (_isSetupMode) {
       return CreateBuildingScreen(
         onCreated: () {
-          // Clear setup mode and go to standard login
           if (mounted) {
             setState(() => _isSetupMode = false);
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              '/admin-dashboard',
+              (route) => false,
+            );
           }
         },
       );

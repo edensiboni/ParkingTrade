@@ -66,4 +66,42 @@ class BuildingService {
     final lower = query.trim().toLowerCase();
     return all.where((b) => b.name.toLowerCase().contains(lower)).toList();
   }
+
+  /// Update mutable fields on an existing building.
+  ///
+  /// Only the fields that are non-null are patched so callers can pass only
+  /// the values they want to change.
+  Future<Building> updateBuilding({
+    required String buildingId,
+    String? name,
+    String? address,
+    double? latitude,
+    double? longitude,
+    int? totalParkingSpots,
+  }) async {
+    final patch = <String, dynamic>{
+      if (name != null) 'name': name,
+      if (address != null) 'address': address,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      if (totalParkingSpots != null)
+        'total_parking_spots': totalParkingSpots,
+    };
+
+    if (patch.isEmpty) {
+      // Nothing to update — fetch and return current state.
+      final current = await getBuildingById(buildingId);
+      if (current == null) throw Exception('Building not found');
+      return current;
+    }
+
+    final response = await _supabase
+        .from('buildings')
+        .update(patch)
+        .eq('id', buildingId)
+        .select()
+        .single();
+
+    return Building.fromJson(response);
+  }
 }
