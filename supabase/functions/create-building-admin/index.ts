@@ -89,7 +89,6 @@ serve(async (req) => {
 
     const buildingName: string = (body?.building_name as string | undefined)?.trim() ?? ''
     const adminDisplayName: string = (body?.admin_display_name as string | undefined)?.trim() ?? ''
-    const adminPhone: string = (body?.admin_phone as string | undefined)?.trim() ?? ''
     const address: string | undefined = (body?.address as string | undefined)?.trim() || undefined
     const latitude: number | undefined = typeof body?.latitude === 'number' ? body.latitude as number : undefined
     const longitude: number | undefined = typeof body?.longitude === 'number' ? body.longitude as number : undefined
@@ -100,19 +99,6 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
-    if (!adminPhone) {
-      return new Response(
-        JSON.stringify({ error: 'admin_phone is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
-    }
-    if (!adminPhone.startsWith('+')) {
-      return new Response(
-        JSON.stringify({ error: 'admin_phone must be in E.164 format (start with +)' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
-    }
-
     // ── Guard: this auth user must not already have a profile ─────────────────
     const { data: existingProfile } = await supabase
       .from('profiles')
@@ -123,21 +109,6 @@ serve(async (req) => {
     if (existingProfile) {
       return new Response(
         JSON.stringify({ error: 'A profile already exists for this account' }),
-        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
-    }
-
-    // ── Guard: phone must not be claimed by a different profile ───────────────
-    const { data: phoneProfile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('phone', adminPhone)
-      .neq('id', authUserId)
-      .maybeSingle()
-
-    if (phoneProfile) {
-      return new Response(
-        JSON.stringify({ error: 'A profile with this phone number already exists' }),
         { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
@@ -206,14 +177,12 @@ serve(async (req) => {
     // ── 3. Create admin profile keyed by the real auth.users.id ─────────────
     // Using the authenticated user's actual UUID satisfies the FK constraint
     // immediately — no trigger or deferred linking needed.
-    // The phone number from the form is stored even when the auth provider is
-    // Google (which doesn't populate phone on auth.users).
+    // Admins use Google Auth so no phone number is required or stored here.
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
         id: authUserId,                   // real auth.users.id — no placeholder needed
         apartment_id: apartment.id,
-        phone: adminPhone,                // stored from form even for Google-auth users
         display_name: adminDisplayName || null,
         role: 'admin',
         status: 'approved',               // admin needs no approval
