@@ -27,7 +27,7 @@ echo "Rebuilding dependencies..."
 flutter pub get > /dev/null 2>&1
 
 echo "Starting web app (auto-rebuilds on file changes)..."
-echo "Supabase URL: ${SUPABASE_URL:-https://YOUR_PROJECT.supabase.co}"
+echo "Supabase URL: ${SUPABASE_URL:-https://njlbcrcoogpblscvjfah.supabase.co}"
 echo ""
 
 # Load environment variables
@@ -43,14 +43,14 @@ if [ -n "$SUPABASE_PUBLISHABLE_KEY" ]; then
 elif [ -n "$SUPABASE_ANON_KEY" ]; then
     PUBLISHABLE_KEY="$SUPABASE_ANON_KEY"
 else
-    PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY:-your-publishable-key}"
+    PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY:-sb_publishable_NMGQVHr82TK0d_4HSYQFMg_O6xokAKE}"
 fi
 
 if [ $# -eq 2 ]; then
     SUPABASE_URL="$1"
     PUBLISHABLE_KEY="$2"
 elif [ -z "$SUPABASE_URL" ]; then
-    SUPABASE_URL="${SUPABASE_URL:-https://YOUR_PROJECT.supabase.co}"
+    SUPABASE_URL="${SUPABASE_URL:-https://njlbcrcoogpblscvjfah.supabase.co}"
 fi
 
 # Run flutter run - it will automatically hot reload on file changes

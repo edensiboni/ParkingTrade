@@ -1,74 +1,83 @@
 #!/bin/bash
 # Run Parking Trade on web (Flutter web server).
-# Requires SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY for backward compatibility).
+#
+# Reads credentials from .env in the project root. Never hardcodes real secrets
+# here — keep them in .env (gitignored) or pass as environment variables.
+#
+# Usage:
+#   ./run_web.sh                  # load from .env
+#   ./run_web.sh <url> <key>      # override URL and publishable key inline
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Default values (from .env.example); replace in .env or via env/args
-SUPABASE_URL_DEFAULT='https://YOUR_PROJECT.supabase.co'
-SUPABASE_PUBLISHABLE_KEY_DEFAULT='your-publishable-key'
-
-# Ensure .env exists from example so keys exist by default
+# ── Bootstrap .env from example if missing ──────────────────────────────────
 if [ ! -f "$SCRIPT_DIR/.env" ] && [ -f "$SCRIPT_DIR/.env.example" ]; then
     cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
-    echo "Created .env from .env.example — edit .env with your Supabase URL and publishable key."
+    echo "Created .env from .env.example — fill in your Supabase credentials before running."
     echo ""
 fi
 
-# Load .env (gitignored)
+# ── Load .env (gitignored) ───────────────────────────────────────────────────
 if [ -f "$SCRIPT_DIR/.env" ]; then
     set -a
+    # shellcheck disable=SC1091
     source "$SCRIPT_DIR/.env"
     set +a
 fi
 
-if ! command -v flutter &> /dev/null; then
-    echo "❌ Flutter not found. Install from https://flutter.dev"
-    exit 1
-fi
-
-# Support both SUPABASE_PUBLISHABLE_KEY (new) and SUPABASE_ANON_KEY (legacy)
-# Prefer publishable key, fallback to anon key for backward compatibility
+# ── Resolve publishable key (new name OR legacy SUPABASE_ANON_KEY) ────────────
+# .env may use either SUPABASE_PUBLISHABLE_KEY or the older SUPABASE_ANON_KEY;
+# accept both so existing .env files don't need editing.
 if [ -n "$SUPABASE_PUBLISHABLE_KEY" ]; then
     PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
 elif [ -n "$SUPABASE_ANON_KEY" ]; then
     PUBLISHABLE_KEY="$SUPABASE_ANON_KEY"
 else
-    PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY_DEFAULT"
+    PUBLISHABLE_KEY=""
 fi
 
-# Use args if provided, else env, else defaults
+# ── Allow positional overrides: ./run_web.sh <url> <key> ─────────────────────
 if [ $# -eq 2 ]; then
     SUPABASE_URL="$1"
     PUBLISHABLE_KEY="$2"
-elif [ -z "$SUPABASE_URL" ] || [ -z "$PUBLISHABLE_KEY" ]; then
-    SUPABASE_URL="${SUPABASE_URL:-$SUPABASE_URL_DEFAULT}"
-    PUBLISHABLE_KEY="${PUBLISHABLE_KEY:-$SUPABASE_PUBLISHABLE_KEY_DEFAULT}"
 fi
 
-# Warn if still using placeholders
-if [ "$SUPABASE_URL" = "$SUPABASE_URL_DEFAULT" ] || [ "$PUBLISHABLE_KEY" = "$SUPABASE_PUBLISHABLE_KEY_DEFAULT" ]; then
-    echo "⚠️  Using default placeholder credentials. Supabase will not work until you set real values."
-    echo "   Edit .env with your URL and publishable key from: Supabase Dashboard → Project Settings → API"
-    echo "   Look for 'Publishable key' (formerly called 'anon public key')"
-    echo ""
+# ── Guard: abort if credentials are still missing or placeholder ─────────────
+if [ -z "$SUPABASE_URL" ] || [ "$SUPABASE_URL" = "https://YOUR_PROJECT.supabase.co" ]; then
+    echo "❌  SUPABASE_URL is not set. Add it to .env:"
+    echo "    SUPABASE_URL=https://<your-ref>.supabase.co"
+    exit 1
+fi
+if [ -z "$PUBLISHABLE_KEY" ] || [ "$PUBLISHABLE_KEY" = "your-publishable-key" ]; then
+    echo "❌  Supabase publishable key is not set. Add it to .env:"
+    echo "    SUPABASE_PUBLISHABLE_KEY=<your-publishable-key>"
+    echo "    (or SUPABASE_ANON_KEY=<...> for the legacy name)"
+    exit 1
 fi
 
+# ── Flutter check ────────────────────────────────────────────────────────────
+if ! command -v flutter &> /dev/null; then
+    echo "❌  Flutter not found. Install from https://flutter.dev"
+    exit 1
+fi
+
+# ── Optional extras ──────────────────────────────────────────────────────────
 PORT="${WEB_PORT:-8081}"
+PLACES_API_KEY="${PLACES_API_KEY:-}"
+
 echo "Starting web app at http://localhost:$PORT"
 echo "Supabase URL: $SUPABASE_URL"
-# Optional: Google Places API key for address autocomplete when creating a building
-PLACES_API_KEY="${PLACES_API_KEY:-}"
 if [ -n "$PLACES_API_KEY" ]; then
-    echo "Places API: key set (address autocomplete enabled)"
+    echo "Places API:   key set (address autocomplete enabled)"
 else
-    echo "Places API: no key (add PLACES_API_KEY to .env for address autocomplete)"
+    echo "Places API:   no key (add PLACES_API_KEY to .env for address autocomplete)"
 fi
 echo ""
 
-# Pass both env var names for backward compatibility (Dart code prefers PUBLISHABLE_KEY, falls back to ANON_KEY)
+# ── Launch ───────────────────────────────────────────────────────────────────
+# Pass both env var names so Dart's String.fromEnvironment picks up either one.
 flutter run -d web-server \
     -t lib/main_web.dart \
     --web-port="$PORT" \
