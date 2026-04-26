@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/auth_service.dart';
 
 /// Shown when the app is loaded with `/?mode=setup`.
 ///
@@ -50,7 +51,7 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
         body: {
           'building_name': _buildingNameController.text.trim(),
           'admin_display_name': _adminNameController.text.trim(),
-          'admin_phone': _phoneController.text.trim(),
+          'admin_phone': AuthService.normalisePhone(_phoneController.text),
         },
       );
 
@@ -85,10 +86,14 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
 
   String? _validatePhone(String? value) {
     if (value == null || value.trim().isEmpty) return 'Phone number is required';
-    if (!value.trim().startsWith('+')) {
-      return 'Use E.164 format: +1234567890';
+    // Normalise first so we validate what will actually be sent.
+    final normalised = AuthService.normalisePhone(value);
+    // After normalisation the number must start with '+' and contain
+    // only digits (7–15 digits after the '+').
+    final e164Regex = RegExp(r'^\+\d{7,15}$');
+    if (!e164Regex.hasMatch(normalised)) {
+      return 'Enter a valid phone number, e.g. 050-123-4567';
     }
-    if (value.trim().length < 8) return 'Phone number is too short';
     return null;
   }
 
@@ -169,7 +174,7 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
                 onFieldSubmitted: (_) => _submit(),
                 decoration: const InputDecoration(
                   labelText: 'Phone Number',
-                  hintText: '+972501234567',
+                  hintText: '05X-XXX-XXXX or +972 5X XXX XXXX',
                   prefixIcon: Icon(Icons.phone_rounded),
                 ),
                 validator: _validatePhone,
