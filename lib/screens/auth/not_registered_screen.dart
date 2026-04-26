@@ -55,6 +55,11 @@ class NotRegisteredScreen extends StatelessWidget {
                   child: const Text('Sign Out'),
                 ),
               ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => Navigator.of(context).pushNamed('/setup'),
+                child: const Text('Are you a building admin? Create a new building'),
+              ),
             ],
           ),
         ),
