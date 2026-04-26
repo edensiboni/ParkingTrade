@@ -9,6 +9,8 @@ class Profile {
   final bool receivesPushNotifications;
   final bool receivesChatNotifications;
   final String? displayName;
+  /// E.164 phone used to link auth account to this profile (see migration 014).
+  final String? phone;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -22,6 +24,7 @@ class Profile {
     this.receivesPushNotifications = false,
     this.receivesChatNotifications = false,
     this.displayName,
+    this.phone,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -42,6 +45,7 @@ class Profile {
       receivesChatNotifications:
           (json['receives_chat_notifications'] as bool?) ?? false,
       displayName: json['display_name'] as String?,
+      phone: json['phone'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -58,6 +62,7 @@ class Profile {
       'receives_push_notifications': receivesPushNotifications,
       'receives_chat_notifications': receivesChatNotifications,
       'display_name': displayName,
+      if (phone != null) 'phone': phone,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -71,6 +76,7 @@ class Profile {
     bool? receivesPushNotifications,
     bool? receivesChatNotifications,
     String? displayName,
+    String? phone,
   }) {
     return Profile(
       id: id,
@@ -84,6 +90,7 @@ class Profile {
       receivesChatNotifications:
           receivesChatNotifications ?? this.receivesChatNotifications,
       displayName: displayName ?? this.displayName,
+      phone: phone ?? this.phone,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );

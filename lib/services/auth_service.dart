@@ -159,6 +159,7 @@ class AuthService {
   // Update profile
   Future<void> updateProfile({
     String? displayName,
+    String? phone,
   }) async {
     final user = currentUser;
     if (user == null) throw Exception('Not authenticated');
@@ -167,6 +168,9 @@ class AuthService {
     if (displayName != null) {
       updates['display_name'] = displayName;
     }
+    if (phone != null) {
+      updates['phone'] = phone;
+    }
 
     if (updates.isEmpty) return;
 
@@ -174,6 +178,15 @@ class AuthService {
         .from('profiles')
         .update(updates)
         .eq('id', user.id);
+  }
+
+  /// Returns true if the current user authenticated via Google OAuth
+  /// (i.e. has no phone number on their auth.users row yet).
+  bool get isGoogleUser {
+    final user = currentUser;
+    if (user == null) return false;
+    return user.appMetadata['provider'] == 'google' ||
+        (user.identities?.any((i) => i.provider == 'google') ?? false);
   }
 }
 

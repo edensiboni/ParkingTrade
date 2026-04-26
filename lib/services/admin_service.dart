@@ -80,6 +80,43 @@ class AdminService {
     return Profile.fromJson(data['member']);
   }
 
+  // ── Manage Apartments (authorized_apartments table) ────────────────────────
+
+  /// Returns all authorized_apartments rows for the current admin's building.
+  Future<List<Map<String, dynamic>>> getAuthorizedApartments() async {
+    final buildingId = await _resolveAdminBuildingId();
+
+    final response = await _supabase
+        .from('authorized_apartments')
+        .select('id, unit_number, phone, created_at')
+        .eq('building_id', buildingId)
+        .order('unit_number', ascending: true);
+
+    return (response as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Adds a single authorized apartment (unit_number + phone) for the admin's building.
+  Future<void> addAuthorizedApartment({
+    required String unitNumber,
+    required String phone,
+  }) async {
+    final buildingId = await _resolveAdminBuildingId();
+
+    await _supabase.from('authorized_apartments').insert({
+      'building_id': buildingId,
+      'unit_number': unitNumber.trim(),
+      'phone': phone.trim(),
+    });
+  }
+
+  /// Deletes an authorized_apartment row by its UUID.
+  Future<void> deleteAuthorizedApartment(String id) async {
+    // Verify admin status before deletion (RLS also enforces this server-side).
+    await _resolveAdminBuildingId();
+
+    await _supabase.from('authorized_apartments').delete().eq('id', id);
+  }
+
   /// Sends a list of apartment/phone/spot objects to the admin-bulk-import
   /// edge function. Returns a summary map with 'imported' and optional 'errors'.
   Future<Map<String, dynamic>> bulkImport(

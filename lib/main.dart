@@ -14,9 +14,12 @@ import 'services/notification_service_stub.dart' if (dart.library.io) 'services/
 import 'screens/auth/dev_auth_screen.dart';
 import 'screens/auth/phone_auth_screen.dart';
 import 'screens/auth/not_registered_screen.dart';
+import 'screens/auth/create_building_screen.dart';
+import 'screens/auth/phone_verification_screen.dart';
 import 'screens/building/pending_approval_screen.dart';
 import 'screens/building/rejected_screen.dart';
 import 'screens/spots/parking_spots_screen.dart';
+import 'screens/admin/admin_dashboard_screen.dart';
 import 'models/profile.dart';
 
 void main() async {
@@ -96,6 +99,12 @@ class ParkingTradeApp extends StatelessWidget {
         '/pending-approval': (context) => const PendingApprovalScreen(),
         '/rejected': (context) => const RejectedScreen(),
         '/home': (context) => const ParkingSpotsScreen(),
+        '/admin-dashboard': (context) => const AdminDashboardScreen(),
+        '/phone-verification': (context) => const PhoneVerificationScreen(),
+        '/setup': (context) => CreateBuildingScreen(
+              onCreated: () => Navigator.of(context)
+                  .pushNamedAndRemoveUntil('/auth', (route) => false),
+            ),
       },
     );
   }
@@ -182,55 +191,61 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _navigateBasedOnProfile() async {
     try {
+      // Google users who haven't linked a phone yet must verify first.
+      if (_authService.isGoogleUser) {
+        final user = _authService.currentUser;
+        final hasPhone = user?.phone != null && user!.phone!.isNotEmpty;
+        if (!hasPhone) {
+          if (mounted) {
+            Navigator.of(context)
+                .pushReplacementNamed('/phone-verification');
+            setState(() => _isLoading = false);
+          }
+          return;
+        }
+      }
+
       final profile = await _authService.getCurrentProfile();
 
       if (!mounted) return;
 
-      // No pre-created profile found for this phone number
+      // No pre-created profile found for this user.
       if (profile == null || profile.apartmentId == null) {
-        Navigator.of(context).pushReplacementNamed('/not-registered');
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
+        // Building admins may have no apartment_id yet if they were
+        // created by the create-building edge function before linking.
+        // Route admins directly to the dashboard; others to not-registered.
+        if (profile != null && profile.isAdmin) {
+          Navigator.of(context)
+              .pushReplacementNamed('/admin-dashboard');
+        } else {
+          Navigator.of(context).pushReplacementNamed('/not-registered');
         }
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
-      // Profile is linked to an apartment — route based on status
-      if (profile.status == ProfileStatus.pending) {
+      // Admin users go straight to the admin dashboard regardless of status.
+      if (profile.isAdmin) {
+        Navigator.of(context).pushReplacementNamed('/admin-dashboard');
+      } else if (profile.status == ProfileStatus.pending) {
         Navigator.of(context).pushReplacementNamed('/pending-approval');
       } else if (profile.status == ProfileStatus.rejected) {
         Navigator.of(context).pushReplacementNamed('/rejected');
       } else {
-        // approved (or any other status) → go straight to parking spots
+        // Approved resident → parking spots home.
         Navigator.of(context).pushReplacementNamed('/home');
       }
 
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       debugPrint('Error navigating based on profile: $e');
       final user = _authService.currentUser;
       if (user == null) {
-        if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/auth');
-        }
+        if (mounted) Navigator.of(context).pushReplacementNamed('/auth');
       } else {
-        // Authenticated but profile fetch failed — treat as not registered
-        if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/not-registered');
-        }
+        if (mounted) Navigator.of(context).pushReplacementNamed('/not-registered');
       }
-
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

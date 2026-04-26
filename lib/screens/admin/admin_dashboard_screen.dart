@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/admin_service.dart';
+import '../../services/auth_service.dart';
 import '../../models/profile.dart';
 import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
@@ -27,7 +28,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadData();
   }
 
@@ -177,8 +178,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Building admin'),
+        actions: [
+          IconButton(
+            tooltip: 'Sign out',
+            icon: const Icon(Icons.logout_rounded),
+            onPressed: () async {
+              await AuthService().signOut();
+            },
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           tabs: [
             Tab(
               text: _pendingMembers.isEmpty
@@ -186,6 +198,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   : 'Pending (${_pendingMembers.length})',
             ),
             Tab(text: 'Members (${_allMembers.length})'),
+            const Tab(text: 'Manage Apartments'),
             const Tab(text: 'Bulk Import'),
           ],
         ),
@@ -195,6 +208,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         children: [
           _buildPendingList(),
           _buildAllMembersList(),
+          _ManageApartmentsTab(adminService: _adminService),
           _BulkImportTab(adminService: _adminService),
         ],
       ),
@@ -368,6 +382,284 @@ class _MemberCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ─── Manage Apartments Tab ────────────────────────────────────────────────────
+
+class _ManageApartmentsTab extends StatefulWidget {
+  final AdminService adminService;
+  const _ManageApartmentsTab({required this.adminService});
+
+  @override
+  State<_ManageApartmentsTab> createState() => _ManageApartmentsTabState();
+}
+
+class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
+  final _formKey = GlobalKey<FormState>();
+  final _unitController = TextEditingController();
+  final _phoneController = TextEditingController();
+
+  List<Map<String, dynamic>> _apartments = [];
+  bool _isLoading = true;
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadApartments();
+  }
+
+  @override
+  void dispose() {
+    _unitController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadApartments() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await widget.adminService.getAuthorizedApartments();
+      if (!mounted) return;
+      setState(() {
+        _apartments = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  Future<void> _addApartment() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final rawPhone = _phoneController.text.trim();
+    final phone = AuthService.normalisePhone(rawPhone);
+
+    setState(() => _isSubmitting = true);
+    try {
+      await widget.adminService.addAuthorizedApartment(
+        unitNumber: _unitController.text.trim(),
+        phone: phone,
+      );
+      if (!mounted) return;
+      AppSnack.success(context, 'Apartment added successfully.');
+      _unitController.clear();
+      _phoneController.clear();
+      _loadApartments();
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _deleteApartment(String id, String unit) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove authorization?'),
+        content: Text(
+          'Remove unit "$unit"? The resident will lose access on their next login.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await widget.adminService.deleteAuthorizedApartment(id);
+      if (!mounted) return;
+      AppSnack.success(context, 'Authorization removed.');
+      _loadApartments();
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  String? _validatePhone(String? value) {
+    if (value == null || value.trim().isEmpty) return 'Phone number is required';
+    final normalised = AuthService.normalisePhone(value);
+    if (!RegExp(r'^\+\d{7,15}$').hasMatch(normalised)) {
+      return 'Enter a valid phone number, e.g. 050-123-4567';
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Column(
+      children: [
+        // ── Add Apartment Form ───────────────────────────────────────────────
+        Container(
+          color: scheme.surfaceContainerLow,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Add Apartment',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Unit number
+                    SizedBox(
+                      width: 110,
+                      child: TextFormField(
+                        controller: _unitController,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          labelText: 'Unit No.',
+                          hintText: 'e.g. 4B',
+                          isDense: true,
+                        ),
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty)
+                                ? 'Required'
+                                : null,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Phone
+                    Expanded(
+                      child: TextFormField(
+                        controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _addApartment(),
+                        decoration: const InputDecoration(
+                          labelText: 'Resident Phone',
+                          hintText: '05X-XXX-XXXX',
+                          isDense: true,
+                        ),
+                        validator: _validatePhone,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Add button
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: FilledButton(
+                        onPressed: _isSubmitting ? null : _addApartment,
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                        ),
+                        child: _isSubmitting
+                            ? SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: scheme.onPrimary,
+                                ),
+                              )
+                            : const Icon(Icons.add_rounded),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const Divider(height: 1),
+
+        // ── Apartment List ───────────────────────────────────────────────────
+        Expanded(
+          child: _isLoading
+              ? const SkeletonList(count: 5)
+              : _apartments.isEmpty
+                  ? const EmptyState(
+                      icon: Icons.door_front_door_outlined,
+                      title: 'No apartments yet',
+                      message:
+                          'Add a unit number and resident phone above to authorize access.',
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadApartments,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _apartments.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final apt = _apartments[index];
+                          final id = apt['id'] as String;
+                          final unit = apt['unit_number'] as String;
+                          final phone = apt['phone'] as String;
+
+                          return Card(
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor:
+                                    scheme.primaryContainer,
+                                child: Text(
+                                  unit.length <= 3
+                                      ? unit
+                                      : unit.substring(0, 3),
+                                  style: TextStyle(
+                                    color: scheme.onPrimaryContainer,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                'Unit $unit',
+                                style: theme.textTheme.titleSmall,
+                              ),
+                              subtitle: Text(
+                                phone,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                              trailing: IconButton(
+                                tooltip: 'Remove authorization',
+                                icon: Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: scheme.error,
+                                ),
+                                onPressed: () =>
+                                    _deleteApartment(id, unit),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+        ),
+      ],
     );
   }
 }

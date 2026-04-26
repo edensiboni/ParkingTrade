@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../services/auth_service.dart';
 
-/// Shown when the app is loaded with `/?mode=setup`.
+/// Shown when a prospective building admin navigates to /setup.
 ///
-/// Allows a prospective building admin to register their building in a single
-/// step — no authentication required. After the building is created the admin
-/// logs in via the normal OTP flow; migration-014 automatically links the auth
-/// account to the pre-created admin profile.
+/// Allows the admin to register a new building with just a name and address.
+/// After the building is created, the admin logs in via the normal OTP flow;
+/// migration-014 automatically links the auth account to the pre-created
+/// admin profile.
 class CreateBuildingScreen extends StatefulWidget {
   /// Called after a successful creation so the caller can navigate away.
   final VoidCallback onCreated;
@@ -21,8 +20,7 @@ class CreateBuildingScreen extends StatefulWidget {
 class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _buildingNameController = TextEditingController();
-  final _adminNameController = TextEditingController();
-  final _phoneController = TextEditingController();
+  final _addressController = TextEditingController();
 
   bool _isLoading = false;
   bool _success = false;
@@ -31,8 +29,7 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
   @override
   void dispose() {
     _buildingNameController.dispose();
-    _adminNameController.dispose();
-    _phoneController.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 
@@ -50,12 +47,10 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
         'create-building-admin',
         body: {
           'building_name': _buildingNameController.text.trim(),
-          'admin_display_name': _adminNameController.text.trim(),
-          'admin_phone': AuthService.normalisePhone(_phoneController.text),
+          'address': _addressController.text.trim(),
         },
       );
 
-      // Supabase functions.invoke throws on non-2xx, but double-check the body.
       final data = response.data as Map<String, dynamic>?;
       if (data == null || data['success'] != true) {
         throw Exception(data?['error'] ?? 'Unknown error from server');
@@ -84,19 +79,6 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
     return null;
   }
 
-  String? _validatePhone(String? value) {
-    if (value == null || value.trim().isEmpty) return 'Phone number is required';
-    // Normalise first so we validate what will actually be sent.
-    final normalised = AuthService.normalisePhone(value);
-    // After normalisation the number must start with '+' and contain
-    // only digits (7–15 digits after the '+').
-    final e164Regex = RegExp(r'^\+\d{7,15}$');
-    if (!e164Regex.hasMatch(normalised)) {
-      return 'Enter a valid phone number, e.g. 050-123-4567';
-    }
-    return null;
-  }
-
   // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
@@ -111,7 +93,9 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 480),
-              child: _success ? _buildSuccessView(theme, colorScheme) : _buildFormView(theme, colorScheme),
+              child: _success
+                  ? _buildSuccessView(theme, colorScheme)
+                  : _buildFormView(theme, colorScheme),
             ),
           ),
         ),
@@ -133,8 +117,9 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Create your building and admin account. After setup you can log in with your phone number.',
-          style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+          'Enter your building\'s name and address. After setup, log in with your phone number to access the admin dashboard.',
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 36),
@@ -157,46 +142,37 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
               ),
               const SizedBox(height: 16),
               TextFormField(
-                controller: _adminNameController,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Your Name',
-                  hintText: 'e.g. Dana Cohen',
-                  prefixIcon: Icon(Icons.person_rounded),
-                ),
-                // Display name is optional — we just use it when provided
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
+                controller: _addressController,
                 textInputAction: TextInputAction.done,
                 onFieldSubmitted: (_) => _submit(),
                 decoration: const InputDecoration(
-                  labelText: 'Phone Number',
-                  hintText: '05X-XXX-XXXX or +972 5X XXX XXXX',
-                  prefixIcon: Icon(Icons.phone_rounded),
+                  labelText: 'Building Address',
+                  hintText: 'e.g. 12 Herzl St, Tel Aviv',
+                  prefixIcon: Icon(Icons.location_on_rounded),
                 ),
-                validator: _validatePhone,
+                validator: (v) => _validateRequired(v, 'Building address'),
               ),
               const SizedBox(height: 28),
 
               // ── Error ──────────────────────────────────────────────────────
               if (_errorMessage != null) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
                     color: colorScheme.errorContainer,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.error_outline_rounded, color: colorScheme.onErrorContainer, size: 20),
+                      Icon(Icons.error_outline_rounded,
+                          color: colorScheme.onErrorContainer, size: 20),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           _errorMessage!,
-                          style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onErrorContainer),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onErrorContainer),
                         ),
                       ),
                     ],
@@ -227,7 +203,8 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(Icons.check_circle_rounded, size: 72, color: colorScheme.primary),
+        Icon(Icons.check_circle_rounded,
+            size: 72, color: colorScheme.primary),
         const SizedBox(height: 24),
         Text(
           'Building Created!',
@@ -236,8 +213,9 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
         ),
         const SizedBox(height: 12),
         Text(
-          'You can now log in with your phone number to access the Admin Dashboard.',
-          style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+          'Log in with your phone number to access the Admin Dashboard and start adding apartments.',
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 36),
