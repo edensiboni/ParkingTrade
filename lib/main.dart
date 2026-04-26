@@ -16,7 +16,6 @@ import 'screens/auth/dev_auth_screen.dart';
 import 'screens/auth/phone_auth_screen.dart';
 import 'screens/auth/not_registered_screen.dart';
 import 'screens/auth/create_building_screen.dart';
-import 'screens/auth/phone_verification_screen.dart';
 import 'screens/building/pending_approval_screen.dart';
 import 'screens/building/rejected_screen.dart';
 import 'screens/spots/parking_spots_screen.dart';
@@ -113,7 +112,6 @@ class ParkingTradeApp extends StatelessWidget {
         '/rejected': (context) => const RejectedScreen(),
         '/home': (context) => const ParkingSpotsScreen(),
         '/admin-dashboard': (context) => const AdminDashboardScreen(),
-        '/phone-verification': (context) => const PhoneVerificationScreen(),
         '/setup': (context) => CreateBuildingScreen(
               onCreated: () => Navigator.of(context)
                   .pushNamedAndRemoveUntil('/admin-dashboard', (route) => false),
@@ -204,20 +202,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _navigateBasedOnProfile() async {
     try {
-      // Google users who haven't linked a phone yet must verify first.
-      if (_authService.isGoogleUser) {
-        final user = _authService.currentUser;
-        final hasPhone = user?.phone != null && user!.phone!.isNotEmpty;
-        if (!hasPhone) {
-          if (mounted) {
-            Navigator.of(context)
-                .pushReplacementNamed('/phone-verification');
-            setState(() => _isLoading = false);
-          }
-          return;
-        }
-      }
-
       final profile = await _authService.getCurrentProfile();
 
       if (!mounted) return;
