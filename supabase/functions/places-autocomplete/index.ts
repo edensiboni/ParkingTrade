@@ -1,12 +1,17 @@
-// Proxies Google Places Autocomplete so the browser avoids CORS.
+// Proxies Google Places Autocomplete and Place Details so the browser avoids CORS.
 // Set secret: supabase secrets set PLACES_API_KEY=your-google-key
+//
+// Supports two actions (passed in the JSON body):
+//   { input: "..." }                          → Autocomplete suggestions
+//   { place_id: "ChIJ...", action: "details" } → Geocoordinates for a placeId
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const GOOGLE_URL = 'https://maps.googleapis.com/maps/api/place/autocomplete/json'
+const AUTOCOMPLETE_URL = 'https://maps.googleapis.com/maps/api/place/autocomplete/json'
+const DETAILS_URL = 'https://maps.googleapis.com/maps/api/place/details/json'
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -21,14 +26,13 @@ Deno.serve(async (req) => {
     )
   }
 
-  let input = ''
+  let body: Record<string, string> = {}
   try {
     if (req.method === 'GET') {
       const u = new URL(req.url)
-      input = (u.searchParams.get('input') ?? '').trim()
+      body = Object.fromEntries(u.searchParams.entries())
     } else {
-      const body = await req.json() as { input?: string }
-      input = (body?.input ?? '').trim()
+      body = await req.json()
     }
   } catch {
     return new Response(
@@ -37,6 +41,25 @@ Deno.serve(async (req) => {
     )
   }
 
+  // ── Place Details (lat/lng lookup) ──────────────────────────────────────────
+  if (body.action === 'details' && body.place_id) {
+    const placeId = body.place_id.trim()
+    if (!placeId) {
+      return new Response(
+        JSON.stringify({ error: 'place_id is required for details action' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    const url = `${DETAILS_URL}?place_id=${encodeURIComponent(placeId)}&fields=geometry&key=${encodeURIComponent(apiKey)}`
+    const resp = await fetch(url)
+    const data = await resp.json()
+    return new Response(JSON.stringify(data), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // ── Autocomplete ─────────────────────────────────────────────────────────────
+  const input = (body.input ?? '').trim()
   if (input.length < 3) {
     return new Response(
       JSON.stringify({ predictions: [] }),
@@ -44,7 +67,7 @@ Deno.serve(async (req) => {
     )
   }
 
-  const url = `${GOOGLE_URL}?input=${encodeURIComponent(input)}&key=${encodeURIComponent(apiKey)}&types=address`
+  const url = `${AUTOCOMPLETE_URL}?input=${encodeURIComponent(input)}&key=${encodeURIComponent(apiKey)}&types=address`
   const resp = await fetch(url)
   const data = await resp.json()
 

@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../widgets/address_autocomplete_field.dart';
+
 /// Shown when a prospective building admin navigates to /setup.
 ///
-/// Allows the admin to register a new building with just a name and address.
+/// Allows the admin to register a new building with a name and address.
+/// The address field uses Google Places Autocomplete to validate and geocode
+/// the address — latitude and longitude are captured automatically when the
+/// user selects a suggestion.
+///
 /// After the building is created, the admin logs in via the normal OTP flow;
 /// migration-014 automatically links the auth account to the pre-created
 /// admin profile.
@@ -20,7 +26,11 @@ class CreateBuildingScreen extends StatefulWidget {
 class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _buildingNameController = TextEditingController();
-  final _addressController = TextEditingController();
+
+  // Address state — filled by the autocomplete widget callback.
+  String _address = '';
+  double? _latitude;
+  double? _longitude;
 
   bool _isLoading = false;
   bool _success = false;
@@ -29,8 +39,15 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
   @override
   void dispose() {
     _buildingNameController.dispose();
-    _addressController.dispose();
     super.dispose();
+  }
+
+  void _onAddressSelected(AddressResult result) {
+    setState(() {
+      _address = result.address;
+      _latitude = result.latitude;
+      _longitude = result.longitude;
+    });
   }
 
   Future<void> _submit() async {
@@ -43,12 +60,17 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
 
     try {
       final supabase = Supabase.instance.client;
+
+      final body = <String, dynamic>{
+        'building_name': _buildingNameController.text.trim(),
+        if (_address.isNotEmpty) 'address': _address,
+        if (_latitude != null) 'latitude': _latitude,
+        if (_longitude != null) 'longitude': _longitude,
+      };
+
       final response = await supabase.functions.invoke(
         'create-building-admin',
-        body: {
-          'building_name': _buildingNameController.text.trim(),
-          'address': _addressController.text.trim(),
-        },
+        body: body,
       );
 
       final data = response.data as Map<String, dynamic>?;
@@ -76,6 +98,12 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
     if (value == null || value.trim().isEmpty) {
       return '$fieldName is required';
     }
+    return null;
+  }
+
+  String? _validateAddress(String? value) {
+    final text = (value ?? _address).trim();
+    if (text.isEmpty) return 'Building address is required';
     return null;
   }
 
@@ -130,6 +158,7 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Building name
               TextFormField(
                 controller: _buildingNameController,
                 textInputAction: TextInputAction.next,
@@ -141,17 +170,45 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
                 validator: (v) => _validateRequired(v, 'Building name'),
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _addressController,
-                textInputAction: TextInputAction.done,
-                onFieldSubmitted: (_) => _submit(),
-                decoration: const InputDecoration(
-                  labelText: 'Building Address',
-                  hintText: 'e.g. 12 Herzl St, Tel Aviv',
-                  prefixIcon: Icon(Icons.location_on_rounded),
-                ),
-                validator: (v) => _validateRequired(v, 'Building address'),
+
+              // Address — autocomplete
+              AddressAutocompleteField(
+                labelText: 'Building Address',
+                hintText: 'e.g. 12 Herzl St, Tel Aviv',
+                initialValue: _address.isEmpty ? null : _address,
+                validator: _validateAddress,
+                onAddressSelected: _onAddressSelected,
+                onChanged: (value) {
+                  // If the user edits text after picking a suggestion,
+                  // clear the cached lat/lng so we don't store stale coords.
+                  if (value != _address) {
+                    setState(() {
+                      _address = value;
+                      _latitude = null;
+                      _longitude = null;
+                    });
+                  }
+                },
               ),
+
+              // Show captured coordinates (subtle hint that geocoding worked)
+              if (_latitude != null && _longitude != null) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const SizedBox(width: 12),
+                    Icon(Icons.check_circle_outline_rounded,
+                        size: 14, color: colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Location confirmed (${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)})',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.primary),
+                    ),
+                  ],
+                ),
+              ],
+
               const SizedBox(height: 28),
 
               // ── Error ──────────────────────────────────────────────────────

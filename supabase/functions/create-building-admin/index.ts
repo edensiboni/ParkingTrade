@@ -90,6 +90,9 @@ serve(async (req) => {
     const buildingName: string = (body?.building_name as string | undefined)?.trim() ?? ''
     const adminDisplayName: string = (body?.admin_display_name as string | undefined)?.trim() ?? ''
     const adminPhone: string = (body?.admin_phone as string | undefined)?.trim() ?? ''
+    const address: string | undefined = (body?.address as string | undefined)?.trim() || undefined
+    const latitude: number | undefined = typeof body?.latitude === 'number' ? body.latitude as number : undefined
+    const longitude: number | undefined = typeof body?.longitude === 'number' ? body.longitude as number : undefined
 
     if (!buildingName) {
       return new Response(
@@ -167,6 +170,9 @@ serve(async (req) => {
         name: buildingName,
         invite_code: inviteCode,
         approval_required: false, // admins approve members later; the admin themselves is auto-approved
+        ...(address !== undefined ? { address } : {}),
+        ...(latitude !== undefined ? { latitude } : {}),
+        ...(longitude !== undefined ? { longitude } : {}),
       })
       .select('id, name, invite_code')
       .single()
