@@ -4,15 +4,14 @@
 // Creates:
 //   1. A new `buildings` row.
 //   2. An "ADMIN-UNIT" apartment linked to that building.
-//   3. A `profiles` row for the admin, keyed by phone number (no auth.uid yet).
-//      The profile is pre-created with role='admin' and status='approved' so that
-//      when the admin logs in via OTP the migration-014 trigger links the auth account
-//      automatically.
+//   3. A `profiles` row for the admin using the authenticated user's real auth.uid.
+//      Supports both Google OAuth and phone/OTP sign-in.
+//      The phone number supplied in the form is stored on the profile even when the
+//      auth provider is Google (which has no phone on the auth.users row).
 //
-// This function uses the SERVICE ROLE key and is intentionally unauthenticated —
-// the caller is a prospective admin who has not signed up yet.
-// Security is by obscurity (hidden URL) combined with rate-limiting / abuse detection
-// at the Supabase / hosting layer.
+// The caller MUST be authenticated — the Authorization header (Bearer JWT) is used
+// to resolve the real auth.users.id so that the profiles FK is satisfied immediately.
+// Security: valid Supabase JWT + hidden URL.
 
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
 
@@ -48,12 +47,34 @@ serve(async (req) => {
   }
 
   try {
-    // Service-role client — bypasses RLS so we can write profiles without an auth session.
+    // Service-role client — bypasses RLS so we can write profiles.
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       { auth: { autoRefreshToken: false, persistSession: false } },
     )
+
+    // ── Resolve the authenticated user from the JWT ────────────────────────────
+    const authHeader = req.headers.get('Authorization') ?? ''
+    if (!authHeader.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'Missing or invalid Authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser(
+      authHeader.replace('Bearer ', ''),
+    )
+
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized — could not resolve user from token', details: userError?.message }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
+    const authUserId = user.id
 
     // ── Parse & validate input ─────────────────────────────────────────────────
     let body: Record<string, unknown>
@@ -89,14 +110,29 @@ serve(async (req) => {
       )
     }
 
-    // ── Guard: phone must not already be registered ────────────────────────────
+    // ── Guard: this auth user must not already have a profile ─────────────────
     const { data: existingProfile } = await supabase
       .from('profiles')
-      .select('id, phone')
-      .eq('phone', adminPhone)
+      .select('id')
+      .eq('id', authUserId)
       .maybeSingle()
 
     if (existingProfile) {
+      return new Response(
+        JSON.stringify({ error: 'A profile already exists for this account' }),
+        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
+    // ── Guard: phone must not be claimed by a different profile ───────────────
+    const { data: phoneProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('phone', adminPhone)
+      .neq('id', authUserId)
+      .maybeSingle()
+
+    if (phoneProfile) {
       return new Response(
         JSON.stringify({ error: 'A profile with this phone number already exists' }),
         { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -161,16 +197,17 @@ serve(async (req) => {
       )
     }
 
-    // ── 3. Create admin profile (phone-keyed, no auth.uid yet) ────────────────
-    // A UUID placeholder is used as the profile id.
-    // When the admin later logs in via OTP, the migration-014 trigger
-    // (link_auth_user_to_profile) will UPDATE this row setting id = auth.users.id.
+    // ── 3. Create admin profile keyed by the real auth.users.id ─────────────
+    // Using the authenticated user's actual UUID satisfies the FK constraint
+    // immediately — no trigger or deferred linking needed.
+    // The phone number from the form is stored even when the auth provider is
+    // Google (which doesn't populate phone on auth.users).
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
-        id: crypto.randomUUID(),          // temporary; overwritten by trigger on first login
+        id: authUserId,                   // real auth.users.id — no placeholder needed
         apartment_id: apartment.id,
-        phone: adminPhone,
+        phone: adminPhone,                // stored from form even for Google-auth users
         display_name: adminDisplayName || null,
         role: 'admin',
         status: 'approved',               // admin needs no approval
@@ -197,7 +234,7 @@ serve(async (req) => {
         building_name: building.name,
         invite_code: building.invite_code,
         apartment_id: apartment.id,
-        message: 'Building created. Log in with your phone number to access the Admin Dashboard.',
+        message: 'Building created. You can now access the Admin Dashboard.',
       }),
       { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
