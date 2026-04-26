@@ -18,16 +18,16 @@ CREATE TABLE IF NOT EXISTS authorized_apartments (
     id              UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
     building_id     UUID        NOT NULL REFERENCES buildings(id) ON DELETE CASCADE,
     unit_number     TEXT        NOT NULL,          -- e.g. "4B", "101", "Penthouse"
-    phone           TEXT        NOT NULL,          -- E.164 resident phone
+    resident_phone  TEXT        NOT NULL,          -- E.164 resident phone
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (building_id, unit_number, phone)
+    UNIQUE (building_id, unit_number, resident_phone)
 );
 
 CREATE INDEX IF NOT EXISTS idx_authorized_apartments_building_id
     ON authorized_apartments(building_id);
 
-CREATE INDEX IF NOT EXISTS idx_authorized_apartments_phone
-    ON authorized_apartments(phone);
+CREATE INDEX IF NOT EXISTS idx_authorized_apartments_resident_phone
+    ON authorized_apartments(resident_phone);
 
 -- ─── 1. Enable RLS on all three tables ──────────────────────
 ALTER TABLE buildings             ENABLE ROW LEVEL SECURITY;
@@ -116,7 +116,7 @@ CREATE POLICY "Admins can view their building authorizations" ON authorized_apar
 -- SELECT for residents: can see their own authorization record (matched by phone).
 CREATE POLICY "Residents can view their own authorization" ON authorized_apartments
     FOR SELECT USING (
-        phone = (
+        resident_phone = (
             SELECT au.phone
             FROM   auth.users au
             WHERE  au.id = auth.uid()
