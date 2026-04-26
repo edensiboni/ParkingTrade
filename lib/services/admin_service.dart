@@ -88,7 +88,7 @@ class AdminService {
 
     final response = await _supabase
         .from('authorized_apartments')
-        .select('id, unit_number, phone, created_at')
+        .select('id, unit_number, resident_phone, created_at')
         .eq('building_id', buildingId)
         .order('unit_number', ascending: true);
 
@@ -105,7 +105,7 @@ class AdminService {
     await _supabase.from('authorized_apartments').insert({
       'building_id': buildingId,
       'unit_number': unitNumber.trim(),
-      'phone': phone.trim(),
+      'resident_phone': phone.trim(),
     });
   }
 

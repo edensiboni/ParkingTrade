@@ -616,7 +616,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
                           final apt = _apartments[index];
                           final id = apt['id'] as String;
                           final unit = apt['unit_number'] as String;
-                          final phone = apt['phone'] as String;
+                          final phone = apt['resident_phone'] as String;
 
                           return Card(
                             child: ListTile(

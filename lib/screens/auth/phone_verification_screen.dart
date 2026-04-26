@@ -102,7 +102,7 @@ class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
       final rows = await _supabase
           .from('authorized_apartments')
           .select('id')
-          .eq('phone', _normalisedPhone)
+          .eq('resident_phone', _normalisedPhone)
           .limit(1);
 
       if (!mounted) return;
