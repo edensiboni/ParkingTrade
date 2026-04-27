@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -24,6 +25,7 @@ import 'models/profile.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await EasyLocalization.ensureInitialized();
   debugPrint('### MAIN STARTED ###');
   debugPrint('### TIME: ${DateTime.now().toIso8601String()} ###');
 
@@ -89,7 +91,15 @@ void main() async {
     }
   }
 
-  runApp(const ParkingTradeApp());
+  runApp(
+    EasyLocalization(
+      supportedLocales: const [Locale('he'), Locale('en')],
+      path: 'assets/translations',
+      fallbackLocale: const Locale('he'),
+      startLocale: const Locale('he'),
+      child: const ParkingTradeApp(),
+    ),
+  );
 }
 
 class ParkingTradeApp extends StatelessWidget {
@@ -102,6 +112,9 @@ class ParkingTradeApp extends StatelessWidget {
       navigatorKey: rootNavigatorKey,
       theme: AppTheme.light(),
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: context.localizationDelegates,
+      supportedLocales: context.supportedLocales,
+      locale: context.locale,
       home: const AuthWrapper(),
       routes: {
         '/auth': (context) => DevAuthConfig.isEnabled

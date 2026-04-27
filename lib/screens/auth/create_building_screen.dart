@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -65,10 +66,7 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
       // After a Google OAuth redirect the session may not be restored yet.
       final session = supabase.auth.currentSession;
       if (session == null) {
-        throw Exception(
-          'You are not signed in. Please sign in with Google first, '
-          'then return to this page to create your building.',
-        );
+        throw Exception('setup.not_signed_in'.tr());
       }
 
       final body = <String, dynamic>{
@@ -109,14 +107,14 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
 
   String? _validateRequired(String? value, String fieldName) {
     if (value == null || value.trim().isEmpty) {
-      return '$fieldName is required';
+      return fieldName;
     }
     return null;
   }
 
   String? _validateAddress(String? value) {
     final text = (value ?? _address).trim();
-    if (text.isEmpty) return 'Building address is required';
+    if (text.isEmpty) return 'setup.address_required'.tr();
     return null;
   }
 
@@ -128,6 +126,26 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'language_toggle'.tr(),
+            icon: const Icon(Icons.translate_rounded),
+            onPressed: () {
+              final current = context.locale;
+              context.setLocale(
+                current.languageCode == 'he'
+                    ? const Locale('en')
+                    : const Locale('he'),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -152,13 +170,13 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
         Icon(Icons.apartment_rounded, size: 56, color: colorScheme.primary),
         const SizedBox(height: 20),
         Text(
-          'Set Up Your Building',
+          'setup.title'.tr(),
           style: theme.textTheme.headlineSmall,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
         Text(
-          'Enter your building\'s name and address. Once created, you\'ll be taken straight to your admin dashboard.',
+          'setup.subtitle'.tr(),
           style: theme.textTheme.bodyMedium
               ?.copyWith(color: colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
@@ -175,19 +193,20 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
               TextFormField(
                 controller: _buildingNameController,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Building Name',
-                  hintText: 'e.g. Tower Residences',
-                  prefixIcon: Icon(Icons.business_rounded),
+                decoration: InputDecoration(
+                  labelText: 'setup.building_name_label'.tr(),
+                  hintText: 'setup.building_name_hint'.tr(),
+                  prefixIcon: const Icon(Icons.business_rounded),
                 ),
-                validator: (v) => _validateRequired(v, 'Building name'),
+                validator: (v) =>
+                    _validateRequired(v, 'setup.building_name_required'.tr()),
               ),
               const SizedBox(height: 16),
 
               // Address — autocomplete
               AddressAutocompleteField(
-                labelText: 'Building Address',
-                hintText: 'e.g. 12 Herzl St, Tel Aviv',
+                labelText: 'setup.building_address_label'.tr(),
+                hintText: 'setup.building_address_hint'.tr(),
                 initialValue: _address.isEmpty ? null : _address,
                 validator: _validateAddress,
                 onAddressSelected: _onAddressSelected,
@@ -214,7 +233,10 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
                         size: 14, color: colorScheme.primary),
                     const SizedBox(width: 6),
                     Text(
-                      'Location confirmed (${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)})',
+                      tr('setup.location_confirmed', namedArgs: {
+                        'lat': _latitude!.toStringAsFixed(4),
+                        'lng': _longitude!.toStringAsFixed(4),
+                      }),
                       style: theme.textTheme.labelSmall?.copyWith(
                           color: colorScheme.primary),
                     ),
@@ -260,7 +282,7 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Create Building'),
+                    : Text('setup.create_button'.tr()),
               ),
             ],
           ),
@@ -277,13 +299,13 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
             size: 72, color: colorScheme.primary),
         const SizedBox(height: 24),
         Text(
-          'Building Setup Complete!',
+          'setup.success_title'.tr(),
           style: theme.textTheme.headlineSmall,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 12),
         Text(
-          'Your building is ready. You can now start adding apartments and managing residents.',
+          'setup.success_message'.tr(),
           style: theme.textTheme.bodyMedium
               ?.copyWith(color: colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
@@ -291,7 +313,7 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
         const SizedBox(height: 36),
         FilledButton(
           onPressed: widget.onCreated,
-          child: const Text('Go to Dashboard'),
+          child: Text('setup.go_to_dashboard'.tr()),
         ),
       ],
     );

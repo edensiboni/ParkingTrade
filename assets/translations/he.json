@@ -1,0 +1,148 @@
+{
+  "app_title": "ParkingTrade",
+
+  "auth": {
+    "welcome": "ברוכים הבאים ל-ParkingTrade",
+    "tagline": "החליפו חניות עם השכנים שלכם.",
+    "continue_google": "המשך עם Google",
+    "or": "או",
+    "phone_label": "מספר טלפון",
+    "phone_hint": "05X-XXX-XXXX",
+    "send_code": "שלח קוד",
+    "enter_code_title": "הזן את הקוד בן 6 הספרות",
+    "code_sent_to": "שלחנו אותו אל {phone}",
+    "verify_continue": "אמת והמשך",
+    "different_phone": "השתמש במספר טלפון אחר",
+    "privacy_note": "בהמשך, אתה מסכים לשיתוף מספר הטלפון שלך עם קהילת הבניין שלך.",
+    "phone_required": "אנא הזן את מספר הטלפון שלך",
+    "phone_invalid": "הזן מספר טלפון תקין, לדוגמה 050-123-4567",
+    "otp_required": "אנא הזן את הקוד",
+    "send_failed": "שליחת קוד ל-{phone} נכשלה. אנא בדוק את המספר שלך."
+  },
+
+  "setup": {
+    "title": "הגדרת הבניין שלך",
+    "subtitle": "הזן את שם הבניין וכתובתו. לאחר היצירה, תועבר ישירות ללוח הבקרה שלך.",
+    "building_name_label": "שם הבניין",
+    "building_name_hint": "לדוגמה: מגדל המגורים",
+    "building_address_label": "כתובת הבניין",
+    "building_address_hint": "לדוגמה: רחוב הרצל 12, תל אביב",
+    "location_confirmed": "מיקום אושר ({lat}, {lng})",
+    "create_button": "צור בניין",
+    "building_name_required": "שם הבניין הוא שדה חובה",
+    "address_required": "כתובת הבניין היא שדה חובה",
+    "not_signed_in": "אינך מחובר. אנא התחבר תחילה.",
+    "success_title": "הגדרת הבניין הושלמה!",
+    "success_message": "הבניין שלך מוכן. כעת תוכל להתחיל להוסיף דירות ולנהל דיירים.",
+    "go_to_dashboard": "עבור ללוח הבקרה"
+  },
+
+  "admin": {
+    "title": "ניהול הבניין",
+    "sign_out": "התנתק",
+    "tab_pending": "ממתינים",
+    "tab_pending_count": "ממתינים ({count})",
+    "tab_members": "דיירים ({count})",
+    "tab_apartments": "ניהול דירות",
+    "tab_bulk_import": "ייבוא מרוכז",
+    "tab_settings": "הגדרות הבניין",
+
+    "pending": {
+      "empty_title": "אין בקשות ממתינות",
+      "empty_message": "אין בקשות חברות שמחכות לך כרגע.",
+      "requested_on": "נשלח ב-{date}",
+      "unnamed": "דייר ללא שם",
+      "pending_chip": "ממתין",
+      "decline": "דחה",
+      "approve": "אשר"
+    },
+
+    "members": {
+      "empty_title": "אין דיירים עדיין",
+      "empty_message": "שתף את קוד ההזמנה שלך כדי לצרף שכנים.",
+      "status_approved": "מאושר",
+      "status_pending": "ממתין",
+      "status_rejected": "נדחה",
+      "admin_chip": "מנהל",
+      "revoke_tooltip": "בטל גישה",
+      "unnamed": "דייר ללא שם"
+    },
+
+    "dialog": {
+      "approve_title": "לאשר דייר?",
+      "reject_title": "לדחות דייר?",
+      "revoke_title": "לבטל גישה?",
+      "approve_body": "לתת ל-{name} גישה מלאה לבניין?",
+      "reject_body": "לדחות את {name}? הם יוכלו לפנות אליך לניסיון חוזר.",
+      "revoke_body": "לבטל גישה ל-{name}? ההזמנות שלהם ייחסמו.",
+      "cancel": "ביטול",
+      "confirm_approve": "אשר",
+      "confirm_reject": "דחה",
+      "confirm_revoke": "בטל גישה",
+      "approved_success": "אושר",
+      "rejected_success": "נדחה",
+      "revoked_success": "בוטל"
+    },
+
+    "apartments": {
+      "add_title": "הוסף דירה",
+      "unit_label": "מספר יחידה",
+      "unit_hint": "לדוגמה: 4B",
+      "phone_label": "טלפון דייר",
+      "phone_hint": "05X-XXX-XXXX",
+      "add_button": "הוסף",
+      "adding": "מוסיף…",
+      "section_title": "דירות מורשות",
+      "empty_title": "אין דירות עדיין",
+      "empty_message": "הוסף מספר יחידה וטלפון דייר למעלה כדי לאשר גישה.",
+      "unit_display": "יחידה {unit}",
+      "remove_tooltip": "הסר הרשאה",
+      "phone_required": "מספר הטלפון הוא שדה חובה",
+      "phone_invalid": "הזן מספר טלפון תקין, לדוגמה 050-123-4567",
+      "unit_required": "שדה חובה",
+      "added_success": "הדירה נוספה בהצלחה.",
+      "removed_success": "ההרשאה הוסרה.",
+      "remove_dialog_title": "להסיר הרשאה?",
+      "remove_dialog_body": "להסיר יחידה \"{unit}\"? הדייר יאבד גישה בכניסה הבאה שלו.",
+      "remove_button": "הסר"
+    },
+
+    "bulk_import": {
+      "title": "ייבוא מרוכז של דירות",
+      "description": "הדבק מערך JSON של דירות כדי ליצור אותן יחד עם הדיירים וחניות החנייה שלהם בפעולה אחת.",
+      "json_label": "JSON Payload",
+      "run_button": "הפעל ייבוא",
+      "importing": "מייבא…",
+      "format_title": "פורמט צפוי",
+      "paste_required": "אנא הדבק מערך JSON לפני הייבוא.",
+      "invalid_json": "JSON לא תקין: {error}",
+      "success": "יובאו בהצלחה {count} דירות.",
+      "partial_error": "יובאו {count} דירות. {errors} שגיאות — בדוק לוגים."
+    },
+
+    "settings": {
+      "not_found_title": "הבניין לא נמצא",
+      "not_found_message": "לא ניתן לטעון את פרטי הבניין שלך.",
+      "retry": "נסה שוב",
+      "details_section": "פרטים",
+      "invite_code": "קוד הזמנה",
+      "total_spots": "סך חניות",
+      "spots_not_set": "לא הוגדר",
+      "approval_required": "נדרש אישור",
+      "yes": "כן",
+      "no": "לא",
+      "coordinates": "קואורדינטות",
+      "edit_button": "ערוך",
+      "edit_dialog_title": "עריכת הגדרות הבניין",
+      "building_name_label": "שם הבניין",
+      "building_name_required": "שם הבניין הוא שדה חובה",
+      "spots_label": "סך חניות (אופציונלי)",
+      "spots_invalid": "הזן מספר שלם חיובי",
+      "save": "שמור",
+      "cancel": "ביטול",
+      "saved_success": "הגדרות הבניין נשמרו."
+    }
+  },
+
+  "language_toggle": "English"
+}

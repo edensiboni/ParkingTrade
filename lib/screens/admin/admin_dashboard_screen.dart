@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/admin_service.dart';
@@ -63,29 +64,43 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   }
 
   Future<void> _handleAction(Profile member, String action) async {
-    final label = switch (action) {
-      'approve' => 'Approve',
-      'reject' => 'Reject',
-      'revoke' => 'Revoke',
-      _ => action,
-    };
     final isDestructive = action != 'approve';
+    final name = member.displayName ?? tr('admin.members.unnamed');
+
+    String dialogTitle;
+    String dialogBody;
+    String confirmLabel;
+    String successMsg;
+
+    switch (action) {
+      case 'approve':
+        dialogTitle = tr('admin.dialog.approve_title');
+        dialogBody = tr('admin.dialog.approve_body', namedArgs: {'name': name});
+        confirmLabel = tr('admin.dialog.confirm_approve');
+        successMsg = tr('admin.dialog.approved_success');
+        break;
+      case 'reject':
+        dialogTitle = tr('admin.dialog.reject_title');
+        dialogBody = tr('admin.dialog.reject_body', namedArgs: {'name': name});
+        confirmLabel = tr('admin.dialog.confirm_reject');
+        successMsg = tr('admin.dialog.rejected_success');
+        break;
+      default: // revoke
+        dialogTitle = tr('admin.dialog.revoke_title');
+        dialogBody = tr('admin.dialog.revoke_body', namedArgs: {'name': name});
+        confirmLabel = tr('admin.dialog.confirm_revoke');
+        successMsg = tr('admin.dialog.revoked_success');
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('$label member?'),
-        content: Text(
-          action == 'approve'
-              ? 'Give ${member.displayName ?? "this member"} full access to the building?'
-              : action == 'reject'
-                  ? 'Deny ${member.displayName ?? "this member"} access? They can contact you to retry.'
-                  : 'Revoke access for ${member.displayName ?? "this member"}? Their bookings will be blocked.',
-        ),
+        title: Text(dialogTitle),
+        content: Text(dialogBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text('admin.dialog.cancel'.tr()),
           ),
           FilledButton.tonal(
             onPressed: () => Navigator.of(context).pop(true),
@@ -94,7 +109,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     foregroundColor: Theme.of(context).colorScheme.error,
                   )
                 : null,
-            child: Text(label),
+            child: Text(confirmLabel),
           ),
         ],
       ),
@@ -108,7 +123,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         action: action,
       );
       if (!mounted) return;
-      AppSnack.success(context, '${label}d');
+      AppSnack.success(context, successMsg);
       _loadData();
     } catch (e) {
       if (!mounted) return;
@@ -121,10 +136,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     if (_isLoading) return const SkeletonList(count: 3);
 
     if (_pendingMembers.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.inbox_rounded,
-        title: 'Inbox zero',
-        message: 'No membership requests waiting on you right now.',
+        title: 'admin.pending.empty_title'.tr(),
+        message: 'admin.pending.empty_message'.tr(),
       );
     }
 
@@ -150,10 +165,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     if (_isLoading) return const SkeletonList(count: 4);
 
     if (_allMembers.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.people_outline_rounded,
-        title: 'No members yet',
-        message: 'Share your invite code to get neighbors onboard.',
+        title: 'admin.members.empty_title'.tr(),
+        message: 'admin.members.empty_message'.tr(),
       );
     }
 
@@ -180,10 +195,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Building Admin'),
+        title: Text('admin.title'.tr()),
         actions: [
           IconButton(
-            tooltip: 'Sign out',
+            tooltip: 'language_toggle'.tr(),
+            icon: const Icon(Icons.translate_rounded),
+            onPressed: () {
+              final current = context.locale;
+              context.setLocale(
+                current.languageCode == 'he'
+                    ? const Locale('en')
+                    : const Locale('he'),
+              );
+            },
+          ),
+          IconButton(
+            tooltip: 'admin.sign_out'.tr(),
             icon: const Icon(Icons.logout_rounded),
             onPressed: () async {
               await AuthService().signOut();
@@ -204,13 +231,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 tabs: [
                   Tab(
                     text: _pendingMembers.isEmpty
-                        ? 'Pending'
-                        : 'Pending (${_pendingMembers.length})',
+                        ? 'admin.tab_pending'.tr()
+                        : tr('admin.tab_pending_count',
+                            namedArgs: {'count': '${_pendingMembers.length}'}),
                   ),
-                  Tab(text: 'Members (${_allMembers.length})'),
-                  const Tab(text: 'Manage Apartments'),
-                  const Tab(text: 'Bulk Import'),
-                  const Tab(text: 'Building Settings'),
+                  Tab(
+                    text: tr('admin.tab_members',
+                        namedArgs: {'count': '${_allMembers.length}'}),
+                  ),
+                  Tab(text: 'admin.tab_apartments'.tr()),
+                  Tab(text: 'admin.tab_bulk_import'.tr()),
+                  Tab(text: 'admin.tab_settings'.tr()),
                 ],
               ),
             ),
@@ -266,12 +297,13 @@ class _PendingMemberCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    member.displayName ?? 'Unnamed resident',
+                    member.displayName ?? 'admin.pending.unnamed'.tr(),
                     style: theme.textTheme.titleMedium,
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    'Requested ${dateFmt.format(member.createdAt.toLocal())}',
+                    tr('admin.pending.requested_on',
+                        namedArgs: {'date': dateFmt.format(member.createdAt.toLocal())}),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -280,8 +312,8 @@ class _PendingMemberCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            const StatusChip(
-              label: 'Pending',
+            StatusChip(
+              label: 'admin.pending.pending_chip'.tr(),
               tone: StatusTone.warning,
               icon: Icons.hourglass_top_rounded,
             ),
@@ -289,7 +321,8 @@ class _PendingMemberCard extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: onReject,
               icon: Icon(Icons.close_rounded, color: scheme.error, size: 18),
-              label: Text('Decline', style: TextStyle(color: scheme.error)),
+              label: Text('admin.pending.decline'.tr(),
+                  style: TextStyle(color: scheme.error)),
               style: OutlinedButton.styleFrom(
                 side: BorderSide(color: scheme.error),
                 minimumSize: const Size(0, 40),
@@ -301,7 +334,7 @@ class _PendingMemberCard extends StatelessWidget {
             FilledButton.icon(
               onPressed: onApprove,
               icon: const Icon(Icons.check_rounded, size: 18),
-              label: const Text('Approve'),
+              label: Text('admin.pending.approve'.tr()),
               style: FilledButton.styleFrom(
                 minimumSize: const Size(0, 40),
                 padding:
@@ -338,11 +371,11 @@ class _MemberCard extends StatelessWidget {
   String _statusLabel(ProfileStatus s) {
     switch (s) {
       case ProfileStatus.approved:
-        return 'Approved';
+        return 'admin.members.status_approved'.tr();
       case ProfileStatus.pending:
-        return 'Pending';
+        return 'admin.members.status_pending'.tr();
       case ProfileStatus.rejected:
-        return 'Rejected';
+        return 'admin.members.status_rejected'.tr();
     }
   }
 
@@ -366,15 +399,15 @@ class _MemberCard extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          member.displayName ?? 'Unnamed resident',
+                          member.displayName ?? 'admin.members.unnamed'.tr(),
                           style: theme.textTheme.titleMedium,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (member.isAdmin) ...[
                         const SizedBox(width: 8),
-                        const StatusChip(
-                          label: 'Admin',
+                        StatusChip(
+                          label: 'admin.members.admin_chip'.tr(),
                           tone: StatusTone.info,
                           icon: Icons.shield_outlined,
                         ),
@@ -391,7 +424,7 @@ class _MemberCard extends StatelessWidget {
             ),
             if (onRevoke != null)
               IconButton(
-                tooltip: 'Revoke access',
+                tooltip: 'admin.members.revoke_tooltip'.tr(),
                 icon: Icon(Icons.person_remove_outlined, color: scheme.error),
                 onPressed: onRevoke,
               ),
@@ -463,7 +496,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
         phone: phone,
       );
       if (!mounted) return;
-      AppSnack.success(context, 'Apartment added successfully.');
+      AppSnack.success(context, 'admin.apartments.added_success'.tr());
       _unitController.clear();
       _phoneController.clear();
       _loadApartments();
@@ -479,21 +512,21 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove authorization?'),
+        title: Text('admin.apartments.remove_dialog_title'.tr()),
         content: Text(
-          'Remove unit "$unit"? The resident will lose access on their next login.',
+          tr('admin.apartments.remove_dialog_body', namedArgs: {'unit': unit}),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text('admin.dialog.cancel'.tr()),
           ),
           FilledButton.tonal(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('Remove'),
+            child: Text('admin.apartments.remove_button'.tr()),
           ),
         ],
       ),
@@ -504,7 +537,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
     try {
       await widget.adminService.deleteAuthorizedApartment(id);
       if (!mounted) return;
-      AppSnack.success(context, 'Authorization removed.');
+      AppSnack.success(context, 'admin.apartments.removed_success'.tr());
       _loadApartments();
     } catch (e) {
       if (!mounted) return;
@@ -513,10 +546,12 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
   }
 
   String? _validatePhone(String? value) {
-    if (value == null || value.trim().isEmpty) return 'Phone number is required';
+    if (value == null || value.trim().isEmpty) {
+      return 'admin.apartments.phone_required'.tr();
+    }
     final normalised = AuthService.normalisePhone(value);
     if (!RegExp(r'^\+\d{7,15}$').hasMatch(normalised)) {
-      return 'Enter a valid phone number, e.g. 050-123-4567';
+      return 'admin.apartments.phone_invalid'.tr();
     }
     return null;
   }
@@ -547,7 +582,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
                               size: 20, color: scheme.primary),
                           const SizedBox(width: 8),
                           Text(
-                            'Add Apartment',
+                            'admin.apartments.add_title'.tr(),
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w700,
                               color: scheme.onSurface,
@@ -565,14 +600,14 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
                             child: TextFormField(
                               controller: _unitController,
                               textInputAction: TextInputAction.next,
-                              decoration: const InputDecoration(
-                                labelText: 'Unit No.',
-                                hintText: 'e.g. 4B',
-                                prefixIcon: Icon(Icons.door_front_door_outlined),
+                              decoration: InputDecoration(
+                                labelText: 'admin.apartments.unit_label'.tr(),
+                                hintText: 'admin.apartments.unit_hint'.tr(),
+                                prefixIcon: const Icon(Icons.door_front_door_outlined),
                               ),
                               validator: (v) =>
                                   (v == null || v.trim().isEmpty)
-                                      ? 'Required'
+                                      ? 'admin.apartments.unit_required'.tr()
                                       : null,
                             ),
                           ),
@@ -584,10 +619,10 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
                               keyboardType: TextInputType.phone,
                               textInputAction: TextInputAction.done,
                               onFieldSubmitted: (_) => _addApartment(),
-                              decoration: const InputDecoration(
-                                labelText: 'Resident Phone',
-                                hintText: '05X-XXX-XXXX',
-                                prefixIcon: Icon(Icons.phone_outlined),
+                              decoration: InputDecoration(
+                                labelText: 'admin.apartments.phone_label'.tr(),
+                                hintText: 'admin.apartments.phone_hint'.tr(),
+                                prefixIcon: const Icon(Icons.phone_outlined),
                               ),
                               validator: _validatePhone,
                             ),
@@ -609,7 +644,9 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
                                     )
                                   : const Icon(Icons.add_rounded),
                               label: Text(
-                                  _isSubmitting ? 'Adding…' : 'Add'),
+                                  _isSubmitting
+                                      ? 'admin.apartments.adding'.tr()
+                                      : 'admin.apartments.add_button'.tr()),
                             ),
                           ),
                         ],
@@ -629,7 +666,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
             child: Row(
               children: [
                 Text(
-                  'Authorized Apartments',
+                  'admin.apartments.section_title'.tr(),
                   style: theme.textTheme.titleSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                     letterSpacing: 0.5,
@@ -664,12 +701,11 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
             child: SkeletonList(count: 5),
           )
         else if (_apartments.isEmpty)
-          const SliverFillRemaining(
+          SliverFillRemaining(
             child: EmptyState(
               icon: Icons.door_front_door_outlined,
-              title: 'No apartments yet',
-              message:
-                  'Add a unit number and resident phone above to authorize access.',
+              title: 'admin.apartments.empty_title'.tr(),
+              message: 'admin.apartments.empty_message'.tr(),
             ),
           )
         else
@@ -700,7 +736,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
                       ),
                     ),
                     title: Text(
-                      'Unit $unit',
+                      tr('admin.apartments.unit_display', namedArgs: {'unit': unit}),
                       style: theme.textTheme.titleSmall,
                     ),
                     subtitle: Text(
@@ -710,7 +746,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
                       ),
                     ),
                     trailing: IconButton(
-                      tooltip: 'Remove authorization',
+                      tooltip: 'admin.apartments.remove_tooltip'.tr(),
                       icon: Icon(
                         Icons.delete_outline_rounded,
                         color: scheme.error,
@@ -758,7 +794,7 @@ class _BulkImportTabState extends State<_BulkImportTab> {
   Future<void> _runImport() async {
     final raw = _jsonController.text.trim();
     if (raw.isEmpty) {
-      AppSnack.error(context, 'Please paste a JSON array before importing.');
+      AppSnack.error(context, 'admin.bulk_import.paste_required'.tr());
       return;
     }
 
@@ -768,7 +804,8 @@ class _BulkImportTabState extends State<_BulkImportTab> {
       if (decoded is! List) throw const FormatException('Root must be a JSON array');
       data = decoded.cast<Map<String, dynamic>>();
     } catch (e) {
-      AppSnack.error(context, 'Invalid JSON: ${e.toString()}');
+      AppSnack.error(context,
+          tr('admin.bulk_import.invalid_json', namedArgs: {'error': e.toString()}));
       return;
     }
 
@@ -783,12 +820,13 @@ class _BulkImportTabState extends State<_BulkImportTab> {
       if (errs != null && errs.isNotEmpty) {
         AppSnack.error(
           context,
-          '$imported apartment(s) imported. ${errs.length} error(s) — check logs.',
+          tr('admin.bulk_import.partial_error',
+              namedArgs: {'count': '$imported', 'errors': '${errs.length}'}),
         );
       } else {
         AppSnack.success(
           context,
-          'Successfully imported $imported apartment(s).',
+          tr('admin.bulk_import.success', namedArgs: {'count': '$imported'}),
         );
         _jsonController.clear();
       }
@@ -832,7 +870,7 @@ class _BulkImportTabState extends State<_BulkImportTab> {
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        'Bulk Import Apartments',
+                        'admin.bulk_import.title'.tr(),
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -841,7 +879,7 @@ class _BulkImportTabState extends State<_BulkImportTab> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Paste a JSON array of apartments to create them along with their residents and parking spots in one go.',
+                    'admin.bulk_import.description'.tr(),
                     style: theme.textTheme.bodyMedium
                         ?.copyWith(color: scheme.onSurfaceVariant),
                   ),
@@ -852,7 +890,7 @@ class _BulkImportTabState extends State<_BulkImportTab> {
           const SizedBox(height: 20),
 
           // ── JSON input ───────────────────────────────────────────────────
-          Text('JSON Payload', style: theme.textTheme.labelLarge),
+          Text('admin.bulk_import.json_label'.tr(), style: theme.textTheme.labelLarge),
           const SizedBox(height: 8),
           TextField(
             controller: _jsonController,
@@ -888,7 +926,9 @@ class _BulkImportTabState extends State<_BulkImportTab> {
                       ),
                     )
                   : const Icon(Icons.cloud_upload_rounded),
-              label: Text(_isImporting ? 'Importing…' : 'Run Import'),
+              label: Text(_isImporting
+                  ? 'admin.bulk_import.importing'.tr()
+                  : 'admin.bulk_import.run_button'.tr()),
             ),
           ),
           const SizedBox(height: 28),
@@ -899,7 +939,7 @@ class _BulkImportTabState extends State<_BulkImportTab> {
               Icon(Icons.info_outline_rounded,
                   size: 16, color: scheme.onSurfaceVariant),
               const SizedBox(width: 6),
-              Text('Expected format', style: theme.textTheme.labelLarge),
+              Text('admin.bulk_import.format_title'.tr(), style: theme.textTheme.labelLarge),
             ],
           ),
           const SizedBox(height: 8),
@@ -971,7 +1011,7 @@ class _BuildingSettingsTabState extends State<_BuildingSettingsTab> {
 
     if (updated != null && mounted) {
       setState(() => _building = updated);
-      AppSnack.success(context, 'Building settings saved.');
+      AppSnack.success(context, 'admin.settings.saved_success'.tr());
     }
   }
 
@@ -987,12 +1027,12 @@ class _BuildingSettingsTabState extends State<_BuildingSettingsTab> {
     if (_building == null) {
       return EmptyState(
         icon: Icons.apartment_rounded,
-        title: 'Building not found',
-        message: 'Could not load your building details.',
+        title: 'admin.settings.not_found_title'.tr(),
+        message: 'admin.settings.not_found_message'.tr(),
         action: TextButton.icon(
           onPressed: _loadBuilding,
           icon: const Icon(Icons.refresh_rounded),
-          label: const Text('Retry'),
+          label: Text('admin.settings.retry'.tr()),
         ),
       );
     }
@@ -1048,7 +1088,7 @@ class _BuildingSettingsTabState extends State<_BuildingSettingsTab> {
                   FilledButton.icon(
                     onPressed: _openEditDialog,
                     icon: const Icon(Icons.edit_rounded, size: 18),
-                    label: const Text('Edit'),
+                    label: Text('admin.settings.edit_button'.tr()),
                   ),
                 ],
               ),
@@ -1063,7 +1103,7 @@ class _BuildingSettingsTabState extends State<_BuildingSettingsTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Details',
+                  Text('admin.settings.details_section'.tr(),
                       style: theme.textTheme.titleSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                         letterSpacing: 0.4,
@@ -1071,29 +1111,31 @@ class _BuildingSettingsTabState extends State<_BuildingSettingsTab> {
                   const SizedBox(height: 16),
                   _DetailRow(
                     icon: Icons.vpn_key_outlined,
-                    label: 'Invite Code',
+                    label: 'admin.settings.invite_code'.tr(),
                     value: b.inviteCode,
                     monospace: true,
                   ),
                   const Divider(height: 24),
                   _DetailRow(
                     icon: Icons.local_parking_rounded,
-                    label: 'Total Parking Spots',
+                    label: 'admin.settings.total_spots'.tr(),
                     value: b.totalParkingSpots != null
                         ? '${b.totalParkingSpots}'
-                        : 'Not set',
+                        : 'admin.settings.spots_not_set'.tr(),
                   ),
                   const Divider(height: 24),
                   _DetailRow(
                     icon: Icons.approval_rounded,
-                    label: 'Approval Required',
-                    value: b.approvalRequired ? 'Yes' : 'No',
+                    label: 'admin.settings.approval_required'.tr(),
+                    value: b.approvalRequired
+                        ? 'admin.settings.yes'.tr()
+                        : 'admin.settings.no'.tr(),
                   ),
                   if (b.latitude != null && b.longitude != null) ...[
                     const Divider(height: 24),
                     _DetailRow(
                       icon: Icons.location_on_outlined,
-                      label: 'Coordinates',
+                      label: 'admin.settings.coordinates'.tr(),
                       value:
                           '${b.latitude!.toStringAsFixed(5)}, ${b.longitude!.toStringAsFixed(5)}',
                     ),
@@ -1188,7 +1230,7 @@ class _EditBuildingDialogState extends State<_EditBuildingDialog> {
     final theme = Theme.of(context);
 
     return AlertDialog(
-      title: const Text('Edit Building Settings'),
+      title: Text('admin.settings.edit_dialog_title'.tr()),
       content: SizedBox(
         width: 480,
         child: Form(
@@ -1202,20 +1244,20 @@ class _EditBuildingDialogState extends State<_EditBuildingDialog> {
                 TextFormField(
                   controller: _nameController,
                   textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Building Name',
-                    prefixIcon: Icon(Icons.business_rounded),
+                  decoration: InputDecoration(
+                    labelText: 'admin.settings.building_name_label'.tr(),
+                    prefixIcon: const Icon(Icons.business_rounded),
                   ),
                   validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Building name is required'
+                      ? 'admin.settings.building_name_required'.tr()
                       : null,
                 ),
                 const SizedBox(height: 16),
 
                 // Address autocomplete
                 AddressAutocompleteField(
-                  labelText: 'Building Address',
-                  hintText: 'e.g. 12 Herzl St, Tel Aviv',
+                  labelText: 'setup.building_address_label'.tr(),
+                  hintText: 'setup.building_address_hint'.tr(),
                   initialValue: _address.isEmpty ? null : _address,
                   onAddressSelected: _onAddressSelected,
                   onChanged: (value) {
@@ -1238,7 +1280,10 @@ class _EditBuildingDialogState extends State<_EditBuildingDialog> {
                           color: theme.colorScheme.primary),
                       const SizedBox(width: 6),
                       Text(
-                        'Location confirmed (${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)})',
+                        tr('setup.location_confirmed', namedArgs: {
+                          'lat': _latitude!.toStringAsFixed(4),
+                          'lng': _longitude!.toStringAsFixed(4),
+                        }),
                         style: theme.textTheme.labelSmall?.copyWith(
                             color: theme.colorScheme.primary),
                       ),
@@ -1252,15 +1297,15 @@ class _EditBuildingDialogState extends State<_EditBuildingDialog> {
                   controller: _spotsController,
                   keyboardType: TextInputType.number,
                   textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(
-                    labelText: 'Total Parking Spots (optional)',
-                    prefixIcon: Icon(Icons.local_parking_rounded),
+                  decoration: InputDecoration(
+                    labelText: 'admin.settings.spots_label'.tr(),
+                    prefixIcon: const Icon(Icons.local_parking_rounded),
                   ),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return null;
                     final n = int.tryParse(v.trim());
                     if (n == null || n < 1) {
-                      return 'Enter a positive whole number';
+                      return 'admin.settings.spots_invalid'.tr();
                     }
                     return null;
                   },
@@ -1273,7 +1318,7 @@ class _EditBuildingDialogState extends State<_EditBuildingDialog> {
       actions: [
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text('admin.settings.cancel'.tr()),
         ),
         FilledButton(
           onPressed: _isSaving ? null : _save,
@@ -1283,7 +1328,7 @@ class _EditBuildingDialogState extends State<_EditBuildingDialog> {
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Save'),
+              : Text('admin.settings.save'.tr()),
         ),
       ],
     );

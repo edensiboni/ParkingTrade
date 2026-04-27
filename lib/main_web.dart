@@ -5,6 +5,7 @@
 import 'dart:async';
 import 'dart:ui' show PlatformDispatcher;
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -41,6 +42,7 @@ void main() async {
 
   try {
     WidgetsFlutterBinding.ensureInitialized();
+    await EasyLocalization.ensureInitialized();
     debugPrint('### MAIN STARTED (web) ###');
 
     if (!SupabaseConfig.isConfigured) {
@@ -110,7 +112,15 @@ void main() async {
       }
     }
 
-    runApp(const ParkingTradeApp());
+    runApp(
+      EasyLocalization(
+        supportedLocales: const [Locale('he'), Locale('en')],
+        path: 'assets/translations',
+        fallbackLocale: const Locale('he'),
+        startLocale: const Locale('he'),
+        child: const ParkingTradeApp(),
+      ),
+    );
   } catch (e, stackTrace) {
     debugPrint('Fatal error in main: $e');
     debugPrint('Stack: $stackTrace');
@@ -127,6 +137,9 @@ class ParkingTradeApp extends StatelessWidget {
       title: 'Parking Trade',
       theme: AppTheme.light(),
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: context.localizationDelegates,
+      supportedLocales: context.supportedLocales,
+      locale: context.locale,
       home: const AuthWrapper(),
       routes: {
         '/auth': (context) => const PhoneAuthScreen(),

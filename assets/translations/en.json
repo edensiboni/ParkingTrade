@@ -1,0 +1,148 @@
+{
+  "app_title": "Parking Trade",
+
+  "auth": {
+    "welcome": "Welcome to ParkingTrade",
+    "tagline": "Swap spots with your neighbors.",
+    "continue_google": "Continue with Google",
+    "or": "or",
+    "phone_label": "Phone number",
+    "phone_hint": "05X-XXX-XXXX or +972 5X XXX XXXX",
+    "send_code": "Send code",
+    "enter_code_title": "Enter the 6-digit code",
+    "code_sent_to": "We sent it to {phone}",
+    "verify_continue": "Verify & continue",
+    "different_phone": "Use a different phone number",
+    "privacy_note": "By continuing, you agree to share your phone with your building community.",
+    "phone_required": "Please enter your phone number",
+    "phone_invalid": "Enter a valid phone number, e.g. 050-123-4567",
+    "otp_required": "Please enter the code",
+    "send_failed": "Failed to send code to {phone}. Please check your number."
+  },
+
+  "setup": {
+    "title": "Set Up Your Building",
+    "subtitle": "Enter your building's name and address. Once created, you'll be taken straight to your admin dashboard.",
+    "building_name_label": "Building Name",
+    "building_name_hint": "e.g. Tower Residences",
+    "building_address_label": "Building Address",
+    "building_address_hint": "e.g. 12 Herzl St, Tel Aviv",
+    "location_confirmed": "Location confirmed ({lat}, {lng})",
+    "create_button": "Create Building",
+    "building_name_required": "Building name is required",
+    "address_required": "Building address is required",
+    "not_signed_in": "You are not signed in. Please sign in first.",
+    "success_title": "Building Setup Complete!",
+    "success_message": "Your building is ready. You can now start adding apartments and managing residents.",
+    "go_to_dashboard": "Go to Dashboard"
+  },
+
+  "admin": {
+    "title": "Building Admin",
+    "sign_out": "Sign out",
+    "tab_pending": "Pending",
+    "tab_pending_count": "Pending ({count})",
+    "tab_members": "Members ({count})",
+    "tab_apartments": "Manage Apartments",
+    "tab_bulk_import": "Bulk Import",
+    "tab_settings": "Building Settings",
+
+    "pending": {
+      "empty_title": "Inbox zero",
+      "empty_message": "No membership requests waiting on you right now.",
+      "requested_on": "Requested {date}",
+      "unnamed": "Unnamed resident",
+      "pending_chip": "Pending",
+      "decline": "Decline",
+      "approve": "Approve"
+    },
+
+    "members": {
+      "empty_title": "No members yet",
+      "empty_message": "Share your invite code to get neighbors onboard.",
+      "status_approved": "Approved",
+      "status_pending": "Pending",
+      "status_rejected": "Rejected",
+      "admin_chip": "Admin",
+      "revoke_tooltip": "Revoke access",
+      "unnamed": "Unnamed resident"
+    },
+
+    "dialog": {
+      "approve_title": "Approve member?",
+      "reject_title": "Reject member?",
+      "revoke_title": "Revoke member?",
+      "approve_body": "Give {name} full access to the building?",
+      "reject_body": "Deny {name} access? They can contact you to retry.",
+      "revoke_body": "Revoke access for {name}? Their bookings will be blocked.",
+      "cancel": "Cancel",
+      "confirm_approve": "Approve",
+      "confirm_reject": "Reject",
+      "confirm_revoke": "Revoke",
+      "approved_success": "Approved",
+      "rejected_success": "Rejected",
+      "revoked_success": "Revoked"
+    },
+
+    "apartments": {
+      "add_title": "Add Apartment",
+      "unit_label": "Unit No.",
+      "unit_hint": "e.g. 4B",
+      "phone_label": "Resident Phone",
+      "phone_hint": "05X-XXX-XXXX",
+      "add_button": "Add",
+      "adding": "Adding…",
+      "section_title": "Authorized Apartments",
+      "empty_title": "No apartments yet",
+      "empty_message": "Add a unit number and resident phone above to authorize access.",
+      "unit_display": "Unit {unit}",
+      "remove_tooltip": "Remove authorization",
+      "phone_required": "Phone number is required",
+      "phone_invalid": "Enter a valid phone number, e.g. 050-123-4567",
+      "unit_required": "Required",
+      "added_success": "Apartment added successfully.",
+      "removed_success": "Authorization removed.",
+      "remove_dialog_title": "Remove authorization?",
+      "remove_dialog_body": "Remove unit \"{unit}\"? The resident will lose access on their next login.",
+      "remove_button": "Remove"
+    },
+
+    "bulk_import": {
+      "title": "Bulk Import Apartments",
+      "description": "Paste a JSON array of apartments to create them along with their residents and parking spots in one go.",
+      "json_label": "JSON Payload",
+      "run_button": "Run Import",
+      "importing": "Importing…",
+      "format_title": "Expected format",
+      "paste_required": "Please paste a JSON array before importing.",
+      "invalid_json": "Invalid JSON: {error}",
+      "success": "Successfully imported {count} apartment(s).",
+      "partial_error": "{count} apartment(s) imported. {errors} error(s) — check logs."
+    },
+
+    "settings": {
+      "not_found_title": "Building not found",
+      "not_found_message": "Could not load your building details.",
+      "retry": "Retry",
+      "details_section": "Details",
+      "invite_code": "Invite Code",
+      "total_spots": "Total Parking Spots",
+      "spots_not_set": "Not set",
+      "approval_required": "Approval Required",
+      "yes": "Yes",
+      "no": "No",
+      "coordinates": "Coordinates",
+      "edit_button": "Edit",
+      "edit_dialog_title": "Edit Building Settings",
+      "building_name_label": "Building Name",
+      "building_name_required": "Building name is required",
+      "spots_label": "Total Parking Spots (optional)",
+      "spots_invalid": "Enter a positive whole number",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saved_success": "Building settings saved."
+    }
+  },
+
+  "language_toggle": "עברית"
+}

@@ -31,6 +31,9 @@ dependencies:
   uuid: ^4.2.1
   http: ^1.1.0
 
+  # Localization
+  easy_localization: ^3.0.7
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -38,4 +41,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/translations/
 

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 
@@ -61,7 +62,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           message.contains('Failed to send');
 
       final snackMessage = is400
-          ? 'Failed to send code to $sanitized. Please check your number.'
+          ? tr('auth.send_failed', namedArgs: {'phone': sanitized})
           : message;
 
       if (mounted) {
@@ -81,7 +82,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   Future<void> _verifyOtp() async {
     if (_otpController.text.trim().isEmpty) {
-      setState(() => _errorMessage = 'Please enter the code');
+      setState(() => _errorMessage = 'auth.otp_required'.tr());
       return;
     }
 
@@ -154,7 +155,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     ],
                     const SizedBox(height: 24),
                     Text(
-                      'By continuing, you agree to share your phone with your building community.',
+                      'auth.privacy_note'.tr(),
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
@@ -178,7 +179,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         OutlinedButton.icon(
           onPressed: _isLoading ? null : _signInWithGoogle,
           icon: const Icon(Icons.g_mobiledata, size: 28),
-          label: const Text('Continue with Google'),
+          label: Text('auth.continue_google'.tr()),
         ),
         const SizedBox(height: 24),
         Row(
@@ -189,7 +190,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'or',
+                'auth.or'.tr(),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -205,14 +206,14 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           controller: _phoneController,
           keyboardType: TextInputType.phone,
           autofillHints: const [AutofillHints.telephoneNumber],
-          decoration: const InputDecoration(
-            labelText: 'Phone number',
-            hintText: '05X-XXX-XXXX or +972 5X XXX XXXX',
-            prefixIcon: Icon(Icons.phone_outlined),
+          decoration: InputDecoration(
+            labelText: 'auth.phone_label'.tr(),
+            hintText: 'auth.phone_hint'.tr(),
+            prefixIcon: const Icon(Icons.phone_outlined),
           ),
           validator: (value) {
             if (value == null || value.trim().isEmpty) {
-              return 'Please enter your phone number';
+              return 'auth.phone_required'.tr();
             }
             // Normalise first so we validate what will actually be sent.
             final normalised = AuthService.normalisePhone(value);
@@ -220,7 +221,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             // only digits (7–15 digits after the '+').
             final e164Regex = RegExp(r'^\+\d{7,15}$');
             if (!e164Regex.hasMatch(normalised)) {
-              return 'Enter a valid phone number, e.g. 050-123-4567';
+              return 'auth.phone_invalid'.tr();
             }
             return null;
           },
@@ -230,7 +231,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           onPressed: _isLoading ? null : _sendOtp,
           child: _isLoading
               ? const _ButtonSpinner()
-              : const Text('Send code'),
+              : Text('auth.send_code'.tr()),
         ),
       ],
     );
@@ -241,13 +242,13 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Enter the 6-digit code',
+          'auth.enter_code_title'.tr(),
           textAlign: TextAlign.center,
           style: theme.textTheme.titleMedium,
         ),
         const SizedBox(height: 4),
         Text(
-          'We sent it to $_normalisedPhone',
+          tr('auth.code_sent_to', namedArgs: {'phone': _normalisedPhone}),
           textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
@@ -269,7 +270,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           onPressed: _isLoading ? null : _verifyOtp,
           child: _isLoading
               ? const _ButtonSpinner()
-              : const Text('Verify & continue'),
+              : Text('auth.verify_continue'.tr()),
         ),
         const SizedBox(height: 8),
         TextButton(
@@ -282,7 +283,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     _errorMessage = null;
                   });
                 },
-          child: const Text('Use a different phone number'),
+          child: Text('auth.different_phone'.tr()),
         ),
       ],
     );
@@ -309,13 +310,13 @@ class _Hero extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         Text(
-          'Welcome to ParkingTrade',
+          'auth.welcome'.tr(),
           textAlign: TextAlign.center,
           style: theme.textTheme.headlineSmall,
         ),
         const SizedBox(height: 8),
         Text(
-          'Swap spots with your neighbors.',
+          'auth.tagline'.tr(),
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium?.copyWith(
             color: scheme.onSurfaceVariant,
