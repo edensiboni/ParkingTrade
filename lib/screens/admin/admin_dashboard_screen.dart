@@ -9,6 +9,8 @@ import '../../services/auth_service.dart';
 import '../../models/building.dart';
 import '../../models/profile.dart';
 import '../../widgets/address_autocomplete_field.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/gradient_app_bar.dart';
 import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
@@ -146,9 +148,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        padding: const EdgeInsets.fromLTRB(32, 28, 32, 32),
         itemCount: _pendingMembers.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        separatorBuilder: (_, __) => const SizedBox(height: 14),
         itemBuilder: (context, index) {
           final member = _pendingMembers[index];
           return _PendingMemberCard(
@@ -175,9 +177,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        padding: const EdgeInsets.fromLTRB(32, 28, 32, 32),
         itemCount: _allMembers.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final member = _allMembers[index];
           return _MemberCard(
@@ -193,9 +195,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: Text('admin.title'.tr()),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                gradient: AppTheme.brandGradient,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.brandIndigo.withValues(alpha: 0.25),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.local_parking_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text('admin.title'.tr()),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'language_toggle'.tr(),
@@ -216,50 +245,77 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               await AuthService().signOut();
             },
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 16),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1000),
-              child: TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                tabs: [
-                  Tab(
-                    text: _pendingMembers.isEmpty
-                        ? 'admin.tab_pending'.tr()
-                        : tr('admin.tab_pending_count',
-                            namedArgs: {'count': '${_pendingMembers.length}'}),
+          preferredSize: const Size.fromHeight(60),
+          child: Column(
+            children: [
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1100),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12),
+                    child: TabBar(
+                      controller: _tabController,
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
+                      splashBorderRadius:
+                          BorderRadius.circular(AppTheme.radiusSm),
+                      tabs: [
+                        Tab(
+                          text: _pendingMembers.isEmpty
+                              ? 'admin.tab_pending'.tr()
+                              : tr('admin.tab_pending_count',
+                                  namedArgs: {
+                                      'count': '${_pendingMembers.length}'
+                                    }),
+                        ),
+                        Tab(
+                          text: tr('admin.tab_members',
+                              namedArgs: {'count': '${_allMembers.length}'}),
+                        ),
+                        Tab(text: 'admin.tab_apartments'.tr()),
+                        Tab(text: 'admin.tab_bulk_import'.tr()),
+                        Tab(text: 'admin.tab_settings'.tr()),
+                      ],
+                    ),
                   ),
-                  Tab(
-                    text: tr('admin.tab_members',
-                        namedArgs: {'count': '${_allMembers.length}'}),
-                  ),
-                  Tab(text: 'admin.tab_apartments'.tr()),
-                  Tab(text: 'admin.tab_bulk_import'.tr()),
-                  Tab(text: 'admin.tab_settings'.tr()),
-                ],
+                ),
               ),
-            ),
+              const BrandAccentBar(),
+            ],
           ),
         ),
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1000),
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildPendingList(),
-              _buildAllMembersList(),
-              _ManageApartmentsTab(adminService: _adminService),
-              _BulkImportTab(adminService: _adminService),
-              _BuildingSettingsTab(adminService: _adminService),
+      body: Container(
+        // Soft top gradient wash to add depth without distracting from content.
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppTheme.brandIndigo.withValues(alpha: 0.025),
+              scheme.surface,
             ],
+            stops: const [0.0, 0.35],
+          ),
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1100),
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildPendingList(),
+                _buildAllMembersList(),
+                _ManageApartmentsTab(adminService: _adminService),
+                _BulkImportTab(adminService: _adminService),
+                _BuildingSettingsTab(adminService: _adminService),
+              ],
+            ),
           ),
         ),
       ),
@@ -286,7 +342,7 @@ class _PendingMemberCard extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -386,11 +442,11 @@ class _MemberCard extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(18),
         child: Row(
           children: [
             _Avatar(name: member.displayName),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -566,7 +622,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
         // ── Add Apartment Form Card ──────────────────────────────────────────
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+            padding: const EdgeInsets.fromLTRB(32, 32, 32, 0),
             child: Card(
               color: scheme.surfaceContainerLow,
               child: Padding(
@@ -662,7 +718,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
         // ── Section header ───────────────────────────────────────────────────
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+            padding: const EdgeInsets.fromLTRB(32, 32, 32, 12),
             child: Row(
               children: [
                 Text(
@@ -710,7 +766,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
           )
         else
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            padding: const EdgeInsets.fromLTRB(32, 0, 32, 32),
             sliver: SliverList.separated(
               itemCount: _apartments.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -844,7 +900,7 @@ class _BulkImportTabState extends State<_BulkImportTab> {
     final scheme = theme.colorScheme;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1040,7 +1096,7 @@ class _BuildingSettingsTabState extends State<_BuildingSettingsTab> {
     final b = _building!;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1394,23 +1450,29 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final initial = (name != null && name!.trim().isNotEmpty)
         ? name!.trim()[0].toUpperCase()
         : '?';
     return Container(
-      width: 44,
-      height: 44,
+      width: 46,
+      height: 46,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: scheme.primaryContainer.withValues(alpha: 0.5),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFE0E7FF), Color(0xFFEDE9FE)],
+        ),
         shape: BoxShape.circle,
+        border: Border.all(
+          color: AppTheme.brandIndigo.withValues(alpha: 0.12),
+        ),
       ),
       child: Text(
         initial,
-        style: TextStyle(
-          color: scheme.primary,
-          fontWeight: FontWeight.w700,
+        style: const TextStyle(
+          color: AppTheme.brandIndigoDeep,
+          fontWeight: FontWeight.w800,
           fontSize: 16,
         ),
       ),

@@ -2,6 +2,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../theme/app_theme.dart';
+import '../../theme/gradient_app_bar.dart';
 import '../../widgets/address_autocomplete_field.dart';
 
 /// Shown when a prospective building admin navigates to /setup.
@@ -143,18 +145,42 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
               );
             },
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 16),
         ],
+        bottom: const BrandAccentBar(),
       ),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: _success
-                  ? _buildSuccessView(theme, colorScheme)
-                  : _buildFormView(theme, colorScheme),
+      body: Container(
+        // Soft branded ambient background — luxurious, low-contrast.
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppTheme.brandIndigo.withValues(alpha: 0.06),
+              AppTheme.brandViolet.withValues(alpha: 0.02),
+              colorScheme.surface,
+            ],
+            stops: const [0.0, 0.4, 1.0],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 56),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: Card(
+                  // Lift the form into a focused "modal" card on the canvas.
+                  elevation: 0,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(36, 40, 36, 36),
+                    child: _success
+                        ? _buildSuccessView(theme, colorScheme)
+                        : _buildFormView(theme, colorScheme),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -167,14 +193,37 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // ── Header ────────────────────────────────────────────────────────────
-        Icon(Icons.apartment_rounded, size: 56, color: colorScheme.primary),
-        const SizedBox(height: 20),
+        Center(
+          child: Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              gradient: AppTheme.brandGradient,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.brandIndigo.withValues(alpha: 0.32),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.apartment_rounded,
+              size: 36,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        const SizedBox(height: 28),
         Text(
           'setup.title'.tr(),
-          style: theme.textTheme.headlineSmall,
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Text(
           'setup.subtitle'.tr(),
           style: theme.textTheme.bodyMedium
@@ -295,12 +344,38 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(Icons.check_circle_rounded,
-            size: 72, color: colorScheme.primary),
-        const SizedBox(height: 24),
+        Center(
+          child: Container(
+            width: 84,
+            height: 84,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF22C55E), Color(0xFF16A34A)],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF16A34A).withValues(alpha: 0.32),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.check_rounded,
+              size: 44,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        const SizedBox(height: 28),
         Text(
           'setup.success_title'.tr(),
-          style: theme.textTheme.headlineSmall,
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 12),
