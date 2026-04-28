@@ -96,16 +96,15 @@ class AdminService {
 
   /// Returns all authorized_apartments rows for the current admin's building.
   ///
-  /// Each row carries a *list* of authorised resident phones (one apartment
-  /// can have multiple residents — spouses, roommates, etc.). See migration
-  /// 018 for the schema move from `resident_phone TEXT` →
-  /// `resident_phones TEXT[]`.
+  /// Each row carries a *list* of [Resident] objects (name + phone). See
+  /// migration 019 for the schema move from `resident_phones TEXT[]` →
+  /// `residents JSONB`.
   Future<List<AuthorizedApartment>> getAuthorizedApartments() async {
     final buildingId = await _resolveAdminBuildingId();
 
     final response = await _supabase
         .from('authorized_apartments')
-        .select('id, building_id, unit_number, resident_phones, created_at')
+        .select('id, building_id, unit_number, residents, created_at')
         .eq('building_id', buildingId)
         .order('unit_number', ascending: true);
 
@@ -119,29 +118,30 @@ class AdminService {
   ///
   /// **Upsert logic:**
   /// - If no row exists for `(building_id, unit_number)`, a new row is
-  ///   INSERTed with [phones] as the initial `resident_phones` array.
-  /// - If a row already exists for that unit, [phones] are *appended* to
-  ///   the existing `resident_phones` array (duplicates are silently ignored).
-  ///
-  /// [phones] is a list of E.164 phone numbers (already normalised). Pass
-  /// every resident who should be allowed to register against this unit.
+  ///   INSERTed with [residents] as the initial `residents` JSONB array.
+  /// - If a row already exists for that unit, [residents] are *merged* into
+  ///   the existing array. A resident is considered a duplicate if their
+  ///   phone number (normalised) already appears in the stored array — in
+  ///   that case the existing entry is kept unchanged.
   Future<void> addAuthorizedApartment({
     required String unitNumber,
-    required List<String> phones,
+    required List<Resident> residents,
   }) async {
     final buildingId = await _resolveAdminBuildingId();
 
     final cleanedUnit = unitNumber.trim();
-    final cleanedPhones = phones
-        .map((p) => p.trim())
-        .where((p) => p.isNotEmpty)
-        .toSet() // de-duplicate within this call
+
+    // Deduplicate within this call by phone.
+    final seen = <String>{};
+    final cleanedResidents = residents
+        .where((r) => r.phone.trim().isNotEmpty && seen.add(r.phone.trim()))
+        .map((r) => Resident(name: r.name.trim(), phone: r.phone.trim()))
         .toList();
 
     // Check whether a row already exists for this (building, unit) pair.
     final existing = await _supabase
         .from('authorized_apartments')
-        .select('id, resident_phones')
+        .select('id, residents')
         .eq('building_id', buildingId)
         .eq('unit_number', cleanedUnit)
         .maybeSingle();
@@ -151,51 +151,57 @@ class AdminService {
       await _supabase.from('authorized_apartments').insert({
         'building_id': buildingId,
         'unit_number': cleanedUnit,
-        'resident_phones': cleanedPhones,
+        'residents': cleanedResidents.map((r) => r.toJson()).toList(),
       });
     } else {
-      // Row exists — merge the new phones into the existing array,
-      // avoiding duplicates.
+      // Row exists — merge new residents in, skipping any whose phone already
+      // appears in the stored array.
       final id = existing['id'] as String;
-      final raw = existing['resident_phones'];
-      final existingPhones = <String>[];
+      final raw = existing['residents'];
+      final existingResidents = <Resident>[];
       if (raw is List) {
-        for (final p in raw) {
-          if (p is String && p.isNotEmpty) existingPhones.add(p);
+        for (final r in raw) {
+          if (r is Map<String, dynamic>) {
+            final phone = (r['phone'] as String?) ?? '';
+            if (phone.isNotEmpty) existingResidents.add(Resident.fromJson(r));
+          }
         }
       }
 
-      final mergedPhones = {
-        ...existingPhones,
-        ...cleanedPhones,
-      }.toList();
+      final existingPhones = existingResidents.map((r) => r.phone).toSet();
+      final newResidents = cleanedResidents
+          .where((r) => !existingPhones.contains(r.phone))
+          .toList();
+
+      final merged = [...existingResidents, ...newResidents];
 
       await _supabase
           .from('authorized_apartments')
-          .update({'resident_phones': mergedPhones})
+          .update({'residents': merged.map((r) => r.toJson()).toList()})
           .eq('id', id);
     }
   }
 
-  /// Replaces the resident phones array for an existing authorized_apartment row.
+  /// Replaces the residents array for an existing authorized_apartment row.
   ///
-  /// Used by the admin UI when editing an apartment to add/remove phones.
-  Future<void> updateAuthorizedApartmentPhones({
+  /// Used by the admin UI when editing an apartment to add/remove residents.
+  Future<void> updateAuthorizedApartmentResidents({
     required String id,
-    required List<String> phones,
+    required List<Resident> residents,
   }) async {
     // Verify admin status before update (RLS also enforces this server-side).
     await _resolveAdminBuildingId();
 
-    final cleanedPhones = phones
-        .map((p) => p.trim())
-        .where((p) => p.isNotEmpty)
-        .toSet()
+    // Deduplicate by phone before writing.
+    final seen = <String>{};
+    final cleaned = residents
+        .where((r) => r.phone.trim().isNotEmpty && seen.add(r.phone.trim()))
+        .map((r) => Resident(name: r.name.trim(), phone: r.phone.trim()))
         .toList();
 
     await _supabase
         .from('authorized_apartments')
-        .update({'resident_phones': cleanedPhones})
+        .update({'residents': cleaned.map((r) => r.toJson()).toList()})
         .eq('id', id);
   }
 

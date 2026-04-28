@@ -507,12 +507,12 @@ class _ManageApartmentsTab extends StatefulWidget {
 class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
   final _formKey = GlobalKey<FormState>();
   final _unitController = TextEditingController();
+  final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _phoneFocusNode = FocusNode();
 
-  /// Phones currently staged inside the "Add apartment" form (before submission).
-  /// Stored as normalised E.164 strings — what the database will see.
-  final List<String> _stagedPhones = [];
+  /// Residents currently staged inside the "Add apartment" form (before submission).
+  final List<Resident> _stagedResidents = [];
 
   List<AuthorizedApartment> _apartments = [];
   bool _isLoading = true;
@@ -528,6 +528,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
   @override
   void dispose() {
     _unitController.dispose();
+    _nameController.dispose();
     _phoneController.dispose();
     _phoneFocusNode.dispose();
     super.dispose();
@@ -549,46 +550,47 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
     }
   }
 
-  /// Validates the current text in the phone field and, if valid, appends
-  /// it as a chip. Returns true if a chip was added.
-  bool _stagePhoneFromField() {
-    final raw = _phoneController.text.trim();
-    if (raw.isEmpty) return false;
+  /// Validates name + phone fields and, if valid, appends a [Resident] chip.
+  /// Returns true if a resident was staged.
+  bool _stageResidentFromFields() {
+    final rawPhone = _phoneController.text.trim();
+    if (rawPhone.isEmpty) return false;
 
-    final normalised = AuthService.normalisePhone(raw);
+    final normalised = AuthService.normalisePhone(rawPhone);
     if (!RegExp(r'^\+\d{7,15}$').hasMatch(normalised)) {
       AppSnack.error(context, 'admin.apartments.phone_invalid'.tr());
       return false;
     }
-    if (_stagedPhones.contains(normalised)) {
+    if (_stagedResidents.any((r) => r.phone == normalised)) {
       AppSnack.error(context, 'admin.apartments.phone_already_added'.tr());
       return false;
     }
 
+    final name = _nameController.text.trim();
     setState(() {
-      _stagedPhones.add(normalised);
+      _stagedResidents.add(Resident(name: name, phone: normalised));
+      _nameController.clear();
       _phoneController.clear();
     });
-    // Refocus the field so the admin can keep typing the next number.
+    // Refocus the phone field so the admin can keep typing the next number.
     _phoneFocusNode.requestFocus();
     return true;
   }
 
-  void _removeStagedPhone(String phone) {
-    setState(() => _stagedPhones.remove(phone));
+  void _removeStagedResident(Resident resident) {
+    setState(() => _stagedResidents.remove(resident));
   }
 
   Future<void> _addApartment() async {
-    // If the admin typed a phone and pressed "Add" without first pressing
-    // Enter, treat that text as one more phone for the new apartment.
+    // If the admin typed a phone (and optionally a name) without pressing the
+    // inline Add button, fold that entry in now.
     if (_phoneController.text.trim().isNotEmpty) {
-      // _stagePhoneFromField already surfaces validation errors via AppSnack.
-      if (!_stagePhoneFromField()) return;
+      if (!_stageResidentFromFields()) return;
     }
 
     if (!_formKey.currentState!.validate()) return;
 
-    if (_stagedPhones.isEmpty) {
+    if (_stagedResidents.isEmpty) {
       AppSnack.error(context, 'admin.apartments.at_least_one_phone'.tr());
       return;
     }
@@ -597,14 +599,15 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
     try {
       await widget.adminService.addAuthorizedApartment(
         unitNumber: _unitController.text.trim(),
-        phones: List<String>.from(_stagedPhones),
+        residents: List<Resident>.from(_stagedResidents),
       );
       if (!mounted) return;
       AppSnack.success(context, 'admin.apartments.added_success'.tr());
       setState(() {
         _unitController.clear();
+        _nameController.clear();
         _phoneController.clear();
-        _stagedPhones.clear();
+        _stagedResidents.clear();
       });
       _loadApartments();
     } catch (e) {
@@ -616,17 +619,17 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
   }
 
   Future<void> _editApartment(AuthorizedApartment apt) async {
-    final updatedPhones = await showDialog<List<String>>(
+    final updatedResidents = await showDialog<List<Resident>>(
       context: context,
       builder: (context) => _EditApartmentDialog(apartment: apt),
     );
 
-    if (updatedPhones == null || !mounted) return;
+    if (updatedResidents == null || !mounted) return;
 
     try {
-      await widget.adminService.updateAuthorizedApartmentPhones(
+      await widget.adminService.updateAuthorizedApartmentResidents(
         id: apt.id,
-        phones: updatedPhones,
+        residents: updatedResidents,
       );
       if (!mounted) return;
       AppSnack.success(context, 'admin.apartments.saved_success'.tr());
@@ -684,13 +687,17 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
       for (int i = 1; i <= 20; i++) {
         final unit = '${100 + i}';           // "101" … "120"
         final base = 100 + i;                // 101 … 120
-        // Give even-numbered units 2 phones, odd ones 1 phone.
-        final phones = <String>['+972500000$base'];
-        if (i.isEven) phones.add('+972500001$base');
+        // Give even-numbered units 2 residents, odd ones 1.
+        final residents = <Resident>[
+          Resident(name: 'Resident A', phone: '+972500000$base'),
+        ];
+        if (i.isEven) {
+          residents.add(Resident(name: 'Resident B', phone: '+972500001$base'));
+        }
 
         await widget.adminService.addAuthorizedApartment(
           unitNumber: unit,
-          phones: phones,
+          residents: residents,
         );
       }
       if (!mounted) return;
@@ -761,15 +768,15 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          // Chips-based phones input — admin can stage multiple phones
-                          // by pressing Enter or the inline "Add" affordance.
+                          // Chips-based residents input — name + phone per entry.
                           Expanded(
-                            child: _PhoneChipsField(
-                              phones: _stagedPhones,
-                              controller: _phoneController,
-                              focusNode: _phoneFocusNode,
-                              onSubmitPhone: _stagePhoneFromField,
-                              onRemovePhone: _removeStagedPhone,
+                            child: _ResidentChipsField(
+                              residents: _stagedResidents,
+                              nameController: _nameController,
+                              phoneController: _phoneController,
+                              phoneFocusNode: _phoneFocusNode,
+                              onAddResident: _stageResidentFromFields,
+                              onRemoveResident: _removeStagedResident,
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -906,35 +913,36 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
   }
 }
 
-// ─── Phone chips field ───────────────────────────────────────────────────────
+// ─── Resident chips field ────────────────────────────────────────────────────
 //
-// A small composite that shows a list of phone-number "chips" inline with a
-// text field. Pressing Enter (or hitting the inline + button) commits the
-// current text in the field as a chip via [onSubmitPhone]. Tapping the X on a
-// chip removes it via [onRemovePhone]. Used both by the "Add apartment" form
-// and by [_EditApartmentDialog] so the UX is identical in both flows. The
-// surrounding theme handles RTL automatically (the field uses Wrap, which
-// flips alignment correctly under TextDirection.rtl).
+// Shows staged [Resident] objects as deletable chips above a two-field row:
+//   [ Name ] [ Phone ] [ + ]
+// Tapping + (or pressing Enter in the Phone field) calls [onAddResident],
+// which validates the inputs and appends a new Resident chip. Tapping the ×
+// on a chip calls [onRemoveResident]. Used in both the "Add apartment" form
+// and [_EditApartmentDialog].
 
-class _PhoneChipsField extends StatelessWidget {
-  final List<String> phones;
-  final TextEditingController controller;
-  final FocusNode? focusNode;
+class _ResidentChipsField extends StatelessWidget {
+  final List<Resident> residents;
+  final TextEditingController nameController;
+  final TextEditingController phoneController;
+  final FocusNode? phoneFocusNode;
 
-  /// Called when the admin presses Enter or taps the inline add button.
-  /// Should validate, normalise, and (on success) push the phone into [phones]
-  /// and clear [controller].
-  final VoidCallback onSubmitPhone;
+  /// Called when the inline + button is tapped or Enter is pressed in the
+  /// phone field. Should validate, create a [Resident], push it into
+  /// [residents], and clear the controllers on success.
+  final VoidCallback onAddResident;
 
-  /// Called when the admin taps the close icon on a chip.
-  final void Function(String phone) onRemovePhone;
+  /// Called when the × on a chip is tapped.
+  final void Function(Resident resident) onRemoveResident;
 
-  const _PhoneChipsField({
-    required this.phones,
-    required this.controller,
-    required this.onSubmitPhone,
-    required this.onRemovePhone,
-    this.focusNode,
+  const _ResidentChipsField({
+    required this.residents,
+    required this.nameController,
+    required this.phoneController,
+    required this.onAddResident,
+    required this.onRemoveResident,
+    this.phoneFocusNode,
   });
 
   @override
@@ -945,23 +953,21 @@ class _PhoneChipsField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Wrap chips above the field so the field itself stays a normal
-        // single-line height. (Keeps vertical alignment with the unit input
-        // and the Add button on the right.)
-        if (phones.isNotEmpty) ...[
+        // Staged resident chips shown above the input row.
+        if (residents.isNotEmpty) ...[
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: [
-              for (final phone in phones)
+              for (final r in residents)
                 InputChip(
-                  label: Text(phone),
+                  label: Text(r.displayLabel),
                   avatar: Icon(
-                    Icons.phone_outlined,
+                    Icons.person_outline_rounded,
                     size: 16,
                     color: scheme.onSecondaryContainer,
                   ),
-                  onDeleted: () => onRemovePhone(phone),
+                  onDeleted: () => onRemoveResident(r),
                   deleteIconColor: scheme.onSecondaryContainer,
                   backgroundColor: scheme.secondaryContainer,
                   labelStyle: TextStyle(
@@ -973,38 +979,62 @@ class _PhoneChipsField extends StatelessWidget {
           ),
           const SizedBox(height: 8),
         ],
-        // Phone entry field. Pressing Enter — including the hardware Enter
-        // key on web/desktop — stages the value as a chip.
-        Focus(
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent &&
-                (event.logicalKey == LogicalKeyboardKey.enter ||
-                    event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
-              onSubmitPhone();
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          },
-          child: TextField(
-            controller: controller,
-            focusNode: focusNode,
-            keyboardType: TextInputType.phone,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => onSubmitPhone(),
-            decoration: InputDecoration(
-              labelText: 'admin.apartments.phones_label'.tr(),
-              hintText: 'admin.apartments.phones_hint'.tr(),
-              helperText: phones.isEmpty
-                  ? 'admin.apartments.phones_helper'.tr()
-                  : null,
-              prefixIcon: const Icon(Icons.phone_outlined),
-              suffixIcon: IconButton(
-                tooltip: 'admin.apartments.add_phone_tooltip'.tr(),
-                icon: const Icon(Icons.add_circle_outline_rounded),
-                onPressed: onSubmitPhone,
+        // Name + Phone entry row.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Name field (optional)
+            Expanded(
+              flex: 2,
+              child: TextField(
+                controller: nameController,
+                textInputAction: TextInputAction.next,
+                decoration: InputDecoration(
+                  labelText: 'admin.apartments.name_label'.tr(),
+                  hintText: 'admin.apartments.name_hint'.tr(),
+                  prefixIcon: const Icon(Icons.person_outline_rounded),
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 8),
+            // Phone field (required)
+            Expanded(
+              flex: 3,
+              child: Focus(
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      (event.logicalKey == LogicalKeyboardKey.enter ||
+                          event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+                    onAddResident();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: TextField(
+                  controller: phoneController,
+                  focusNode: phoneFocusNode,
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => onAddResident(),
+                  decoration: InputDecoration(
+                    labelText: 'admin.apartments.phones_label'.tr(),
+                    hintText: 'admin.apartments.phones_hint'.tr(),
+                    helperText: residents.isEmpty
+                        ? 'admin.apartments.phones_helper'.tr()
+                        : null,
+                    prefixIcon: const Icon(Icons.phone_outlined),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Inline add button
+            IconButton.filledTonal(
+              tooltip: 'admin.apartments.add_phone_tooltip'.tr(),
+              icon: const Icon(Icons.person_add_outlined),
+              onPressed: onAddResident,
+            ),
+          ],
         ),
       ],
     );
@@ -1029,7 +1059,7 @@ class _ApartmentCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final unit = apartment.unitNumber;
-    final phones = apartment.residentPhones;
+    final residents = apartment.residents;
 
     return Card(
       child: Padding(
@@ -1061,7 +1091,7 @@ class _ApartmentCard extends StatelessWidget {
                       style: theme.textTheme.titleSmall,
                     ),
                   ),
-                  if (phones.isEmpty)
+                  if (residents.isEmpty)
                     Text(
                       'admin.apartments.phones_empty'.tr(),
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -1074,11 +1104,11 @@ class _ApartmentCard extends StatelessWidget {
                       spacing: 6,
                       runSpacing: 6,
                       children: [
-                        for (final p in phones)
+                        for (final r in residents)
                           Chip(
-                            label: Text(p),
+                            label: Text(r.displayLabel),
                             avatar: Icon(
-                              Icons.phone_outlined,
+                              Icons.person_outline_rounded,
                               size: 14,
                               color: scheme.onSurfaceVariant,
                             ),
@@ -1119,9 +1149,9 @@ class _ApartmentCard extends StatelessWidget {
 
 // ─── Edit apartment dialog ──────────────────────────────────────────────────
 //
-// Reuses [_PhoneChipsField] to keep the editing UX identical to the create
-// flow. Returns the new list of phones via Navigator.pop, or null if the
-// admin cancelled.
+// Reuses [_ResidentChipsField] to keep the editing UX identical to the create
+// flow. Returns the updated List<Resident> via Navigator.pop, or null if
+// the admin cancelled.
 
 class _EditApartmentDialog extends StatefulWidget {
   final AuthorizedApartment apartment;
@@ -1132,59 +1162,62 @@ class _EditApartmentDialog extends StatefulWidget {
 }
 
 class _EditApartmentDialogState extends State<_EditApartmentDialog> {
-  late final List<String> _phones;
+  late final List<Resident> _residents;
+  final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _phoneFocusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    _phones = List<String>.from(widget.apartment.residentPhones);
+    _residents = List<Resident>.from(widget.apartment.residents);
   }
 
   @override
   void dispose() {
+    _nameController.dispose();
     _phoneController.dispose();
     _phoneFocusNode.dispose();
     super.dispose();
   }
 
-  void _stagePhone() {
-    final raw = _phoneController.text.trim();
-    if (raw.isEmpty) return;
+  void _stageResident() {
+    final rawPhone = _phoneController.text.trim();
+    if (rawPhone.isEmpty) return;
 
-    final normalised = AuthService.normalisePhone(raw);
+    final normalised = AuthService.normalisePhone(rawPhone);
     if (!RegExp(r'^\+\d{7,15}$').hasMatch(normalised)) {
       AppSnack.error(context, 'admin.apartments.phone_invalid'.tr());
       return;
     }
-    if (_phones.contains(normalised)) {
+    if (_residents.any((r) => r.phone == normalised)) {
       AppSnack.error(context, 'admin.apartments.phone_already_added'.tr());
       return;
     }
+    final name = _nameController.text.trim();
     setState(() {
-      _phones.add(normalised);
+      _residents.add(Resident(name: name, phone: normalised));
+      _nameController.clear();
       _phoneController.clear();
     });
     _phoneFocusNode.requestFocus();
   }
 
-  void _removePhone(String phone) {
-    setState(() => _phones.remove(phone));
+  void _removeResident(Resident r) {
+    setState(() => _residents.remove(r));
   }
 
   void _save() {
-    // If there's an un-staged value in the field, fold it in first.
+    // Fold in any un-staged phone entry.
     if (_phoneController.text.trim().isNotEmpty) {
-      _stagePhone();
-      // Bail out if validation failed; _stagePhone will have shown the error.
+      _stageResident();
       if (_phoneController.text.trim().isNotEmpty) return;
     }
-    if (_phones.isEmpty) {
+    if (_residents.isEmpty) {
       AppSnack.error(context, 'admin.apartments.at_least_one_phone'.tr());
       return;
     }
-    Navigator.of(context).pop(List<String>.from(_phones));
+    Navigator.of(context).pop(List<Resident>.from(_residents));
   }
 
   @override
@@ -1192,7 +1225,7 @@ class _EditApartmentDialogState extends State<_EditApartmentDialog> {
     return AlertDialog(
       title: Text(tr('admin.apartments.edit_dialog_title')),
       content: SizedBox(
-        width: 420,
+        width: 480,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1206,12 +1239,13 @@ class _EditApartmentDialogState extends State<_EditApartmentDialog> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
-              _PhoneChipsField(
-                phones: _phones,
-                controller: _phoneController,
-                focusNode: _phoneFocusNode,
-                onSubmitPhone: _stagePhone,
-                onRemovePhone: _removePhone,
+              _ResidentChipsField(
+                residents: _residents,
+                nameController: _nameController,
+                phoneController: _phoneController,
+                phoneFocusNode: _phoneFocusNode,
+                onAddResident: _stageResident,
+                onRemoveResident: _removeResident,
               ),
             ],
           ),
