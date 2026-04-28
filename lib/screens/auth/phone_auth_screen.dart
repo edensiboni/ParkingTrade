@@ -261,9 +261,17 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           textAlign: TextAlign.center,
           autofillHints: const [AutofillHints.oneTimeCode],
           style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 8),
+          maxLength: 6,
+          enabled: !_isLoading,
           decoration: const InputDecoration(
             hintText: '••••••',
+            counterText: '',
           ),
+          onChanged: (value) {
+            if (value.length == 6 && !_isLoading) {
+              _verifyOtp();
+            }
+          },
         ),
         const SizedBox(height: 16),
         FilledButton(
