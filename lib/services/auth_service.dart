@@ -123,6 +123,35 @@ class AuthService {
     );
   }
 
+  /// Dev-only: impersonate a registered resident by signing in with the
+  /// shadow email/password account that mirrors their phone profile.
+  ///
+  /// [shadowEmail] — derived from [DevImpersonationConfig.shadowEmail].
+  /// [password]    — the password set on that shadow Supabase Auth account.
+  ///
+  /// This method is intentionally NOT gated by kDebugMode so it compiles in
+  /// release; the caller (PhoneAuthScreen) gates the UI with kDebugMode, which
+  /// the Dart compiler tree-shakes in release mode.
+  Future<AuthResponse> devImpersonate({
+    required String shadowEmail,
+    required String password,
+  }) async {
+    try {
+      return await _supabase.auth.signInWithPassword(
+        email: shadowEmail,
+        password: password,
+      );
+    } on AuthException catch (e) {
+      throw Exception(
+        e.message.isNotEmpty
+            ? 'Dev login failed: ${e.message}'
+            : 'Dev login failed. Check that the shadow account exists in Supabase Auth.',
+      );
+    } catch (e) {
+      throw Exception('Dev login failed: $e');
+    }
+  }
+
   // Verify OTP
   Future<AuthResponse> verifyOtp(String phone, String token) async {
     // Normalise so it always matches what was sent to Supabase
