@@ -73,7 +73,7 @@ class AppTheme {
   );
 
   static ThemeData light() {
-    final scheme = ColorScheme(
+    final scheme = const ColorScheme(
       brightness: Brightness.light,
       primary: brandIndigo,
       onPrimary: Colors.white,
@@ -497,11 +497,11 @@ class AppTheme {
         contentTextStyle: textTheme.bodyMedium,
       ),
 
-      bottomSheetTheme: BottomSheetThemeData(
+      bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: cardSurface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        shape: const RoundedRectangleBorder(
+        shape: RoundedRectangleBorder(
           borderRadius:
               BorderRadius.vertical(top: Radius.circular(radiusXl)),
         ),

@@ -10,14 +10,6 @@ import '../../config/dev_impersonation_config.dart';
 // the verification step always use the same E.164 string.
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// DEV BACKDOOR — toggle this to false before shipping to production.
-// When true, a "Dev Login" button is shown (regardless of kDebugMode) so the
-// backdoor works on Flutter Web / GitHub Pages preview builds.
-// ---------------------------------------------------------------------------
-const bool _showDevBackdoor = true;
-const String _devPhone = '+972523552350';
-const String _devOtp = '123456';
 
 class PhoneAuthScreen extends StatefulWidget {
   const PhoneAuthScreen({super.key});

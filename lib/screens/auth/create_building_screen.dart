@@ -36,7 +36,7 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
   double? _longitude;
 
   bool _isLoading = false;
-  bool _success = false;
+  final bool _success = false;
   String? _errorMessage;
 
   @override
