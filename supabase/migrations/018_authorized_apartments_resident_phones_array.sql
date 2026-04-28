@@ -62,7 +62,7 @@ BEGIN
                     array_agg(DISTINCT resident_phone) FILTER (
                         WHERE resident_phone IS NOT NULL AND resident_phone <> ''
                     ) AS phones,
-                    MIN(id)         AS keep_id,
+                    (array_agg(id ORDER BY created_at ASC))[1] AS keep_id,
                     MIN(created_at) AS keep_created_at
             FROM    authorized_apartments
             GROUP BY building_id, unit_number
@@ -76,7 +76,7 @@ BEGIN
         -- Delete the now-redundant per-phone rows (keep only keep_id).
         DELETE FROM authorized_apartments aa
         USING (
-            SELECT building_id, unit_number, MIN(id) AS keep_id
+            SELECT building_id, unit_number, (array_agg(id ORDER BY created_at ASC))[1] AS keep_id
             FROM   authorized_apartments
             GROUP BY building_id, unit_number
         ) keepers
