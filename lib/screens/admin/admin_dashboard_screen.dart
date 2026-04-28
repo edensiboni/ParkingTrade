@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -516,6 +517,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
   List<AuthorizedApartment> _apartments = [];
   bool _isLoading = true;
   bool _isSubmitting = false;
+  bool _isGeneratingMock = false;
 
   @override
   void initState() {
@@ -672,6 +674,37 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
     }
   }
 
+  /// Injects 20 fake apartments (units 101–120) with dummy Israeli phone numbers.
+  /// Only callable in debug mode — the button that triggers this is itself
+  /// wrapped in [kDebugMode], so this is purely a belt-and-suspenders guard.
+  Future<void> _generateMockData() async {
+    assert(kDebugMode, '_generateMockData must only be called in debug mode');
+    setState(() => _isGeneratingMock = true);
+    try {
+      for (int i = 1; i <= 20; i++) {
+        final unit = '${100 + i}';           // "101" … "120"
+        final base = 100 + i;                // 101 … 120
+        // Give even-numbered units 2 phones, odd ones 1 phone.
+        final phones = <String>['+972500000$base'];
+        if (i.isEven) phones.add('+972500001$base');
+
+        await widget.adminService.addAuthorizedApartment(
+          unitNumber: unit,
+          phones: phones,
+        );
+      }
+      if (!mounted) return;
+      await _loadApartments();
+      if (!mounted) return;
+      AppSnack.success(context, 'Mock data injected successfully');
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isGeneratingMock = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -802,6 +835,37 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
                     ),
                   ),
                 ],
+                const Spacer(),
+                // ── DEBUG ONLY: Generate Mock Data ──────────────────────────
+                if (kDebugMode)
+                  OutlinedButton.icon(
+                    onPressed: (_isGeneratingMock || _isSubmitting)
+                        ? null
+                        : _generateMockData,
+                    icon: _isGeneratingMock
+                        ? SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: scheme.primary,
+                            ),
+                          )
+                        : const Icon(Icons.auto_fix_high_rounded, size: 16),
+                    label: Text(
+                      _isGeneratingMock ? 'Generating…' : 'Generate Mock Data',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: scheme.tertiary,
+                      side: BorderSide(
+                          color: scheme.tertiary.withValues(alpha: 0.5)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
               ],
             ),
           ),
