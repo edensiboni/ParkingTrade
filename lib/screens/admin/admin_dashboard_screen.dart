@@ -2,10 +2,12 @@ import 'dart:convert';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../services/admin_service.dart';
 import '../../services/building_service.dart';
 import '../../services/auth_service.dart';
+import '../../models/authorized_apartment.dart';
 import '../../models/building.dart';
 import '../../models/profile.dart';
 import '../../widgets/address_autocomplete_field.dart';
@@ -505,8 +507,13 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
   final _formKey = GlobalKey<FormState>();
   final _unitController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _phoneFocusNode = FocusNode();
 
-  List<Map<String, dynamic>> _apartments = [];
+  /// Phones currently staged inside the "Add apartment" form (before submission).
+  /// Stored as normalised E.164 strings — what the database will see.
+  final List<String> _stagedPhones = [];
+
+  List<AuthorizedApartment> _apartments = [];
   bool _isLoading = true;
   bool _isSubmitting = false;
 
@@ -520,6 +527,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
   void dispose() {
     _unitController.dispose();
     _phoneController.dispose();
+    _phoneFocusNode.dispose();
     super.dispose();
   }
 
@@ -539,28 +547,91 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
     }
   }
 
+  /// Validates the current text in the phone field and, if valid, appends
+  /// it as a chip. Returns true if a chip was added.
+  bool _stagePhoneFromField() {
+    final raw = _phoneController.text.trim();
+    if (raw.isEmpty) return false;
+
+    final normalised = AuthService.normalisePhone(raw);
+    if (!RegExp(r'^\+\d{7,15}$').hasMatch(normalised)) {
+      AppSnack.error(context, 'admin.apartments.phone_invalid'.tr());
+      return false;
+    }
+    if (_stagedPhones.contains(normalised)) {
+      AppSnack.error(context, 'admin.apartments.phone_already_added'.tr());
+      return false;
+    }
+
+    setState(() {
+      _stagedPhones.add(normalised);
+      _phoneController.clear();
+    });
+    // Refocus the field so the admin can keep typing the next number.
+    _phoneFocusNode.requestFocus();
+    return true;
+  }
+
+  void _removeStagedPhone(String phone) {
+    setState(() => _stagedPhones.remove(phone));
+  }
+
   Future<void> _addApartment() async {
+    // If the admin typed a phone and pressed "Add" without first pressing
+    // Enter, treat that text as one more phone for the new apartment.
+    if (_phoneController.text.trim().isNotEmpty) {
+      // _stagePhoneFromField already surfaces validation errors via AppSnack.
+      if (!_stagePhoneFromField()) return;
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
-    final rawPhone = _phoneController.text.trim();
-    final phone = AuthService.normalisePhone(rawPhone);
+    if (_stagedPhones.isEmpty) {
+      AppSnack.error(context, 'admin.apartments.at_least_one_phone'.tr());
+      return;
+    }
 
     setState(() => _isSubmitting = true);
     try {
       await widget.adminService.addAuthorizedApartment(
         unitNumber: _unitController.text.trim(),
-        phone: phone,
+        phones: List<String>.from(_stagedPhones),
       );
       if (!mounted) return;
       AppSnack.success(context, 'admin.apartments.added_success'.tr());
-      _unitController.clear();
-      _phoneController.clear();
+      setState(() {
+        _unitController.clear();
+        _phoneController.clear();
+        _stagedPhones.clear();
+      });
       _loadApartments();
     } catch (e) {
       if (!mounted) return;
       AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _editApartment(AuthorizedApartment apt) async {
+    final updatedPhones = await showDialog<List<String>>(
+      context: context,
+      builder: (context) => _EditApartmentDialog(apartment: apt),
+    );
+
+    if (updatedPhones == null || !mounted) return;
+
+    try {
+      await widget.adminService.updateAuthorizedApartmentPhones(
+        id: apt.id,
+        phones: updatedPhones,
+      );
+      if (!mounted) return;
+      AppSnack.success(context, 'admin.apartments.saved_success'.tr());
+      _loadApartments();
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
     }
   }
 
@@ -599,17 +670,6 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
       if (!mounted) return;
       AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
     }
-  }
-
-  String? _validatePhone(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'admin.apartments.phone_required'.tr();
-    }
-    final normalised = AuthService.normalisePhone(value);
-    if (!RegExp(r'^\+\d{7,15}$').hasMatch(normalised)) {
-      return 'admin.apartments.phone_invalid'.tr();
-    }
-    return null;
   }
 
   @override
@@ -668,19 +728,15 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          // Phone
+                          // Chips-based phones input — admin can stage multiple phones
+                          // by pressing Enter or the inline "Add" affordance.
                           Expanded(
-                            child: TextFormField(
+                            child: _PhoneChipsField(
+                              phones: _stagedPhones,
                               controller: _phoneController,
-                              keyboardType: TextInputType.phone,
-                              textInputAction: TextInputAction.done,
-                              onFieldSubmitted: (_) => _addApartment(),
-                              decoration: InputDecoration(
-                                labelText: 'admin.apartments.phone_label'.tr(),
-                                hintText: 'admin.apartments.phone_hint'.tr(),
-                                prefixIcon: const Icon(Icons.phone_outlined),
-                              ),
-                              validator: _validatePhone,
+                              focusNode: _phoneFocusNode,
+                              onSubmitPhone: _stagePhoneFromField,
+                              onRemovePhone: _removeStagedPhone,
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -772,48 +828,340 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final apt = _apartments[index];
-                final id = apt['id'] as String;
-                final unit = apt['unit_number'] as String;
-                final phone = apt['resident_phone'] as String;
-
-                return Card(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
-                    leading: CircleAvatar(
-                      backgroundColor: scheme.primaryContainer,
-                      child: Text(
-                        unit.length <= 3 ? unit : unit.substring(0, 3),
-                        style: TextStyle(
-                          color: scheme.onPrimaryContainer,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    title: Text(
-                      tr('admin.apartments.unit_display', namedArgs: {'unit': unit}),
-                      style: theme.textTheme.titleSmall,
-                    ),
-                    subtitle: Text(
-                      phone,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                    trailing: IconButton(
-                      tooltip: 'admin.apartments.remove_tooltip'.tr(),
-                      icon: Icon(
-                        Icons.delete_outline_rounded,
-                        color: scheme.error,
-                      ),
-                      onPressed: () => _deleteApartment(id, unit),
-                    ),
-                  ),
+                return _ApartmentCard(
+                  apartment: apt,
+                  onEdit: () => _editApartment(apt),
+                  onDelete: () =>
+                      _deleteApartment(apt.id, apt.unitNumber),
                 );
               },
             ),
           ),
+      ],
+    );
+  }
+}
+
+// ─── Phone chips field ───────────────────────────────────────────────────────
+//
+// A small composite that shows a list of phone-number "chips" inline with a
+// text field. Pressing Enter (or hitting the inline + button) commits the
+// current text in the field as a chip via [onSubmitPhone]. Tapping the X on a
+// chip removes it via [onRemovePhone]. Used both by the "Add apartment" form
+// and by [_EditApartmentDialog] so the UX is identical in both flows. The
+// surrounding theme handles RTL automatically (the field uses Wrap, which
+// flips alignment correctly under TextDirection.rtl).
+
+class _PhoneChipsField extends StatelessWidget {
+  final List<String> phones;
+  final TextEditingController controller;
+  final FocusNode? focusNode;
+
+  /// Called when the admin presses Enter or taps the inline add button.
+  /// Should validate, normalise, and (on success) push the phone into [phones]
+  /// and clear [controller].
+  final VoidCallback onSubmitPhone;
+
+  /// Called when the admin taps the close icon on a chip.
+  final void Function(String phone) onRemovePhone;
+
+  const _PhoneChipsField({
+    required this.phones,
+    required this.controller,
+    required this.onSubmitPhone,
+    required this.onRemovePhone,
+    this.focusNode,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Wrap chips above the field so the field itself stays a normal
+        // single-line height. (Keeps vertical alignment with the unit input
+        // and the Add button on the right.)
+        if (phones.isNotEmpty) ...[
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final phone in phones)
+                InputChip(
+                  label: Text(phone),
+                  avatar: Icon(
+                    Icons.phone_outlined,
+                    size: 16,
+                    color: scheme.onSecondaryContainer,
+                  ),
+                  onDeleted: () => onRemovePhone(phone),
+                  deleteIconColor: scheme.onSecondaryContainer,
+                  backgroundColor: scheme.secondaryContainer,
+                  labelStyle: TextStyle(
+                    color: scheme.onSecondaryContainer,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+        // Phone entry field. Pressing Enter — including the hardware Enter
+        // key on web/desktop — stages the value as a chip.
+        Focus(
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent &&
+                (event.logicalKey == LogicalKeyboardKey.enter ||
+                    event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+              onSubmitPhone();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: TextField(
+            controller: controller,
+            focusNode: focusNode,
+            keyboardType: TextInputType.phone,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => onSubmitPhone(),
+            decoration: InputDecoration(
+              labelText: 'admin.apartments.phones_label'.tr(),
+              hintText: 'admin.apartments.phones_hint'.tr(),
+              helperText: phones.isEmpty
+                  ? 'admin.apartments.phones_helper'.tr()
+                  : null,
+              prefixIcon: const Icon(Icons.phone_outlined),
+              suffixIcon: IconButton(
+                tooltip: 'admin.apartments.add_phone_tooltip'.tr(),
+                icon: const Icon(Icons.add_circle_outline_rounded),
+                onPressed: onSubmitPhone,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Apartment card (list view, multiple phones) ────────────────────────────
+
+class _ApartmentCard extends StatelessWidget {
+  final AuthorizedApartment apartment;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _ApartmentCard({
+    required this.apartment,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final unit = apartment.unitNumber;
+    final phones = apartment.residentPhones;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              backgroundColor: scheme.primaryContainer,
+              child: Text(
+                unit.length <= 3 ? unit : unit.substring(0, 3),
+                style: TextStyle(
+                  color: scheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, bottom: 6),
+                    child: Text(
+                      tr('admin.apartments.unit_display',
+                          namedArgs: {'unit': unit}),
+                      style: theme.textTheme.titleSmall,
+                    ),
+                  ),
+                  if (phones.isEmpty)
+                    Text(
+                      'admin.apartments.phones_empty'.tr(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    )
+                  else
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final p in phones)
+                          Chip(
+                            label: Text(p),
+                            avatar: Icon(
+                              Icons.phone_outlined,
+                              size: 14,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            backgroundColor: scheme.surfaceContainerHighest,
+                            labelStyle: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'admin.apartments.edit_tooltip'.tr(),
+              icon: Icon(Icons.edit_outlined, color: scheme.primary),
+              onPressed: onEdit,
+            ),
+            IconButton(
+              tooltip: 'admin.apartments.remove_tooltip'.tr(),
+              icon: Icon(
+                Icons.delete_outline_rounded,
+                color: scheme.error,
+              ),
+              onPressed: onDelete,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Edit apartment dialog ──────────────────────────────────────────────────
+//
+// Reuses [_PhoneChipsField] to keep the editing UX identical to the create
+// flow. Returns the new list of phones via Navigator.pop, or null if the
+// admin cancelled.
+
+class _EditApartmentDialog extends StatefulWidget {
+  final AuthorizedApartment apartment;
+  const _EditApartmentDialog({required this.apartment});
+
+  @override
+  State<_EditApartmentDialog> createState() => _EditApartmentDialogState();
+}
+
+class _EditApartmentDialogState extends State<_EditApartmentDialog> {
+  late final List<String> _phones;
+  final _phoneController = TextEditingController();
+  final _phoneFocusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _phones = List<String>.from(widget.apartment.residentPhones);
+  }
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _phoneFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _stagePhone() {
+    final raw = _phoneController.text.trim();
+    if (raw.isEmpty) return;
+
+    final normalised = AuthService.normalisePhone(raw);
+    if (!RegExp(r'^\+\d{7,15}$').hasMatch(normalised)) {
+      AppSnack.error(context, 'admin.apartments.phone_invalid'.tr());
+      return;
+    }
+    if (_phones.contains(normalised)) {
+      AppSnack.error(context, 'admin.apartments.phone_already_added'.tr());
+      return;
+    }
+    setState(() {
+      _phones.add(normalised);
+      _phoneController.clear();
+    });
+    _phoneFocusNode.requestFocus();
+  }
+
+  void _removePhone(String phone) {
+    setState(() => _phones.remove(phone));
+  }
+
+  void _save() {
+    // If there's an un-staged value in the field, fold it in first.
+    if (_phoneController.text.trim().isNotEmpty) {
+      _stagePhone();
+      // Bail out if validation failed; _stagePhone will have shown the error.
+      if (_phoneController.text.trim().isNotEmpty) return;
+    }
+    if (_phones.isEmpty) {
+      AppSnack.error(context, 'admin.apartments.at_least_one_phone'.tr());
+      return;
+    }
+    Navigator.of(context).pop(List<String>.from(_phones));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(tr('admin.apartments.edit_dialog_title')),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  tr('admin.apartments.unit_display',
+                      namedArgs: {'unit': widget.apartment.unitNumber}),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              _PhoneChipsField(
+                phones: _phones,
+                controller: _phoneController,
+                focusNode: _phoneFocusNode,
+                onSubmitPhone: _stagePhone,
+                onRemovePhone: _removePhone,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('admin.dialog.cancel'.tr()),
+        ),
+        FilledButton(
+          onPressed: _save,
+          child: Text('admin.apartments.save_button'.tr()),
+        ),
       ],
     );
   }
