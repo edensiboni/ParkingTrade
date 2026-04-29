@@ -86,6 +86,8 @@
 
     "apartments": {
       "add_title": "הוסף דירה",
+      "name_label": "שם הדייר",
+      "name_hint": "לדוגמה: ישראל ישראלי",
       "unit_label": "מספר יחידה",
       "unit_hint": "לדוגמה: 4B",
       "phone_label": "טלפון דייר",

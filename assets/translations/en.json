@@ -86,6 +86,8 @@
 
     "apartments": {
       "add_title": "Add Apartment",
+      "name_label": "Resident Name",
+      "name_hint": "e.g. John Smith",
       "unit_label": "Unit No.",
       "unit_hint": "e.g. 4B",
       "phone_label": "Resident Phone",
