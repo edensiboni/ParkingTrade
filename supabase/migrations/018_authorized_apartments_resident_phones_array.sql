@@ -115,6 +115,25 @@ END;
 $$;
 
 -- ─── 4. Drop the legacy resident_phone column + its index ───
+-- Drop ANY RLS policies that might reference resident_phone BEFORE
+-- dropping the column — Postgres refuses to drop a column while a
+-- policy expression still references it (dependency error).
+-- We drop all known policies on this table so nothing blocks the DROP.
+DROP POLICY IF EXISTS "Residents can view their own authorization"
+    ON authorized_apartments;
+DROP POLICY IF EXISTS "Admins can view their building authorizations"
+    ON authorized_apartments;
+DROP POLICY IF EXISTS "Admins can view apartments in their buildings"
+    ON authorized_apartments;
+DROP POLICY IF EXISTS "Admins can manage authorized apartments"
+    ON authorized_apartments;
+DROP POLICY IF EXISTS "Admins can insert authorized apartments"
+    ON authorized_apartments;
+DROP POLICY IF EXISTS "Admins can update authorized apartments"
+    ON authorized_apartments;
+DROP POLICY IF EXISTS "Admins can delete authorized apartments"
+    ON authorized_apartments;
+
 DROP INDEX IF EXISTS idx_authorized_apartments_resident_phone;
 
 ALTER TABLE authorized_apartments
@@ -125,19 +144,67 @@ CREATE INDEX IF NOT EXISTS idx_authorized_apartments_resident_phones
     ON authorized_apartments
     USING GIN (resident_phones);
 
--- ─── 6. Recreate the resident SELECT policy on the array ────
--- Migration 017 created this policy comparing against the scalar
--- resident_phone column. Now the column is a TEXT[], so we recheck
--- membership using = ANY(...).
-DROP POLICY IF EXISTS "Residents can view their own authorization"
-    ON authorized_apartments;
+-- ─── 6. Recreate ALL policies for authorized_apartments ─────
+-- The resident policy is updated to check the new array column.
+-- The admin policies are recreated exactly as migration 015 defined
+-- them (they don't reference the old column but were dropped above
+-- to avoid any possible dependency issues).
 
+-- SELECT for residents: array membership check.
 CREATE POLICY "Residents can view their own authorization"
     ON authorized_apartments
     FOR SELECT
     USING (
         current_user_phone() IS NOT NULL
         AND current_user_phone() = ANY (resident_phones)
+    );
+
+-- SELECT for admins: see all records in their building.
+CREATE POLICY "Admins can view their building authorizations"
+    ON authorized_apartments
+    FOR SELECT USING (
+        building_id = get_user_building_id(auth.uid())
+        AND EXISTS (
+            SELECT 1 FROM profiles p
+            WHERE p.id   = auth.uid()
+              AND p.role = 'admin'
+        )
+    );
+
+-- INSERT: only building admins can authorize new apartments.
+CREATE POLICY "Admins can insert authorized apartments"
+    ON authorized_apartments
+    FOR INSERT WITH CHECK (
+        building_id = get_user_building_id(auth.uid())
+        AND EXISTS (
+            SELECT 1 FROM profiles p
+            WHERE p.id   = auth.uid()
+              AND p.role = 'admin'
+        )
+    );
+
+-- UPDATE: only building admins can modify authorizations.
+CREATE POLICY "Admins can update authorized apartments"
+    ON authorized_apartments
+    FOR UPDATE USING (
+        building_id = get_user_building_id(auth.uid())
+        AND EXISTS (
+            SELECT 1 FROM profiles p
+            WHERE p.id   = auth.uid()
+              AND p.role = 'admin'
+        )
+    );
+
+-- DELETE: only building admins can remove authorizations.
+CREATE POLICY "Admins can delete authorized apartments"
+    ON authorized_apartments
+    FOR DELETE USING (
+        building_id = get_user_building_id(auth.uid())
+        AND EXISTS (
+            SELECT 1 FROM profiles p
+            WHERE p.id   = auth.uid()
+              AND p.role = 'admin'
+        )
     );
 
 -- ─── Done ────────────────────────────────────────────────────
