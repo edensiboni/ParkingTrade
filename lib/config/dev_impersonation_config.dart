@@ -24,8 +24,9 @@ import 'package:flutter/foundation.dart';
 // ---------------------------------------------------------------------------
 
 class DevImpersonationConfig {
-  /// Master toggle — true only in Flutter debug builds.
-  static const bool enabled = kDebugMode;
+  /// Master toggle — forced true for GitHub Pages / web testing.
+  // REMEMBER: Set enabled back to kDebugMode before public launch.
+  static const bool enabled = true;
 
   /// The magic OTP code accepted in dev mode (skips server round-trip).
   static const String masterOtp = '123456';

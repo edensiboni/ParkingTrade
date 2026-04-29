@@ -74,7 +74,9 @@ jobs:
           FIREBASE_WEB_STORAGE_BUCKET: ${{ secrets.FIREBASE_WEB_STORAGE_BUCKET }}
         run: |
           flutter build web \
-            --release \
+            --profile \
+            --dart-define=isDev=true \
+            --dart-define=PWA_STRATEGY=offline-first \
             -t lib/main_web.dart \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY" \
