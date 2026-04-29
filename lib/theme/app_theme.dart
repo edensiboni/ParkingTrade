@@ -73,39 +73,39 @@ class AppTheme {
   );
 
   static ThemeData light() {
-    final scheme = const ColorScheme(
+    const scheme = ColorScheme(
       brightness: Brightness.light,
       primary: brandIndigo,
       onPrimary: Colors.white,
-      primaryContainer: const Color(0xFFE0E7FF), // indigo-100
+      primaryContainer: Color(0xFFE0E7FF), // indigo-100
       onPrimaryContainer: brandIndigoDeep,
       secondary: brandViolet,
       onSecondary: Colors.white,
-      secondaryContainer: const Color(0xFFEDE9FE), // violet-100
-      onSecondaryContainer: const Color(0xFF5B21B6),
+      secondaryContainer: Color(0xFFEDE9FE), // violet-100
+      onSecondaryContainer: Color(0xFF5B21B6),
       tertiary: brandTeal,
       onTertiary: Colors.white,
-      tertiaryContainer: const Color(0xFFCCFBF1),
-      onTertiaryContainer: const Color(0xFF0F766E),
+      tertiaryContainer: Color(0xFFCCFBF1),
+      onTertiaryContainer: Color(0xFF0F766E),
       error: danger,
       onError: Colors.white,
-      errorContainer: const Color(0xFFFEE2E2),
-      onErrorContainer: const Color(0xFF7F1D1D),
+      errorContainer: Color(0xFFFEE2E2),
+      onErrorContainer: Color(0xFF7F1D1D),
       surface: appBackground,
       onSurface: ink,
       surfaceContainerLowest: Colors.white,
-      surfaceContainerLow: const Color(0xFFFCFCFE),
+      surfaceContainerLow: Color(0xFFFCFCFE),
       surfaceContainer: cardSurface,
       surfaceContainerHigh: subtleSurface,
-      surfaceContainerHighest: const Color(0xFFE9ECF4),
+      surfaceContainerHighest: Color(0xFFE9ECF4),
       onSurfaceVariant: inkMuted,
       outline: hairline,
-      outlineVariant: const Color(0xFFEEF1F6),
-      shadow: const Color(0x14000000),
-      scrim: const Color(0x33000000),
+      outlineVariant: Color(0xFFEEF1F6),
+      shadow: Color(0x14000000),
+      scrim: Color(0x33000000),
       inverseSurface: ink,
       onInverseSurface: Colors.white,
-      inversePrimary: const Color(0xFFA5B4FC),
+      inversePrimary: Color(0xFFA5B4FC),
       surfaceTint: brandIndigo,
     );
 
