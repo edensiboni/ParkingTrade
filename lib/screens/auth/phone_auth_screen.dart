@@ -40,7 +40,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   void dispose() {
     _phoneController.dispose();
     _otpController.dispose();
-    if (kDebugMode) _devPasswordController.dispose();
+    if (DevImpersonationConfig.enabled) _devPasswordController.dispose();
     super.dispose();
   }
 
@@ -54,7 +54,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     final sanitized = _normalisedPhone;
 
     // ── Dev mode: skip real SMS if master code will be used ─────────────────
-    if (kDebugMode && _devSkipOtp) {
+    if (DevImpersonationConfig.enabled && _devSkipOtp) {
       setState(() {
         _isOtpSent = true;
         _otpController.text = DevImpersonationConfig.masterOtp;
@@ -111,7 +111,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     }
 
     // ── Dev mode: master code → sign in via shadow email/password ───────────
-    if (kDebugMode &&
+    if (DevImpersonationConfig.enabled &&
         _devSkipOtp &&
         _otpController.text.trim() == DevImpersonationConfig.masterOtp) {
       await _devSignIn();
@@ -146,7 +146,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   /// Signs in via the shadow email/password account so we get a real Supabase
   /// session and can access all real data for that resident.
   Future<void> _devSignIn() async {
-    if (!kDebugMode) return;
+    if (!DevImpersonationConfig.enabled) return;
 
     final phone = _devSelectedPhone ?? _normalisedPhone;
     if (phone.isEmpty) {
@@ -184,7 +184,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   /// Fills the phone field with the selected dev number and optionally jumps
   /// straight to the OTP step (faking the SMS send).
   void _devSelectPhone(String e164) {
-    if (!kDebugMode) return;
+    if (!DevImpersonationConfig.enabled) return;
     setState(() {
       _devSelectedPhone = e164;
       _phoneController.text = e164;
@@ -241,37 +241,46 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                       _ErrorBanner(message: _errorMessage!),
                     ],
 
-                    // ── Dev Impersonation Panel (debug builds only) ──────────
-                    if (kDebugMode) ...[
-                      const SizedBox(height: 32),
-                      _DevImpersonationPanel(
-                        isOpen: _devPanelOpen,
-                        isLoading: _isLoading,
-                        skipOtp: _devSkipOtp,
-                        selectedPhone: _devSelectedPhone,
-                        passwordController: _devPasswordController,
-                        onTogglePanel: () =>
-                            setState(() => _devPanelOpen = !_devPanelOpen),
-                        onToggleSkipOtp: (v) =>
-                            setState(() => _devSkipOtp = v ?? true),
-                        onSelectPhone: _devSelectPhone,
-                        onImpersonate: _devSignIn,
-                        onQuickFill: () {
-                          // Jump straight to OTP step with master code pre-filled.
-                          if (_devSelectedPhone == null) {
-                            setState(() => _errorMessage =
-                                'Dev: pick a test number first.');
-                            return;
-                          }
-                          setState(() {
-                            _isOtpSent = true;
-                            _otpController.text =
-                                DevImpersonationConfig.masterOtp;
-                            _errorMessage = null;
-                          });
-                        },
+                    // ── Dev Impersonation Panel (always visible when enabled) ─
+                    const SizedBox(height: 32),
+                    const Text(
+                      'BACKDOOR ACTIVE',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFFF59E0B),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        letterSpacing: 1.5,
                       ),
-                    ],
+                    ),
+                    const SizedBox(height: 8),
+                    _DevImpersonationPanel(
+                      isOpen: _devPanelOpen,
+                      isLoading: _isLoading,
+                      skipOtp: _devSkipOtp,
+                      selectedPhone: _devSelectedPhone,
+                      passwordController: _devPasswordController,
+                      onTogglePanel: () =>
+                          setState(() => _devPanelOpen = !_devPanelOpen),
+                      onToggleSkipOtp: (v) =>
+                          setState(() => _devSkipOtp = v ?? true),
+                      onSelectPhone: _devSelectPhone,
+                      onImpersonate: _devSignIn,
+                      onQuickFill: () {
+                        // Jump straight to OTP step with master code pre-filled.
+                        if (_devSelectedPhone == null) {
+                          setState(() => _errorMessage =
+                              'Dev: pick a test number first.');
+                          return;
+                        }
+                        setState(() {
+                          _isOtpSent = true;
+                          _otpController.text =
+                              DevImpersonationConfig.masterOtp;
+                          _errorMessage = null;
+                        });
+                      },
+                    ),
                     // ────────────────────────────────────────────────────────
 
                     const SizedBox(height: 24),
