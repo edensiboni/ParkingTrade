@@ -287,7 +287,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                           : () {
                               final cleanPhone = _phoneController.text
                                   .replaceAll(RegExp(r'[^0-9]'), '');
-                              final devEmail = 'dev_$cleanPhone@parking.test';
+                              final devEmail = 'dev_$cleanPhone@parkingtrade.com';
                               _devBypassLogin(devEmail);
                             },
                       child: _isLoading
