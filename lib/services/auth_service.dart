@@ -206,7 +206,14 @@ class AuthService {
     }
   }
 
-  // Get current user profile
+  // Get current user profile.
+  //
+  // When no profile row is found by user.id, we attempt a phone-based
+  // linking pass (calling the link_profile_by_phone RPC) so that users
+  // who authenticated before migration 020 was deployed — or whose first
+  // OTP login created an auth.users row before the trigger matched — can
+  // still be linked to their pre-authorised apartment without having to
+  // sign out and back in.
   Future<Profile?> getCurrentProfile() async {
     final user = currentUser;
     if (user == null) return null;
@@ -218,12 +225,45 @@ class AuthService {
           .eq('id', user.id)
           .maybeSingle();
 
-      if (response == null) return null;
-      return Profile.fromJson(response);
+      if (response != null) return Profile.fromJson(response);
+
+      // No profile found by id — try to link via phone.
+      await _tryLinkProfileByPhone(user);
+
+      // Re-query after the linking attempt.
+      final retried = await _supabase
+          .from('profiles')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (retried == null) return null;
+      return Profile.fromJson(retried);
     } catch (e) {
       // If profile doesn't exist or there's an error, return null
       // Return null so the app routes to the not-registered screen
       return null;
+    }
+  }
+
+  /// Attempts to link the current auth user to a pre-created profile (or
+  /// auto-create one) by calling the `link_profile_by_phone` database
+  /// function.  Silently ignores errors — the caller will simply route to
+  /// the not-registered screen if linking fails.
+  Future<void> _tryLinkProfileByPhone(User user) async {
+    final phone = user.phone;
+    if (phone == null || phone.isEmpty) return;
+
+    try {
+      // The RPC mirrors the trigger logic: it normalises the phone, searches
+      // profiles.phone and then authorized_apartments.residents, and creates /
+      // links the profile when a match is found.
+      await _supabase.rpc('link_profile_by_phone', params: {
+        'p_user_id': user.id,
+        'p_phone': normalisePhone(phone),
+      });
+    } catch (e) {
+      debugPrint('_tryLinkProfileByPhone: $e');
     }
   }
 
