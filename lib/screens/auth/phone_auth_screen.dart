@@ -110,6 +110,20 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   }
 
   Future<void> _devBypassLogin(String email) async {
+    // Guard: require a phone number before attempting bypass.
+    if (_phoneController.text.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Please enter a phone number first.'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -121,8 +135,31 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           email: email,
           password: 'DevPassword123!',
         );
-      } catch (e) {
-        // If user doesn't exist, auto-create and sign in
+      } on AuthException catch (signInErr) {
+        // Print full error to console for easy debugging.
+        // ignore: avoid_print
+        print('[DevBypass] signInWithPassword error: '
+            'message=${signInErr.message}, '
+            'statusCode=${signInErr.statusCode}, '
+            'code=${signInErr.code}');
+
+        final msg = signInErr.message.toLowerCase();
+
+        // Re-throw immediately for provider-level or signup-disabled errors so
+        // the outer catch can surface a clear, actionable message.
+        final isProviderError =
+            msg.contains('email_provider_disabled') ||
+            msg.contains('provider is disabled') ||
+            msg.contains('signup_disabled') ||
+            msg.contains('signups not allowed') ||
+            (signInErr.statusCode == '400' && msg.contains('email'));
+
+        if (isProviderError) rethrow;
+
+        // 429 = rate-limit, likely caused by "Confirm email" still enabled.
+        if (signInErr.statusCode == '429') rethrow;
+
+        // User likely doesn't exist — sign up then sign in.
         await Supabase.instance.client.auth.signUp(
           email: email,
           password: 'DevPassword123!',
@@ -134,12 +171,64 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         );
       }
       // AuthWrapper's onAuthStateChange listener handles navigation.
-    } catch (e) {
+    } on AuthException catch (authErr) {
+      // Print full error object for easy browser/terminal debugging.
+      // ignore: avoid_print
+      print('[DevBypass] AuthException: '
+          'message=${authErr.message}, '
+          'statusCode=${authErr.statusCode}, '
+          'code=${authErr.code}');
+
+      final msg = authErr.message.toLowerCase();
+
+      final String friendlyMessage;
+
+      if (authErr.statusCode == '429') {
+        // Rate-limit almost always means "Confirm Email" is still ON.
+        friendlyMessage =
+            '🛠️ Dev Tip: Turn OFF "Confirm Email" in Supabase Auth → Email provider settings, then try again.';
+      } else if (msg.contains('email_provider_disabled') ||
+          msg.contains('provider is disabled') ||
+          msg.contains('signup_disabled') ||
+          msg.contains('signups not allowed') ||
+          (authErr.statusCode == '400' && msg.contains('email'))) {
+        friendlyMessage =
+            '🛠️ Dev Tip: Enable "Email Provider" and "Allow Signups" in Supabase Auth settings.';
+      } else {
+        friendlyMessage = 'Dev bypass failed: ${authErr.message}';
+      }
+
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString().replaceAll('Exception: ', '');
           _isLoading = false;
+          _errorMessage = friendlyMessage;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(friendlyMessage),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('[DevBypass] Unexpected error: $e');
+
+      final friendlyMessage =
+          'Dev bypass failed: ${e.toString().replaceAll('Exception: ', '')}';
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = friendlyMessage;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(friendlyMessage),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
@@ -201,7 +290,13 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                               final devEmail = 'dev_$cleanPhone@parking.test';
                               _devBypassLogin(devEmail);
                             },
-                      child: const Text('🛠️ Dev: Bypass SMS'),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 16,
+                              width: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('🛠️ Dev: Bypass SMS'),
                     ),
 
                     const SizedBox(height: 8),
