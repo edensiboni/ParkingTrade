@@ -99,19 +99,10 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
-    // ── Guard: this auth user must not already have a profile ─────────────────
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', authUserId)
-      .maybeSingle()
-
-    if (existingProfile) {
-      return new Response(
-        JSON.stringify({ error: 'A profile already exists for this account' }),
-        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
-    }
+    // NOTE: We intentionally do NOT block on an existing profile here.
+    // Google OAuth (and some phone/OTP flows) trigger an auth hook that
+    // auto-creates a bare profiles row on first sign-in. Step 3 below uses
+    // upsert so that pre-existing rows are updated rather than rejected.
 
     // ── 1. Create building ─────────────────────────────────────────────────────
     // Generate a unique invite code
@@ -174,22 +165,28 @@ serve(async (req) => {
       )
     }
 
-    // ── 3. Create admin profile keyed by the real auth.users.id ─────────────
-    // Using the authenticated user's actual UUID satisfies the FK constraint
-    // immediately — no trigger or deferred linking needed.
-    // Admins use Google Auth so no phone number is required or stored here.
+    // ── 3. Upsert admin profile keyed by the real auth.users.id ─────────────
+    // Using upsert (onConflict: 'id') handles two cases:
+    //   a) No profile row yet → INSERT (phone/OTP users without an auth hook).
+    //   b) Row already exists → UPDATE (Google OAuth users whose auth hook
+    //      auto-created a bare profile row on first sign-in).
+    // This replaces the old INSERT + 409 guard pattern that always failed for
+    // Google OAuth users.
     const { error: profileError } = await supabase
       .from('profiles')
-      .insert({
-        id: authUserId,                   // real auth.users.id — no placeholder needed
-        apartment_id: apartment.id,
-        display_name: adminDisplayName || null,
-        role: 'admin',
-        status: 'approved',               // admin needs no approval
-        is_apartment_admin: true,
-        receives_push_notifications: true,
-        receives_chat_notifications: true,
-      })
+      .upsert(
+        {
+          id: authUserId,                   // PK — real auth.users.id
+          apartment_id: apartment.id,
+          display_name: adminDisplayName || null,
+          role: 'admin',
+          status: 'approved',               // admin needs no approval
+          is_apartment_admin: true,
+          receives_push_notifications: true,
+          receives_chat_notifications: true,
+        },
+        { onConflict: 'id' },             // UPDATE the existing row if id already exists
+      )
 
     if (profileError) {
       // Roll back building + apartment
