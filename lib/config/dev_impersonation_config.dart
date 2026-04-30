@@ -9,9 +9,9 @@
 //   1. Make sure the phone number exists in Supabase `auth.users` AND has a
 //      matching row in `profiles` (i.e. is a registered resident).
 //   2. Also create a Supabase Auth email+password user whose email follows the
-//      pattern  dev+<digits>@parkingtrade.dev  (replace <digits> with the
+//      pattern  dev_<digits>@parkingtrade.dev  (replace <digits> with the
 //      national phone digits, no country code, no leading zero).
-//      e.g. for +972523552350 → dev+523552350@parkingtrade.dev
+//      e.g. for +972523552350 → dev_523552350@parkingtrade.dev
 //   3. Add an entry to [testNumbers] below.
 //
 // WHY email+password?
@@ -30,9 +30,9 @@ class DevImpersonationConfig {
   static const String masterOtp = '123456';
 
   /// Prefix used to derive the shadow email for each test number.
-  /// e.g. +972523552350 → "dev+523552350@parkingtrade.dev"
+  /// e.g. +972523552350 → "dev_523552350@parkingtrade.dev"
   static const String emailDomain = 'parkingtrade.dev';
-  static const String emailPrefix = 'dev+';
+  static const String emailPrefix = 'dev_';
 
   /// Registered test phone numbers shown in the dev picker.
   /// Key   = human-readable label shown in the UI.
