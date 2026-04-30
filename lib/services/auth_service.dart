@@ -142,6 +142,34 @@ class AuthService {
         password: password,
       );
     } on AuthException catch (e) {
+      // Shadow user is missing (deleted from Supabase) — auto-create it and retry.
+      final isInvalidCredentials = e.message.toLowerCase().contains('invalid') ||
+          e.message.toLowerCase().contains('credentials') ||
+          e.message.toLowerCase().contains('not found') ||
+          e.statusCode == '400';
+
+      if (isInvalidCredentials) {
+        print('Shadow user not found, creating new one...');
+        try {
+          await _supabase.auth.signUp(
+            email: shadowEmail,
+            password: password,
+          );
+          print('Shadow user created: $shadowEmail — retrying sign-in...');
+          await Future.delayed(const Duration(seconds: 1));
+          return await _supabase.auth.signInWithPassword(
+            email: shadowEmail,
+            password: password,
+          );
+        } on AuthException catch (signUpError) {
+          throw Exception(
+            'Dev login failed (auto-create also failed): ${signUpError.message}',
+          );
+        } catch (signUpError) {
+          throw Exception('Dev login failed (auto-create also failed): $signUpError');
+        }
+      }
+
       throw Exception(
         e.message.isNotEmpty
             ? 'Dev login failed: ${e.message}'
