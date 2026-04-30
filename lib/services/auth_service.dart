@@ -123,11 +123,10 @@ class AuthService {
     );
   }
 
-  /// Dev-only: impersonate a registered resident by signing in with the
-  /// shadow email/password account that mirrors their phone profile.
+  /// Dev-only: sign in with a shadow email/password account.
   ///
-  /// [shadowEmail] — derived from [DevImpersonationConfig.shadowEmail].
-  /// [password]    — the password set on that shadow Supabase Auth account.
+  /// [shadowEmail] — e.g. dev_<digits>@parking.test
+  /// [password]    — the password set on that Supabase Auth account.
   ///
   /// This method is intentionally NOT gated by kDebugMode so it compiles in
   /// release; the caller (PhoneAuthScreen) gates the UI with kDebugMode, which

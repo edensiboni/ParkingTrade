@@ -1,8 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
-import '../../config/dev_impersonation_config.dart';
 
 // ---------------------------------------------------------------------------
 // Phone normalisation is handled by AuthService.normalisePhone.
@@ -27,20 +26,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
-  // ── Dev impersonation state ────────────────────────────────────────────────
-  // All of this is tree-shaken away in release builds because every usage
-  // is inside `if (kDebugMode)` blocks.
-  bool _devPanelOpen = false;
-  String? _devSelectedPhone; // E.164 of the chosen test number
-  bool _devSkipOtp = true;   // when true, fake the OTP step entirely
-  final _devPasswordController = TextEditingController();
-  // ──────────────────────────────────────────────────────────────────────────
-
   @override
   void dispose() {
     _phoneController.dispose();
     _otpController.dispose();
-    if (DevImpersonationConfig.enabled) _devPasswordController.dispose();
     super.dispose();
   }
 
@@ -52,17 +41,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final sanitized = _normalisedPhone;
-
-    // ── Dev mode: skip real SMS if master code will be used ─────────────────
-    if (DevImpersonationConfig.enabled && _devSkipOtp) {
-      setState(() {
-        _isOtpSent = true;
-        _otpController.text = DevImpersonationConfig.masterOtp;
-        _errorMessage = null;
-      });
-      return;
-    }
-    // ────────────────────────────────────────────────────────────────────────
 
     setState(() {
       _isLoading = true;
@@ -110,15 +88,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       return;
     }
 
-    // ── Dev mode: master code → sign in via shadow email/password ───────────
-    if (DevImpersonationConfig.enabled &&
-        _devSkipOtp &&
-        _otpController.text.trim() == DevImpersonationConfig.masterOtp) {
-      await _devSignIn();
-      return;
-    }
-    // ────────────────────────────────────────────────────────────────────────
-
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -140,59 +109,40 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     }
   }
 
-  // ── Dev helpers ────────────────────────────────────────────────────────────
-
-  /// Called when the user taps "Impersonate" or enters the master code.
-  /// Signs in via the shadow email/password account so we get a real Supabase
-  /// session and can access all real data for that resident.
-  Future<void> _devSignIn() async {
-    if (!DevImpersonationConfig.enabled) return;
-
-    final phone = _devSelectedPhone ?? _normalisedPhone;
-    if (phone.isEmpty) {
-      setState(() => _errorMessage = 'Dev: pick a test number first.');
-      return;
-    }
-
-    final password = _devPasswordController.text.trim();
-    if (password.isEmpty) {
-      setState(() => _errorMessage = 'Dev: enter the shadow account password.');
-      return;
-    }
-
-    final email = DevImpersonationConfig.shadowEmail(phone);
-
+  Future<void> _devBypassLogin(String email) async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      await _authService.devImpersonate(
-        shadowEmail: email,
-        password: password,
-      );
+      try {
+        await Supabase.instance.client.auth.signInWithPassword(
+          email: email,
+          password: 'DevPassword123!',
+        );
+      } catch (e) {
+        // If user doesn't exist, auto-create and sign in
+        await Supabase.instance.client.auth.signUp(
+          email: email,
+          password: 'DevPassword123!',
+        );
+        await Future.delayed(const Duration(milliseconds: 500));
+        await Supabase.instance.client.auth.signInWithPassword(
+          email: email,
+          password: 'DevPassword123!',
+        );
+      }
       // AuthWrapper's onAuthStateChange listener handles navigation.
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceAll('Exception: ', '');
+          _isLoading = false;
+        });
+      }
     }
   }
-
-  /// Fills the phone field with the selected dev number and optionally jumps
-  /// straight to the OTP step (faking the SMS send).
-  void _devSelectPhone(String e164) {
-    if (!DevImpersonationConfig.enabled) return;
-    setState(() {
-      _devSelectedPhone = e164;
-      _phoneController.text = e164;
-      _errorMessage = null;
-    });
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
 
   Future<void> _signInWithGoogle() async {
     setState(() {
@@ -241,49 +191,20 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                       _ErrorBanner(message: _errorMessage!),
                     ],
 
-                    // ── Dev Impersonation Panel (always visible when enabled) ─
-                    const SizedBox(height: 32),
-                    const Text(
-                      'BACKDOOR ACTIVE',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Color(0xFFF59E0B),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                        letterSpacing: 1.5,
-                      ),
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              final cleanPhone = _phoneController.text
+                                  .replaceAll(RegExp(r'[^0-9]'), '');
+                              final devEmail = 'dev_$cleanPhone@parking.test';
+                              _devBypassLogin(devEmail);
+                            },
+                      child: const Text('🛠️ Dev: Bypass SMS'),
                     ),
-                    const SizedBox(height: 8),
-                    _DevImpersonationPanel(
-                      isOpen: _devPanelOpen,
-                      isLoading: _isLoading,
-                      skipOtp: _devSkipOtp,
-                      selectedPhone: _devSelectedPhone,
-                      passwordController: _devPasswordController,
-                      onTogglePanel: () =>
-                          setState(() => _devPanelOpen = !_devPanelOpen),
-                      onToggleSkipOtp: (v) =>
-                          setState(() => _devSkipOtp = v ?? true),
-                      onSelectPhone: _devSelectPhone,
-                      onImpersonate: _devSignIn,
-                      onQuickFill: () {
-                        // Jump straight to OTP step with master code pre-filled.
-                        if (_devSelectedPhone == null) {
-                          setState(() => _errorMessage =
-                              'Dev: pick a test number first.');
-                          return;
-                        }
-                        setState(() {
-                          _isOtpSent = true;
-                          _otpController.text =
-                              DevImpersonationConfig.masterOtp;
-                          _errorMessage = null;
-                        });
-                      },
-                    ),
-                    // ────────────────────────────────────────────────────────
 
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 8),
                     Text(
                       'auth.privacy_note'.tr(),
                       textAlign: TextAlign.center,
@@ -424,278 +345,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           child: Text('auth.different_phone'.tr()),
         ),
       ],
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Dev Impersonation Panel widget
-// Only instantiated when kDebugMode == true (tree-shaken in release).
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _DevImpersonationPanel extends StatelessWidget {
-  final bool isOpen;
-  final bool isLoading;
-  final bool skipOtp;
-  final String? selectedPhone;
-  final TextEditingController passwordController;
-  final VoidCallback onTogglePanel;
-  final ValueChanged<bool?> onToggleSkipOtp;
-  final ValueChanged<String> onSelectPhone;
-  final VoidCallback onImpersonate;
-  final VoidCallback onQuickFill;
-
-  const _DevImpersonationPanel({
-    required this.isOpen,
-    required this.isLoading,
-    required this.skipOtp,
-    required this.selectedPhone,
-    required this.passwordController,
-    required this.onTogglePanel,
-    required this.onToggleSkipOtp,
-    required this.onSelectPhone,
-    required this.onImpersonate,
-    required this.onQuickFill,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    // Dev panel accent colour — amber so it's visually distinct from prod UI.
-    const devColor = Color(0xFFF59E0B); // amber-500
-
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: devColor.withValues(alpha: 0.6), width: 1.5),
-        borderRadius: BorderRadius.circular(12),
-        color: devColor.withValues(alpha: 0.06),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ── Header / toggle ──────────────────────────────────────────────
-          InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: onTogglePanel,
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Row(
-                children: [
-                  const Icon(Icons.developer_mode,
-                      size: 18, color: devColor),
-                  const SizedBox(width: 8),
-                  Text(
-                    '🛠 Dev Impersonation Mode',
-                    style: textTheme.labelLarge?.copyWith(color: devColor),
-                  ),
-                  const Spacer(),
-                  Icon(
-                    isOpen
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    color: devColor,
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          if (isOpen) ...[
-            Divider(
-                height: 1,
-                color: devColor.withValues(alpha: 0.3)),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // ── Explainer ──────────────────────────────────────────
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Skip real SMS and log in as any registered resident.\n'
-                      'Requires a shadow Supabase account (see DevImpersonationConfig).\n'
-                      'Master OTP: ${DevImpersonationConfig.masterOtp}',
-                      style: textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // ── Phone picker ───────────────────────────────────────
-                  Text('Test number:',
-                      style: textTheme.labelMedium),
-                  const SizedBox(height: 6),
-                  ...DevImpersonationConfig.testNumbers.entries
-                      .map((entry) => _PhoneChip(
-                            label: entry.key,
-                            e164: entry.value,
-                            isSelected: selectedPhone == entry.value,
-                            onTap: () => onSelectPhone(entry.value),
-                          )),
-
-                  const SizedBox(height: 12),
-
-                  // ── Shadow password ────────────────────────────────────
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    enabled: !isLoading,
-                    decoration: InputDecoration(
-                      labelText: 'Shadow account password',
-                      hintText: 'password set in Supabase Auth',
-                      prefixIcon: const Icon(Icons.lock_outline, size: 18),
-                      isDense: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // ── Skip OTP toggle ────────────────────────────────────
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: skipOtp,
-                        onChanged: isLoading ? null : onToggleSkipOtp,
-                        activeColor: devColor,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          'Skip OTP step (pre-fill ${DevImpersonationConfig.masterOtp})',
-                          style: textTheme.bodySmall,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // ── Action buttons ─────────────────────────────────────
-                  Row(
-                    children: [
-                      // Quick-fill: jump to OTP step with master code
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: isLoading ? null : onQuickFill,
-                          icon: const Icon(Icons.fast_forward, size: 16),
-                          label: const Text('Go to OTP step'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: devColor,
-                            side: const BorderSide(color: devColor),
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      // Impersonate: sign in directly with shadow account
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: isLoading ? null : onImpersonate,
-                          icon: isLoading
-                              ? const SizedBox(
-                                  height: 14,
-                                  width: 14,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white),
-                                )
-                              : const Icon(Icons.login, size: 16),
-                          label: const Text('Impersonate'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: devColor,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _PhoneChip extends StatelessWidget {
-  final String label;
-  final String e164;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _PhoneChip({
-    required this.label,
-    required this.e164,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const devColor = Color(0xFFF59E0B);
-    final scheme = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? devColor.withValues(alpha: 0.15)
-                : scheme.surfaceContainerHighest.withValues(alpha: 0.4),
-            border: Border.all(
-              color: isSelected
-                  ? devColor
-                  : scheme.outlineVariant,
-              width: isSelected ? 1.5 : 1,
-            ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                isSelected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                size: 16,
-                color: isSelected ? devColor : scheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isSelected
-                            ? devColor
-                            : scheme.onSurface,
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.normal,
-                      ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
