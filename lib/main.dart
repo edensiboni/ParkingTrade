@@ -196,10 +196,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
         state.event == AuthChangeEvent.tokenRefreshed) {
 
       if (_authService.currentSession != null) {
-        // tokenRefreshed fires on every token renewal after the user is already
-        // on the home screen — skip redundant navigation in that case.
-        if (state.event == AuthChangeEvent.tokenRefreshed && _hasNavigated) {
-          debugPrint('--- AuthWrapper: tokenRefreshed after navigation, skipping ---');
+        // Skip navigation when the login screen already handled it imperatively
+        // (signedIn) or when a token refresh fires while the user is already on
+        // a post-login screen (tokenRefreshed).  Both cases are covered by the
+        // _hasNavigated flag so we don't push a duplicate route.
+        if (_hasNavigated &&
+            (state.event == AuthChangeEvent.signedIn ||
+             state.event == AuthChangeEvent.tokenRefreshed)) {
+          debugPrint('--- AuthWrapper: ${state.event} after imperative navigation, skipping ---');
           return;
         }
         await _navigateBasedOnProfile();
@@ -232,6 +236,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return;
     }
     _navigating = true;
+    // Set speculatively before the async gap so any concurrent stream event
+    // (e.g. signedIn arriving while we await the profile fetch) sees the flag
+    // and skips a redundant navigation call.
+    _hasNavigated = true;
 
     try {
       debugPrint('--- AuthWrapper: fetching profile... ---');
@@ -242,8 +250,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         debugPrint('--- AuthWrapper: widget unmounted after profile fetch, aborting ---');
         return;
       }
-
-      _hasNavigated = true;
 
       // No pre-created profile found for this user.
       if (profile == null || profile.apartmentId == null) {
@@ -273,9 +279,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
     } catch (e) {
       debugPrint('--- AuthWrapper: error in _navigateBasedOnProfile: $e ---');
       if (!mounted) return;
-      _hasNavigated = true;
       final user = _authService.currentUser;
       if (user == null) {
+        // No user — reset so the next real login can navigate.
+        _hasNavigated = false;
         Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
       } else {
         Navigator.of(context).pushNamedAndRemoveUntil('/not-registered', (route) => false);

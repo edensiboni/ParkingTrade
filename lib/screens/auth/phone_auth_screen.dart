@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../models/profile.dart';
 import '../../services/auth_service.dart';
 import 'admin_login_screen.dart';
 
@@ -100,10 +101,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         _otpController.text.trim(),
       );
       if (response.user != null) {
-        // AuthWrapper's onAuthStateChange listener handles navigation.
-        // Clear the spinner here so the screen doesn't hang if the
-        // auth-state event arrives while this widget is still mounted.
-        if (mounted) setState(() => _isLoading = false);
+        // Navigate imperatively so we don't depend on the AuthWrapper
+        // stream firing correctly on Flutter Web.
+        await _navigateAfterLogin();
       }
     } catch (e) {
       if (mounted) {
@@ -176,10 +176,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           password: 'DevPassword123!',
         );
       }
-      // AuthWrapper's onAuthStateChange listener handles navigation.
-      // Clear the spinner so the screen doesn't hang while the auth-state
-      // event is being processed in the background.
-      if (mounted) setState(() => _isLoading = false);
+      // Navigate imperatively so we don't depend on the AuthWrapper
+      // stream firing correctly on Flutter Web.
+      await _navigateAfterLogin();
     } on AuthException catch (authErr) {
       // Print full error object for easy browser/terminal debugging.
       // ignore: avoid_print
@@ -238,6 +237,49 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             behavior: SnackBarBehavior.floating,
           ),
         );
+      }
+    }
+  }
+
+  /// Fetches the current profile and pushes the appropriate named route,
+  /// replacing the entire navigation stack.  Called imperatively after a
+  /// successful OTP verification or dev-bypass sign-in so that we do NOT
+  /// rely on AuthWrapper's onAuthStateChange stream (which can fire late or
+  /// silently drop the event on Flutter Web).
+  ///
+  /// Keeps _isLoading = true while the profile fetch is in-flight so the
+  /// user sees a spinner until the navigation actually happens.  Only sets
+  /// _isLoading = false in the catch path (an error) — on the happy path the
+  /// widget is removed from the tree by the navigation so the flag is moot.
+  Future<void> _navigateAfterLogin() async {
+    // _isLoading is already true — leave it so the spinner keeps showing.
+    try {
+      final profile = await _authService.getCurrentProfile();
+
+      if (!mounted) return;
+
+      final String route;
+      if (profile == null || profile.apartmentId == null) {
+        route = profile != null && profile.isAdmin
+            ? '/admin-dashboard'
+            : '/not-registered';
+      } else if (profile.isAdmin) {
+        route = '/admin-dashboard';
+      } else if (profile.status == ProfileStatus.pending) {
+        route = '/pending-approval';
+      } else if (profile.status == ProfileStatus.rejected) {
+        route = '/rejected';
+      } else {
+        route = '/home';
+      }
+
+      Navigator.of(context).pushNamedAndRemoveUntil(route, (route) => false);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceAll('Exception: ', '');
+          _isLoading = false;
+        });
       }
     }
   }
