@@ -17,7 +17,11 @@
     "phone_required": "Please enter your phone number",
     "phone_invalid": "Enter a valid phone number, e.g. 050-123-4567",
     "otp_required": "Please enter the code",
-    "send_failed": "Failed to send code to {phone}. Please check your number."
+    "send_failed": "Failed to send code to {phone}. Please check your number.",
+    "admin_login_link": "Building admin? Log in here",
+    "admin_welcome": "Admin Sign In",
+    "admin_tagline": "Sign in with your Google account to manage your building.",
+    "back_to_tenant": "Back to Tenant Login"
   },
 
   "setup": {

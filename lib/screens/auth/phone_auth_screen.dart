@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
+import 'admin_login_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Phone normalisation is handled by AuthService.normalisePhone.
@@ -233,21 +234,12 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     }
   }
 
-  Future<void> _signInWithGoogle() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    try {
-      await _authService.signInWithGoogle();
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = e.toString().replaceAll('Exception: ', '');
-          _isLoading = false;
-        });
-      }
-    }
+  void _navigateToAdminLogin() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const AdminLoginScreen(),
+      ),
+    );
   }
 
   @override
@@ -308,6 +300,16 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: _isLoading ? null : _navigateToAdminLogin,
+                      child: Text(
+                        'auth.admin_login_link'.tr(),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
@@ -322,32 +324,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        OutlinedButton.icon(
-          onPressed: _isLoading ? null : _signInWithGoogle,
-          icon: const Icon(Icons.g_mobiledata, size: 28),
-          label: Text('auth.continue_google'.tr()),
-        ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: Divider(color: scheme.outlineVariant),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'auth.or'.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            Expanded(
-              child: Divider(color: scheme.outlineVariant),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
         TextFormField(
           controller: _phoneController,
           keyboardType: TextInputType.phone,

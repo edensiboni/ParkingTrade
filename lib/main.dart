@@ -15,6 +15,7 @@ import 'services/navigation_service.dart';
 import 'services/notification_service_stub.dart' if (dart.library.io) 'services/notification_service.dart';
 import 'screens/auth/dev_auth_screen.dart';
 import 'screens/auth/phone_auth_screen.dart';
+import 'screens/auth/admin_login_screen.dart';
 import 'screens/auth/not_registered_screen.dart';
 import 'screens/auth/create_building_screen.dart';
 import 'screens/building/pending_approval_screen.dart';
@@ -120,6 +121,7 @@ class ParkingTradeApp extends StatelessWidget {
         '/auth': (context) => DevAuthConfig.isEnabled
             ? const DevAuthScreen()
             : const PhoneAuthScreen(),
+        '/admin-login': (context) => const AdminLoginScreen(),
         '/not-registered': (context) => const NotRegisteredScreen(),
         '/pending-approval': (context) => const PendingApprovalScreen(),
         '/rejected': (context) => const RejectedScreen(),
