@@ -100,13 +100,18 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         _otpController.text.trim(),
       );
       if (response.user != null) {
-        // AuthWrapper handles routing.
+        // AuthWrapper's onAuthStateChange listener handles navigation.
+        // Clear the spinner here so the screen doesn't hang if the
+        // auth-state event arrives while this widget is still mounted.
+        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceAll('Exception: ', '');
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -172,6 +177,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         );
       }
       // AuthWrapper's onAuthStateChange listener handles navigation.
+      // Clear the spinner so the screen doesn't hang while the auth-state
+      // event is being processed in the background.
+      if (mounted) setState(() => _isLoading = false);
     } on AuthException catch (authErr) {
       // Print full error object for easy browser/terminal debugging.
       // ignore: avoid_print
