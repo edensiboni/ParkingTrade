@@ -146,34 +146,38 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final _authService = AuthService();
   bool _isLoading = true;
-  // Guard: only one _navigateBasedOnProfile() call may run at a time.
-  // Without this, _checkAuth() and _handleAuthChange(initialSession) both
-  // fire on startup when a persisted session exists, causing two concurrent
-  // navigation calls. The second one can lose the race and leave _isLoading
-  // stuck at true if the widget has already navigated away.
+
+  // Tracks whether a _navigateBasedOnProfile() call is currently in-flight.
+  // Reset to false in the finally block so subsequent sign-in events (e.g.
+  // tokenRefreshed) can always trigger a fresh navigation if needed.
   bool _navigating = false;
+
+  // True once we have successfully navigated away from AuthWrapper.
+  // Used to suppress redundant navigation calls (e.g. tokenRefreshed after
+  // the initial signedIn already pushed /home).
+  bool _hasNavigated = false;
+
   StreamSubscription<AuthState>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
-    _checkAuth();
+    debugPrint('--- AuthWrapper: initState ---');
+
+    // The auth stream always fires 'initialSession' on startup (with a session
+    // if one is persisted, or null if not), so we rely entirely on the stream
+    // for startup routing — no separate _checkAuth() call is needed.
     _authSubscription = _authService.authStateChanges.listen(
       (state) {
-        // Handle async operation properly to avoid promise rejection
+        debugPrint('--- AuthWrapper: authStateChange event=${state.event} ---');
         _handleAuthChange(state).catchError((error) {
-          if (mounted) {
-            debugPrint('Error handling auth change: $error');
-            // Always clear the spinner even on unexpected errors.
-            setState(() => _isLoading = false);
-          }
+          debugPrint('--- AuthWrapper: error handling auth change: $error ---');
+          if (mounted) setState(() => _isLoading = false);
         });
       },
       onError: (error) {
-        if (mounted) {
-          debugPrint('Auth state stream error: $error');
-          setState(() => _isLoading = false);
-        }
+        debugPrint('--- AuthWrapper: auth stream error: $error ---');
+        if (mounted) setState(() => _isLoading = false);
       },
     );
   }
@@ -184,98 +188,103 @@ class _AuthWrapperState extends State<AuthWrapper> {
     super.dispose();
   }
 
-  Future<void> _checkAuth() async {
-    // Use currentSession (not just currentUser) so we confirm a valid,
-    // persisted session exists before bypassing the phone auth screen.
-    final session = _authService.currentSession;
-    if (session != null) {
-      await _navigateBasedOnProfile();
-    } else {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
   Future<void> _handleAuthChange(AuthState state) async {
+    debugPrint('--- AuthWrapper: _handleAuthChange event=${state.event} hasNavigated=$_hasNavigated navigating=$_navigating ---');
+
     if (state.event == AuthChangeEvent.signedIn ||
         state.event == AuthChangeEvent.initialSession ||
         state.event == AuthChangeEvent.tokenRefreshed) {
-      // On app restart with a persisted session the SDK fires initialSession.
-      // tokenRefreshed fires when the access token is silently renewed.
-      // In all these cases we want to route based on the user's profile.
+
       if (_authService.currentSession != null) {
+        // tokenRefreshed fires on every token renewal after the user is already
+        // on the home screen — skip redundant navigation in that case.
+        if (state.event == AuthChangeEvent.tokenRefreshed && _hasNavigated) {
+          debugPrint('--- AuthWrapper: tokenRefreshed after navigation, skipping ---');
+          return;
+        }
         await _navigateBasedOnProfile();
       } else if (state.event == AuthChangeEvent.initialSession) {
-        // initialSession fired but session is null → no stored session, show auth.
+        // initialSession fired but session is null → no stored session.
+        debugPrint('--- AuthWrapper: initialSession with no session, showing auth ---');
         if (mounted) setState(() => _isLoading = false);
       }
     } else if (state.event == AuthChangeEvent.signedOut) {
+      debugPrint('--- AuthWrapper: signed out, routing to /auth ---');
+      _hasNavigated = false;
       if (mounted) {
-        // Use pushNamedAndRemoveUntil to clear navigation stack
         Navigator.of(context).pushNamedAndRemoveUntil(
           '/auth',
           (route) => false,
         );
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
 
   Future<void> _navigateBasedOnProfile() async {
-    // Prevent concurrent navigation calls (e.g. _checkAuth + initialSession
-    // both firing on startup). Only the first caller proceeds; subsequent
-    // calls return immediately so _isLoading is not double-cleared after the
-    // widget has already navigated away.
-    if (_navigating) return;
+    debugPrint('--- AuthWrapper: _navigateBasedOnProfile triggered, navigating=$_navigating hasNavigated=$_hasNavigated ---');
+
+    // Prevent two concurrent profile-fetch + navigation calls.
+    // NOTE: _hasNavigated is intentionally NOT checked here so that a
+    // signedIn event after a sign-out can always re-navigate.
+    if (_navigating) {
+      debugPrint('--- AuthWrapper: already navigating, skipping ---');
+      return;
+    }
     _navigating = true;
 
     try {
+      debugPrint('--- AuthWrapper: fetching profile... ---');
       final profile = await _authService.getCurrentProfile();
+      debugPrint('--- AuthWrapper: profile fetched: $profile ---');
 
-      if (!mounted) return;
+      if (!mounted) {
+        debugPrint('--- AuthWrapper: widget unmounted after profile fetch, aborting ---');
+        return;
+      }
+
+      _hasNavigated = true;
 
       // No pre-created profile found for this user.
       if (profile == null || profile.apartmentId == null) {
-        // Building admins may have no apartment_id yet if they were
-        // created by the create-building edge function before linking.
-        // Route admins directly to the dashboard; others to not-registered.
         if (profile != null && profile.isAdmin) {
-          Navigator.of(context).pushReplacementNamed('/admin-dashboard');
+          debugPrint('--- AuthWrapper: navigating to /admin-dashboard (admin, no apartment) ---');
+          Navigator.of(context).pushNamedAndRemoveUntil('/admin-dashboard', (route) => false);
         } else {
-          Navigator.of(context).pushReplacementNamed('/not-registered');
+          debugPrint('--- AuthWrapper: navigating to /not-registered ---');
+          Navigator.of(context).pushNamedAndRemoveUntil('/not-registered', (route) => false);
         }
         return;
       }
 
-      // Admin users go straight to the admin dashboard regardless of status.
       if (profile.isAdmin) {
-        Navigator.of(context).pushReplacementNamed('/admin-dashboard');
+        debugPrint('--- AuthWrapper: navigating to /admin-dashboard ---');
+        Navigator.of(context).pushNamedAndRemoveUntil('/admin-dashboard', (route) => false);
       } else if (profile.status == ProfileStatus.pending) {
-        Navigator.of(context).pushReplacementNamed('/pending-approval');
+        debugPrint('--- AuthWrapper: navigating to /pending-approval ---');
+        Navigator.of(context).pushNamedAndRemoveUntil('/pending-approval', (route) => false);
       } else if (profile.status == ProfileStatus.rejected) {
-        Navigator.of(context).pushReplacementNamed('/rejected');
+        debugPrint('--- AuthWrapper: navigating to /rejected ---');
+        Navigator.of(context).pushNamedAndRemoveUntil('/rejected', (route) => false);
       } else {
-        // Approved resident → parking spots home.
-        Navigator.of(context).pushReplacementNamed('/home');
+        debugPrint('--- AuthWrapper: navigating to /home ---');
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
       }
     } catch (e) {
-      debugPrint('Error navigating based on profile: $e');
+      debugPrint('--- AuthWrapper: error in _navigateBasedOnProfile: $e ---');
       if (!mounted) return;
+      _hasNavigated = true;
       final user = _authService.currentUser;
       if (user == null) {
-        Navigator.of(context).pushReplacementNamed('/auth');
+        Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
       } else {
-        Navigator.of(context).pushReplacementNamed('/not-registered');
+        Navigator.of(context).pushNamedAndRemoveUntil('/not-registered', (route) => false);
       }
     } finally {
-      // Always clear the loading spinner, even if an unhandled exception
-      // escapes the catch block — this is what previously caused the
-      // infinite spinner bug.
+      // Always reset the in-flight guard so future sign-in events can navigate.
       _navigating = false;
       if (mounted) setState(() => _isLoading = false);
+      debugPrint('--- AuthWrapper: _navigateBasedOnProfile done, navigating=false ---');
     }
   }
 
