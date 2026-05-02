@@ -216,6 +216,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
   final _authService = AuthService();
   bool _isLoading = true;
   bool _isSetupMode = false;
+  // Guard: only one _navigateBasedOnProfile() call may run at a time.
+  // Without this, _checkAuth() and _handleAuthChange(initialSession) both
+  // fire on startup when a persisted session exists, causing two concurrent
+  // navigation calls. The second one can lose the race and leave _isLoading
+  // stuck at true if the widget has already navigated away.
+  bool _navigating = false;
   StreamSubscription<AuthState>? _authSubscription;
 
   @override
@@ -229,12 +235,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
         _handleAuthChange(state).catchError((error) {
           if (mounted) {
             debugPrint('Error handling auth change: $error');
+            // Always clear the spinner even on unexpected errors.
+            setState(() => _isLoading = false);
           }
         });
       },
       onError: (error) {
         if (mounted) {
           debugPrint('Auth state stream error: $error');
+          setState(() => _isLoading = false);
         }
       },
     );
@@ -269,9 +278,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       }
       await _navigateBasedOnProfile();
     } else {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -303,18 +310,23 @@ class _AuthWrapperState extends State<AuthWrapper> {
       }
     } else if (state.event == AuthChangeEvent.signedOut) {
       if (mounted) {
+        setState(() => _isLoading = false);
         Navigator.of(context).pushNamedAndRemoveUntil(
           '/auth',
           (route) => false,
         );
-        setState(() {
-          _isLoading = false;
-        });
       }
     }
   }
 
   Future<void> _navigateBasedOnProfile() async {
+    // Prevent concurrent navigation calls (e.g. _checkAuth + initialSession
+    // both firing on startup). Only the first caller proceeds; subsequent
+    // calls return immediately so _isLoading is not double-cleared after the
+    // widget has already navigated away.
+    if (_navigating) return;
+    _navigating = true;
+
     try {
       final profile = await _authService.getCurrentProfile();
 
@@ -332,7 +344,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         } else {
           Navigator.of(context).pushReplacementNamed('/not-registered');
         }
-        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
@@ -348,17 +359,21 @@ class _AuthWrapperState extends State<AuthWrapper> {
         // approved regular member → go to parking spots
         Navigator.of(context).pushReplacementNamed('/home');
       }
-
-      if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       debugPrint('Error navigating based on profile: $e');
+      if (!mounted) return;
       final user = _authService.currentUser;
-      if (user == null && mounted) {
+      if (user == null) {
         Navigator.of(context).pushReplacementNamed('/auth');
-      } else if (mounted) {
+      } else {
         // Authenticated but profile fetch failed — treat as not registered.
         Navigator.of(context).pushReplacementNamed('/not-registered');
       }
+    } finally {
+      // Always clear the loading spinner, even if an unhandled exception
+      // escapes the catch block — this is what previously caused the
+      // infinite spinner bug.
+      _navigating = false;
       if (mounted) setState(() => _isLoading = false);
     }
   }

@@ -46,6 +46,9 @@ class Resident {
 /// allow-list used at OTP login time — a phone is recognised only if it
 /// appears inside [residents].
 ///
+/// [parkingSpotIdentifiers] holds the admin-assigned parking spot labels
+/// (e.g. "A1", "B2") added via migration 024.
+///
 /// Note: The Supabase column is `residents JSONB` (migration 019, which
 /// replaced the legacy `resident_phones TEXT[]` column from migration 018).
 class AuthorizedApartment {
@@ -53,6 +56,7 @@ class AuthorizedApartment {
   final String buildingId;
   final String unitNumber;
   final List<Resident> residents;
+  final List<String> parkingSpotIdentifiers;
   final DateTime createdAt;
 
   AuthorizedApartment({
@@ -60,6 +64,7 @@ class AuthorizedApartment {
     required this.buildingId,
     required this.unitNumber,
     required this.residents,
+    this.parkingSpotIdentifiers = const [],
     required this.createdAt,
   });
 
@@ -75,11 +80,21 @@ class AuthorizedApartment {
       }
     }
 
+    final rawSpots = json['parking_spot_identifiers'];
+    final spots = <String>[];
+    if (rawSpots is List) {
+      for (final s in rawSpots) {
+        final label = (s as String?)?.trim() ?? '';
+        if (label.isNotEmpty) spots.add(label);
+      }
+    }
+
     return AuthorizedApartment(
       id: json['id'] as String,
       buildingId: (json['building_id'] as String?) ?? '',
       unitNumber: json['unit_number'] as String,
       residents: residents,
+      parkingSpotIdentifiers: spots,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -90,6 +105,7 @@ class AuthorizedApartment {
       'building_id': buildingId,
       'unit_number': unitNumber,
       'residents': residents.map((r) => r.toJson()).toList(),
+      'parking_spot_identifiers': parkingSpotIdentifiers,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -99,6 +115,7 @@ class AuthorizedApartment {
     String? buildingId,
     String? unitNumber,
     List<Resident>? residents,
+    List<String>? parkingSpotIdentifiers,
     DateTime? createdAt,
   }) {
     return AuthorizedApartment(
@@ -106,13 +123,16 @@ class AuthorizedApartment {
       buildingId: buildingId ?? this.buildingId,
       unitNumber: unitNumber ?? this.unitNumber,
       residents: residents ?? this.residents,
+      parkingSpotIdentifiers:
+          parkingSpotIdentifiers ?? this.parkingSpotIdentifiers,
       createdAt: createdAt ?? this.createdAt,
     );
   }
 
   @override
   String toString() =>
-      'AuthorizedApartment($unitNumber, ${residents.length} residents)';
+      'AuthorizedApartment($unitNumber, ${residents.length} residents, '
+      '${parkingSpotIdentifiers.length} spots)';
 
   @override
   bool operator ==(Object other) =>

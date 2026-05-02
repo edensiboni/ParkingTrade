@@ -509,9 +509,14 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _phoneFocusNode = FocusNode();
+  final _spotController = TextEditingController();
+  final _spotFocusNode = FocusNode();
 
   /// Residents currently staged inside the "Add apartment" form (before submission).
   final List<Resident> _stagedResidents = [];
+
+  /// Parking spot identifiers currently staged inside the "Add apartment" form.
+  final List<String> _stagedSpots = [];
 
   List<AuthorizedApartment> _apartments = [];
   bool _isLoading = true;
@@ -530,6 +535,8 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
     _nameController.dispose();
     _phoneController.dispose();
     _phoneFocusNode.dispose();
+    _spotController.dispose();
+    _spotFocusNode.dispose();
     super.dispose();
   }
 
@@ -580,11 +587,36 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
     setState(() => _stagedResidents.remove(resident));
   }
 
+  /// Validates the spot field and, if valid, appends a spot chip.
+  bool _stageSpotFromField() {
+    final raw = _spotController.text.trim();
+    if (raw.isEmpty) return false;
+    if (_stagedSpots.contains(raw)) {
+      AppSnack.error(context, 'admin.apartments.spot_already_added'.tr());
+      return false;
+    }
+    setState(() {
+      _stagedSpots.add(raw);
+      _spotController.clear();
+    });
+    _spotFocusNode.requestFocus();
+    return true;
+  }
+
+  void _removeStagedSpot(String spot) {
+    setState(() => _stagedSpots.remove(spot));
+  }
+
   Future<void> _addApartment() async {
     // If the admin typed a phone (and optionally a name) without pressing the
     // inline Add button, fold that entry in now.
     if (_phoneController.text.trim().isNotEmpty) {
       if (!_stageResidentFromFields()) return;
+    }
+
+    // Same for any partially-typed spot identifier.
+    if (_spotController.text.trim().isNotEmpty) {
+      if (!_stageSpotFromField()) return;
     }
 
     if (!_formKey.currentState!.validate()) return;
@@ -599,6 +631,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
       await widget.adminService.addAuthorizedApartment(
         unitNumber: _unitController.text.trim(),
         residents: List<Resident>.from(_stagedResidents),
+        parkingSpotIdentifiers: List<String>.from(_stagedSpots),
       );
       if (!mounted) return;
       AppSnack.success(context, 'admin.apartments.added_success'.tr());
@@ -606,7 +639,9 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
         _unitController.clear();
         _nameController.clear();
         _phoneController.clear();
+        _spotController.clear();
         _stagedResidents.clear();
+        _stagedSpots.clear();
       });
       _loadApartments();
     } catch (e) {
@@ -618,17 +653,18 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
   }
 
   Future<void> _editApartment(AuthorizedApartment apt) async {
-    final updatedResidents = await showDialog<List<Resident>>(
+    final result = await showDialog<({List<Resident> residents, List<String> spots})>(
       context: context,
       builder: (context) => _EditApartmentDialog(apartment: apt),
     );
 
-    if (updatedResidents == null || !mounted) return;
+    if (result == null || !mounted) return;
 
     try {
       await widget.adminService.updateAuthorizedApartmentResidents(
         id: apt.id,
-        residents: updatedResidents,
+        residents: result.residents,
+        parkingSpotIdentifiers: result.spots,
       );
       if (!mounted) return;
       AppSnack.success(context, 'admin.apartments.saved_success'.tr());
@@ -767,15 +803,30 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          // Chips-based residents input — name + phone per entry.
+                          // Right-hand column: residents field + spots field stacked
                           Expanded(
-                            child: _ResidentChipsField(
-                              residents: _stagedResidents,
-                              nameController: _nameController,
-                              phoneController: _phoneController,
-                              phoneFocusNode: _phoneFocusNode,
-                              onAddResident: _stageResidentFromFields,
-                              onRemoveResident: _removeStagedResident,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Chips-based residents input — name + phone per entry.
+                                _ResidentChipsField(
+                                  residents: _stagedResidents,
+                                  nameController: _nameController,
+                                  phoneController: _phoneController,
+                                  phoneFocusNode: _phoneFocusNode,
+                                  onAddResident: _stageResidentFromFields,
+                                  onRemoveResident: _removeStagedResident,
+                                ),
+                                const SizedBox(height: 12),
+                                // Chips-based parking spots input.
+                                _SpotChipsField(
+                                  spots: _stagedSpots,
+                                  spotController: _spotController,
+                                  spotFocusNode: _spotFocusNode,
+                                  onAddSpot: _stageSpotFromField,
+                                  onRemoveSpot: _removeStagedSpot,
+                                ),
+                              ],
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -1040,6 +1091,108 @@ class _ResidentChipsField extends StatelessWidget {
   }
 }
 
+// ─── Parking spot chips field ────────────────────────────────────────────────
+//
+// Shows staged parking spot identifiers as deletable chips above a single
+// text input:
+//   [ Spot identifier ] [ + ]
+// Tapping + (or pressing Enter) calls [onAddSpot] which validates and appends
+// a new spot chip. Tapping × removes the chip via [onRemoveSpot].
+// Used in both the "Add apartment" form and [_EditApartmentDialog].
+
+class _SpotChipsField extends StatelessWidget {
+  final List<String> spots;
+  final TextEditingController spotController;
+  final FocusNode? spotFocusNode;
+  final VoidCallback onAddSpot;
+  final void Function(String spot) onRemoveSpot;
+
+  const _SpotChipsField({
+    required this.spots,
+    required this.spotController,
+    required this.onAddSpot,
+    required this.onRemoveSpot,
+    this.spotFocusNode,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Staged spot chips shown above the input row.
+        if (spots.isNotEmpty) ...[
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final s in spots)
+                InputChip(
+                  label: Text(s),
+                  avatar: Icon(
+                    Icons.local_parking_rounded,
+                    size: 16,
+                    color: scheme.onTertiaryContainer,
+                  ),
+                  onDeleted: () => onRemoveSpot(s),
+                  deleteIconColor: scheme.onTertiaryContainer,
+                  backgroundColor: scheme.tertiaryContainer,
+                  labelStyle: TextStyle(
+                    color: scheme.onTertiaryContainer,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+        // Spot identifier entry row.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Focus(
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      (event.logicalKey == LogicalKeyboardKey.enter ||
+                          event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+                    onAddSpot();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: TextField(
+                  controller: spotController,
+                  focusNode: spotFocusNode,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => onAddSpot(),
+                  decoration: InputDecoration(
+                    labelText: 'admin.apartments.spots_label'.tr(),
+                    hintText: 'admin.apartments.spots_hint'.tr(),
+                    helperText: spots.isEmpty
+                        ? 'admin.apartments.spots_helper'.tr()
+                        : null,
+                    prefixIcon: const Icon(Icons.local_parking_rounded),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filledTonal(
+              tooltip: 'admin.apartments.add_spot_tooltip'.tr(),
+              icon: const Icon(Icons.add_road_rounded),
+              onPressed: onAddSpot,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 // ─── Apartment card (list view, multiple phones) ────────────────────────────
 
 class _ApartmentCard extends StatelessWidget {
@@ -1059,6 +1212,7 @@ class _ApartmentCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     final unit = apartment.unitNumber;
     final residents = apartment.residents;
+    final spots = apartment.parkingSpotIdentifiers;
 
     return Card(
       child: Padding(
@@ -1090,6 +1244,7 @@ class _ApartmentCard extends StatelessWidget {
                       style: theme.textTheme.titleSmall,
                     ),
                   ),
+                  // ── Residents row ──────────────────────────────────────────
                   if (residents.isEmpty)
                     Text(
                       'admin.apartments.phones_empty'.tr(),
@@ -1116,6 +1271,41 @@ class _ApartmentCard extends StatelessWidget {
                             labelStyle: theme.textTheme.bodySmall?.copyWith(
                               color: scheme.onSurface,
                               fontWeight: FontWeight.w600,
+                            ),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                      ],
+                    ),
+                  // ── Parking spots row ──────────────────────────────────────
+                  const SizedBox(height: 6),
+                  if (spots.isEmpty)
+                    Text(
+                      'admin.apartments.spots_empty'.tr(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    )
+                  else
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final s in spots)
+                          Chip(
+                            label: Text(s),
+                            avatar: Icon(
+                              Icons.local_parking_rounded,
+                              size: 14,
+                              color: scheme.onTertiaryContainer,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            backgroundColor: scheme.tertiaryContainer
+                                .withValues(alpha: 0.7),
+                            labelStyle: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onTertiaryContainer,
+                              fontWeight: FontWeight.w700,
                             ),
                             materialTapTargetSize:
                                 MaterialTapTargetSize.shrinkWrap,
@@ -1162,14 +1352,18 @@ class _EditApartmentDialog extends StatefulWidget {
 
 class _EditApartmentDialogState extends State<_EditApartmentDialog> {
   late final List<Resident> _residents;
+  late final List<String> _spots;
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _phoneFocusNode = FocusNode();
+  final _spotController = TextEditingController();
+  final _spotFocusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
     _residents = List<Resident>.from(widget.apartment.residents);
+    _spots = List<String>.from(widget.apartment.parkingSpotIdentifiers);
   }
 
   @override
@@ -1177,6 +1371,8 @@ class _EditApartmentDialogState extends State<_EditApartmentDialog> {
     _nameController.dispose();
     _phoneController.dispose();
     _phoneFocusNode.dispose();
+    _spotController.dispose();
+    _spotFocusNode.dispose();
     super.dispose();
   }
 
@@ -1206,17 +1402,43 @@ class _EditApartmentDialogState extends State<_EditApartmentDialog> {
     setState(() => _residents.remove(r));
   }
 
+  void _stageSpot() {
+    final raw = _spotController.text.trim();
+    if (raw.isEmpty) return;
+    if (_spots.contains(raw)) {
+      AppSnack.error(context, 'admin.apartments.spot_already_added'.tr());
+      return;
+    }
+    setState(() {
+      _spots.add(raw);
+      _spotController.clear();
+    });
+    _spotFocusNode.requestFocus();
+  }
+
+  void _removeSpot(String s) {
+    setState(() => _spots.remove(s));
+  }
+
   void _save() {
     // Fold in any un-staged phone entry.
     if (_phoneController.text.trim().isNotEmpty) {
       _stageResident();
       if (_phoneController.text.trim().isNotEmpty) return;
     }
+    // Fold in any un-staged spot entry.
+    if (_spotController.text.trim().isNotEmpty) {
+      _stageSpot();
+      if (_spotController.text.trim().isNotEmpty) return;
+    }
     if (_residents.isEmpty) {
       AppSnack.error(context, 'admin.apartments.at_least_one_phone'.tr());
       return;
     }
-    Navigator.of(context).pop(List<Resident>.from(_residents));
+    Navigator.of(context).pop((
+      residents: List<Resident>.from(_residents),
+      spots: List<String>.from(_spots),
+    ));
   }
 
   @override
@@ -1245,6 +1467,14 @@ class _EditApartmentDialogState extends State<_EditApartmentDialog> {
                 phoneFocusNode: _phoneFocusNode,
                 onAddResident: _stageResident,
                 onRemoveResident: _removeResident,
+              ),
+              const SizedBox(height: 16),
+              _SpotChipsField(
+                spots: _spots,
+                spotController: _spotController,
+                spotFocusNode: _spotFocusNode,
+                onAddSpot: _stageSpot,
+                onRemoveSpot: _removeSpot,
               ),
             ],
           ),

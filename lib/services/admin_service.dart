@@ -104,7 +104,7 @@ class AdminService {
 
     final response = await _supabase
         .from('authorized_apartments')
-        .select('id, building_id, unit_number, residents, created_at')
+        .select('id, building_id, unit_number, residents, parking_spot_identifiers, created_at')
         .eq('building_id', buildingId)
         .order('unit_number', ascending: true);
 
@@ -118,30 +118,38 @@ class AdminService {
   ///
   /// **Upsert logic:**
   /// - If no row exists for `(building_id, unit_number)`, a new row is
-  ///   INSERTed with [residents] as the initial `residents` JSONB array.
+  ///   INSERTed with [residents] as the initial `residents` JSONB array and
+  ///   [parkingSpotIdentifiers] as the initial spot array.
   /// - If a row already exists for that unit, [residents] are *merged* into
-  ///   the existing array. A resident is considered a duplicate if their
-  ///   phone number (normalised) already appears in the stored array — in
-  ///   that case the existing entry is kept unchanged.
+  ///   the existing array (deduped by phone). [parkingSpotIdentifiers] are
+  ///   likewise merged (deduped by value).
   Future<void> addAuthorizedApartment({
     required String unitNumber,
     required List<Resident> residents,
+    List<String> parkingSpotIdentifiers = const [],
   }) async {
     final buildingId = await _resolveAdminBuildingId();
 
     final cleanedUnit = unitNumber.trim();
 
-    // Deduplicate within this call by phone.
-    final seen = <String>{};
+    // Deduplicate residents within this call by phone.
+    final seenPhones = <String>{};
     final cleanedResidents = residents
-        .where((r) => r.phone.trim().isNotEmpty && seen.add(r.phone.trim()))
+        .where((r) => r.phone.trim().isNotEmpty && seenPhones.add(r.phone.trim()))
         .map((r) => Resident(name: r.name.trim(), phone: r.phone.trim()))
+        .toList();
+
+    // Deduplicate spots within this call.
+    final cleanedSpots = parkingSpotIdentifiers
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toSet()
         .toList();
 
     // Check whether a row already exists for this (building, unit) pair.
     final existing = await _supabase
         .from('authorized_apartments')
-        .select('id, residents')
+        .select('id, residents, parking_spot_identifiers')
         .eq('building_id', buildingId)
         .eq('unit_number', cleanedUnit)
         .maybeSingle();
@@ -152,11 +160,12 @@ class AdminService {
         'building_id': buildingId,
         'unit_number': cleanedUnit,
         'residents': cleanedResidents.map((r) => r.toJson()).toList(),
+        'parking_spot_identifiers': cleanedSpots,
       });
     } else {
-      // Row exists — merge new residents in, skipping any whose phone already
-      // appears in the stored array.
+      // Row exists — merge residents (by phone) and spots (by value).
       final id = existing['id'] as String;
+
       final raw = existing['residents'];
       final existingResidents = <Resident>[];
       if (raw is List) {
@@ -167,42 +176,62 @@ class AdminService {
           }
         }
       }
-
       final existingPhones = existingResidents.map((r) => r.phone).toSet();
       final newResidents = cleanedResidents
           .where((r) => !existingPhones.contains(r.phone))
           .toList();
+      final mergedResidents = [...existingResidents, ...newResidents];
 
-      final merged = [...existingResidents, ...newResidents];
+      final rawSpots = existing['parking_spot_identifiers'];
+      final existingSpots = <String>{};
+      if (rawSpots is List) {
+        for (final s in rawSpots) {
+          final label = (s as String?)?.trim() ?? '';
+          if (label.isNotEmpty) existingSpots.add(label);
+        }
+      }
+      final mergedSpots = [
+        ...existingSpots,
+        ...cleanedSpots.where((s) => !existingSpots.contains(s)),
+      ];
 
-      await _supabase
-          .from('authorized_apartments')
-          .update({'residents': merged.map((r) => r.toJson()).toList()})
-          .eq('id', id);
+      await _supabase.from('authorized_apartments').update({
+        'residents': mergedResidents.map((r) => r.toJson()).toList(),
+        'parking_spot_identifiers': mergedSpots,
+      }).eq('id', id);
     }
   }
 
-  /// Replaces the residents array for an existing authorized_apartment row.
+  /// Replaces the residents and parking spots for an existing authorized_apartment row.
   ///
-  /// Used by the admin UI when editing an apartment to add/remove residents.
+  /// Used by the admin UI when editing an apartment to add/remove residents
+  /// and/or parking spots.
   Future<void> updateAuthorizedApartmentResidents({
     required String id,
     required List<Resident> residents,
+    List<String> parkingSpotIdentifiers = const [],
   }) async {
     // Verify admin status before update (RLS also enforces this server-side).
     await _resolveAdminBuildingId();
 
-    // Deduplicate by phone before writing.
+    // Deduplicate residents by phone before writing.
     final seen = <String>{};
-    final cleaned = residents
+    final cleanedResidents = residents
         .where((r) => r.phone.trim().isNotEmpty && seen.add(r.phone.trim()))
         .map((r) => Resident(name: r.name.trim(), phone: r.phone.trim()))
         .toList();
 
-    await _supabase
-        .from('authorized_apartments')
-        .update({'residents': cleaned.map((r) => r.toJson()).toList()})
-        .eq('id', id);
+    // Deduplicate spots by value before writing.
+    final cleanedSpots = parkingSpotIdentifiers
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList();
+
+    await _supabase.from('authorized_apartments').update({
+      'residents': cleanedResidents.map((r) => r.toJson()).toList(),
+      'parking_spot_identifiers': cleanedSpots,
+    }).eq('id', id);
   }
 
   /// Deletes an authorized_apartment row by its UUID.

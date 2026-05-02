@@ -330,39 +330,6 @@ class AuthService {
     }
   }
 
-  /// Looks up a row in `authorized_apartments` whose `residents` JSONB
-  /// array contains an entry matching ANY of [phones]. Uses a single
-  /// PostgREST `.or()` query with the `cs` (contains) operator so we get
-  /// the lookup done in one round-trip even when the admin stored the
-  /// number in a different format than Supabase Auth uses.
-  ///
-  /// Returns the matching row (with `id`, `building_id`, `unit_number`,
-  /// `residents`) or null if no resident entry matches.
-  Future<Map<String, dynamic>?> _findAuthorizedApartmentForPhones(
-    List<String> phones,
-  ) async {
-    if (phones.isEmpty) return null;
-
-    // Build an OR clause: residents.cs.[{"phone":"+972…"}],residents.cs.[{"phone":"052…"}],…
-    // PostgREST escapes the JSON automatically when we pass it as the value.
-    final clauses = phones
-        .map((p) => 'residents.cs.[{"phone":"$p"}]')
-        .join(',');
-
-    try {
-      final result = await _supabase
-          .from('authorized_apartments')
-          .select('id, building_id, unit_number, residents')
-          .or(clauses)
-          .limit(1)
-          .maybeSingle();
-      return result;
-    } catch (e) {
-      debugPrint('_findAuthorizedApartmentForPhones: $e');
-      return null;
-    }
-  }
-
   /// Returns the best phone number we can derive for [user]:
   ///
   ///   - For OTP-authenticated users, [user.phone] is populated by Supabase
@@ -393,22 +360,21 @@ class AuthService {
 
   /// Attempts to link the current auth user to a pre-created profile (or
   /// auto-create one) by calling the `link_profile_by_phone` database
-  /// function.  Silently ignores errors — the caller will simply route to
-  /// the not-registered screen if linking fails.
+  /// function (SECURITY DEFINER — bypasses RLS).
   ///
-  /// To make the lookup tolerant of phone-format mismatches between
-  /// Supabase Auth (`+97252…`) and `authorized_apartments.residents`
-  /// (which may store `052…`, `97252…`, or `+97252…`), we:
-  ///   1. Generate all known format variations of `user.phone`
-  ///      (see [phoneVariations]).
-  ///   2. Run a single `.or()` query against `authorized_apartments` to
-  ///      verify the user actually has a registered entry — this is what
-  ///      surfaces format-mismatch bugs in logs instead of letting them
-  ///      silently 404 inside the RPC.
-  ///   3. Call the `link_profile_by_phone` RPC with each variation in turn
-  ///      until one succeeds, so the trigger logic itself is exercised
-  ///      even if the DB-side `normalise_phone` helper hasn't been updated
-  ///      to handle a particular admin-entered format.
+  /// Silently ignores errors — the caller will simply route to the
+  /// not-registered screen if linking fails.
+  ///
+  /// NOTE: We intentionally do NOT query `authorized_apartments` directly
+  /// from the client before calling the RPC. A freshly authenticated user
+  /// has no profile row yet, so the RLS policy on `authorized_apartments`
+  /// (migration 021) will deny the read — producing a misleading "no match"
+  /// result even when the resident IS in the table. The SECURITY DEFINER
+  /// RPC is the only path that can do this lookup safely.
+  ///
+  /// We try each phone-format variation in turn (canonical `+972…` first)
+  /// so the DB-side `normalise_phone` helper is exercised and the link
+  /// succeeds regardless of how the admin stored the phone.
   Future<void> _tryLinkProfileByPhone(User user) async {
     final phone = _resolveUserPhone(user);
     if (phone == null || phone.isEmpty) return;
@@ -416,29 +382,10 @@ class AuthService {
     final variations = phoneVariations(phone);
     if (variations.isEmpty) return;
 
-    // Step 1 — robust client-side check on authorized_apartments so we know
-    // up front whether the user is registered under ANY of the formats. This
-    // is purely diagnostic; the RPC below is what actually creates the link.
-    final match = await _findAuthorizedApartmentForPhones(variations);
-    if (match == null) {
-      debugPrint(
-        '_tryLinkProfileByPhone: no authorized_apartments row matched any '
-        'of the phone variations $variations for user ${user.id}',
-      );
-      // Fall through and still try the RPC — the trigger may match against
-      // profiles.phone (Path A) which we did not check here.
-    } else {
-      debugPrint(
-        '_tryLinkProfileByPhone: matched authorized_apartments '
-        '${match['id']} (unit ${match['unit_number']}) for user ${user.id}',
-      );
-    }
+    debugPrint(
+      '_tryLinkProfileByPhone: trying variations $variations for user ${user.id}',
+    );
 
-    // Step 2 — try the RPC with each format variation so the DB-side match
-    // succeeds regardless of how the admin stored the phone. Variations
-    // are ordered with the canonical `+972…` first (see [phoneVariations])
-    // because that is the format the admin UI persists, and is therefore
-    // the most likely to match in a single round-trip.
     for (final variant in variations) {
       try {
         await _supabase.rpc('link_profile_by_phone', params: {
