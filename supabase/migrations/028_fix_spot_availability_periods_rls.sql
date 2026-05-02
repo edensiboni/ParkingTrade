@@ -61,6 +61,8 @@ DROP POLICY IF EXISTS "Users can view availability periods in their building"
 -- ─── 3. SELECT — residents can see periods for their own spots
 --         and for any spot in their building (needed for the
 --         "borrow a spot" flow so the borrower can check windows). ──
+DROP POLICY IF EXISTS "Residents can view availability periods in their building"
+    ON spot_availability_periods;
 CREATE POLICY "Residents can view availability periods in their building"
     ON spot_availability_periods
     FOR SELECT
@@ -85,6 +87,8 @@ CREATE POLICY "Residents can view availability periods in their building"
     );
 
 -- ─── 4. INSERT — only the spot's apartment owner may add windows ─
+DROP POLICY IF EXISTS "Spot owners can insert availability periods"
+    ON spot_availability_periods;
 CREATE POLICY "Spot owners can insert availability periods"
     ON spot_availability_periods
     FOR INSERT
@@ -98,6 +102,8 @@ CREATE POLICY "Spot owners can insert availability periods"
     );
 
 -- ─── 5. UPDATE — only the spot's apartment owner may edit windows ─
+DROP POLICY IF EXISTS "Spot owners can update availability periods"
+    ON spot_availability_periods;
 CREATE POLICY "Spot owners can update availability periods"
     ON spot_availability_periods
     FOR UPDATE
@@ -119,6 +125,8 @@ CREATE POLICY "Spot owners can update availability periods"
     );
 
 -- ─── 6. DELETE — only the spot's apartment owner may remove windows
+DROP POLICY IF EXISTS "Spot owners can delete availability periods"
+    ON spot_availability_periods;
 CREATE POLICY "Spot owners can delete availability periods"
     ON spot_availability_periods
     FOR DELETE
