@@ -21,6 +21,9 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
   final _bookingService = BookingService();
   final _spotService = ParkingSpotService();
   List<ParkingSpot> _spots = [];
+  /// Maps spotId → the earliest end time of an active (currently-live) availability
+  /// period, so we can show "Available until HH:mm" on the card.
+  final Map<String, DateTime> _activeUntil = {};
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -39,8 +42,38 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
     try {
       final spots = await _bookingService.getAvailableSpots();
       if (!mounted) return;
+
+      // For each spot fetch its active (currently-live) availability periods
+      // so we can display the earliest end time on the card.
+      final activeUntil = <String, DateTime>{};
+      final now = DateTime.now();
+      for (final spot in spots) {
+        try {
+          final periods = await _spotService.getAvailabilityPeriods(spot.id);
+          // Find any non-recurring period that is currently active
+          DateTime? earliest;
+          for (final p in periods) {
+            if (!p.isRecurring &&
+                p.startTime.isBefore(now) &&
+                p.endTime.isAfter(now)) {
+              if (earliest == null || p.endTime.isBefore(earliest)) {
+                earliest = p.endTime;
+              }
+            }
+          }
+          if (earliest != null) {
+            activeUntil[spot.id] = earliest;
+          }
+        } catch (_) {
+          // Non-fatal: just skip end-time display for this spot.
+        }
+      }
+
       setState(() {
         _spots = spots;
+        _activeUntil
+          ..clear()
+          ..addAll(activeUntil);
         _isLoading = false;
       });
     } catch (e) {
@@ -397,6 +430,7 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
           final spot = _spots[index];
           return _AvailableSpotCard(
             spot: spot,
+            activeUntil: _activeUntil[spot.id],
             onTap: () => _showBookingDialog(spot),
           );
         },
@@ -407,13 +441,22 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
 
 class _AvailableSpotCard extends StatelessWidget {
   final ParkingSpot spot;
+  final DateTime? activeUntil;
   final VoidCallback onTap;
-  const _AvailableSpotCard({required this.spot, required this.onTap});
+
+  const _AvailableSpotCard({
+    required this.spot,
+    required this.onTap,
+    this.activeUntil,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final timeFmt = DateFormat('HH:mm');
+    final hasEndTime = activeUntil != null;
+
     return Card(
       child: InkWell(
         onTap: onTap,
@@ -439,16 +482,35 @@ class _AvailableSpotCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'bookings.available.spot_label'.tr(namedArgs: {'id': spot.spotIdentifier}),
+                      'bookings.available.spot_label'
+                          .tr(namedArgs: {'id': spot.spotIdentifier}),
                       style: theme.textTheme.titleMedium,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'bookings.available.tap_to_view'.tr(),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+                    const SizedBox(height: 4),
+                    if (hasEndTime)
+                      Row(
+                        children: [
+                          Icon(Icons.check_circle_outline_rounded,
+                              size: 14, color: scheme.primary),
+                          const SizedBox(width: 4),
+                          Text(
+                            'spots.availability.available_until'.tr(namedArgs: {
+                              'time': timeFmt.format(activeUntil!),
+                            }),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      Text(
+                        'bookings.available.tap_to_view'.tr(),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),

@@ -219,7 +219,18 @@
       "sat": "שבת",
       "sun": "ראשון",
       "ok": "אישור",
-      "cancel": "ביטול"
+      "cancel": "ביטול",
+      "add_duration_title": "כמה זמן החנייה פנויה?",
+      "add_duration_subtitle": "החל מעכשיו",
+      "quick_1h": "+שעה",
+      "quick_2h": "+שעתיים",
+      "quick_4h": "+4 שעות",
+      "quick_eod": "עד סוף היום",
+      "custom_time": "שעה מותאמת",
+      "available_until": "פנוי עד {time}",
+      "free_until": "פנוי עד {time}",
+      "custom_time_title": "בחר שעת סיום",
+      "tomorrow_note": "(מחר)"
     }
   },
 

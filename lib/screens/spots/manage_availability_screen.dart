@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../services/parking_spot_service.dart';
 import '../../models/parking_spot.dart';
 import '../../models/spot_availability_period.dart';
+import '../../widgets/add_availability_duration_sheet.dart';
 import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
@@ -56,51 +57,12 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
   }
 
   Future<void> _addAvailabilityPeriod() async {
-    final now = DateTime.now();
+    // Use the new intuitive duration sheet (quick chips + custom time picker).
+    final duration = await showAddAvailabilityDurationSheet(context);
+    if (duration == null || !mounted) return;
 
-    final startDate = await showDatePicker(
-      context: context,
-      initialDate: now,
-      firstDate: now,
-      lastDate: now.add(const Duration(days: 365)),
-    );
-    if (startDate == null || !mounted) return;
-
-    final startTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
-    if (startTime == null || !mounted) return;
-
-    final startDateTime = DateTime(
-      startDate.year,
-      startDate.month,
-      startDate.day,
-      startTime.hour,
-      startTime.minute,
-    );
-
-    final endDate = await showDatePicker(
-      context: context,
-      initialDate: startDateTime,
-      firstDate: startDateTime,
-      lastDate: startDateTime.add(const Duration(days: 365)),
-    );
-    if (endDate == null || !mounted) return;
-
-    final endTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(startDateTime.add(const Duration(hours: 1))),
-    );
-    if (endTime == null || !mounted) return;
-
-    final endDateTime = DateTime(
-      endDate.year,
-      endDate.month,
-      endDate.day,
-      endTime.hour,
-      endTime.minute,
-    );
+    final startDateTime = duration.startTime;
+    final endDateTime = duration.endTime;
 
     if (!endDateTime.isAfter(startDateTime)) {
       if (!mounted) return;
@@ -109,10 +71,8 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     }
 
     try {
-      debugPrint('📅 Creating availability period:');
-      debugPrint('   Local time: ${startDateTime.toLocal()} to ${endDateTime.toLocal()}');
-      debugPrint('   UTC time: ${startDateTime.toUtc()} to ${endDateTime.toUtc()}');
-      debugPrint('   ISO string: ${startDateTime.toIso8601String()} to ${endDateTime.toIso8601String()}');
+      debugPrint('📅 Creating availability period (duration sheet):');
+      debugPrint('   Local: ${startDateTime.toLocal()} → ${endDateTime.toLocal()}');
 
       await _spotService.addAvailabilityPeriod(
         spotId: widget.spot.id,
@@ -517,9 +477,20 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
                     )
                   else
                     ..._periods.map((period) {
+                      final now = DateTime.now();
+                      final isActive = !period.isRecurring &&
+                          period.startTime.isBefore(now) &&
+                          period.endTime.isAfter(now);
+
                       final title = period.isRecurring
                           ? '${DateFormat('HH:mm').format(period.startTime)} – ${DateFormat('HH:mm').format(period.endTime)}'
-                          : '${DateFormat('MMM d, y · HH:mm').format(period.startTime)}  →  ${DateFormat('MMM d, y · HH:mm').format(period.endTime)}';
+                          : isActive
+                              ? 'spots.availability.available_until'.tr(
+                                  namedArgs: {
+                                    'time': DateFormat('HH:mm').format(period.endTime)
+                                  },
+                                )
+                              : '${DateFormat('MMM d, y · HH:mm').format(period.startTime)}  →  ${DateFormat('MMM d, y · HH:mm').format(period.endTime)}';
                       final recurrence = _describeRecurrence(period);
                       final durationLabel =
                           _formatDuration(period.startTime, period.endTime);
@@ -560,7 +531,17 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
                                         spacing: 6,
                                         runSpacing: 4,
                                         children: [
-                                          if (recurrence.isNotEmpty)
+                                          if (isActive)
+                                            StatusChip(
+                                              label: 'spots.availability.available_until'.tr(
+                                                namedArgs: {
+                                                  'time': DateFormat('HH:mm').format(period.endTime),
+                                                },
+                                              ),
+                                              tone: StatusTone.success,
+                                              icon: Icons.check_circle_outline_rounded,
+                                            )
+                                          else if (recurrence.isNotEmpty)
                                             StatusChip(
                                               label: recurrence,
                                               tone: StatusTone.info,

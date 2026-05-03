@@ -219,7 +219,18 @@
       "sat": "Sat",
       "sun": "Sun",
       "ok": "OK",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "add_duration_title": "How long is your spot free?",
+      "add_duration_subtitle": "Starting now",
+      "quick_1h": "+1 Hour",
+      "quick_2h": "+2 Hours",
+      "quick_4h": "+4 Hours",
+      "quick_eod": "Until End of Day",
+      "custom_time": "Custom Time",
+      "available_until": "Available until {time}",
+      "free_until": "Free until {time}",
+      "custom_time_title": "Pick end time",
+      "tomorrow_note": "(tomorrow)"
     }
   },
 
