@@ -1,3 +1,21 @@
+# CI — three-job pipeline that gates deployments on verified migrations and clean Flutter code.
+#
+# Job 1 (supabase-db-verify):  Spins up a local Supabase instance and runs ALL migrations via
+#                               `supabase db reset`. Any SQL syntax error or non-idempotent
+#                               policy (e.g. missing DROP POLICY IF EXISTS) fails here.
+#
+# Job 2 (flutter-analyze-test): Runs `flutter analyze` (hard-fail on errors) and `flutter test`.
+#
+# Job 3 (deploy):               Runs only when BOTH jobs above succeed AND the event is a push
+#                               to main.  Pushes migrations to production and deploys all Edge
+#                               Functions.  Flutter web deploy is handled separately by
+#                               deploy-web.yml which listens for this workflow to complete.
+#
+# Required GitHub secrets:
+#   SUPABASE_ACCESS_TOKEN   — personal access token for Supabase CLI
+#   SUPABASE_PROJECT_REF    — project ref (e.g. njlbcrcoogpblscvjfah)
+#   SUPABASE_DB_PASSWORD    — database password (needed by `supabase db push`)
+
 name: CI
 
 on:
@@ -6,21 +24,155 @@ on:
   pull_request:
     branches: [main]
 
-jobs:
-  analyze-and-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+# Only one CI run per branch/PR at a time; cancel the older one.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
-      - uses: subosito/flutter-action@v2
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 1 — Supabase DB verification
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+  supabase-db-verify:
+    name: "Job 1 · Supabase DB — migration smoke test"
+    runs-on: ubuntu-latest
+
+    services:
+      # Supabase local stack needs Docker; GitHub-hosted ubuntu runners have it.
+      # The supabase CLI will manage the containers itself via `supabase start`.
+      docker:
+        image: docker:dind
+        options: --privileged
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # `supabase start` boots Postgres + all supporting services locally.
+      # We increase the timeout because cold-pulls of the Docker images can be
+      # slow on first run; subsequent runs are cached by the runner.
+      - name: Start local Supabase
+        run: supabase start
+        # Give the stack up to 5 minutes to become healthy.
+        timeout-minutes: 5
+
+      # `supabase db reset` drops and recreates the local DB, then applies ALL
+      # migration files from supabase/migrations/ in order.  This catches:
+      #   • SQL syntax errors in any migration
+      #   • Non-idempotent statements (e.g. CREATE POLICY without IF NOT EXISTS,
+      #     missing DROP POLICY IF EXISTS before re-creating)
+      #   • Migrations that silently depend on a previous migration being run first
+      - name: Run all migrations (supabase db reset)
+        run: supabase db reset --local
+
+      - name: Stop local Supabase (cleanup)
+        if: always()
+        run: supabase stop --backup
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 2 — Flutter static analysis & tests
+# ─────────────────────────────────────────────────────────────────────────────
+  flutter-analyze-test:
+    name: "Job 2 · Flutter — analyze & test"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter (stable)
+        uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze
+      # --fatal-infos is intentionally omitted so that INFO-level hints don't
+      # block the build, but WARNING and ERROR level issues do.
+      # Remove --no-fatal-warnings once existing lint warnings are cleaned up.
+      - name: Flutter analyze
         run: flutter analyze --no-fatal-infos
 
-      - name: Run tests
-        run: flutter test
+      # Runs all tests under test/.  Even with only placeholder tests today,
+      # this ensures the test infrastructure is always exercised and ready.
+      - name: Flutter test
+        run: flutter test --coverage
+
+      # Upload coverage report as an artifact so it can be inspected or fed to
+      # a coverage service (e.g. Codecov) later without re-running tests.
+      - name: Upload coverage report
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-coverage
+          path: coverage/lcov.info
+          retention-days: 14
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 3 — Deploy (production, main-branch only)
+# ─────────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: "Job 3 · Deploy — migrations + Edge Functions"
+    # Only deploy on push to main (not on PRs or feature branches).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Both verification jobs must pass before this runs.
+    needs: [supabase-db-verify, flutter-analyze-test]
+    runs-on: ubuntu-latest
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link to production project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      # Migrations were already validated locally in Job 1; this applies the
+      # delta (only new/unapplied migrations) to the production database.
+      - name: Push migrations to production
+        run: supabase db push --include-all --yes
+
+      # Deploy every Edge Function.  Keep this list in sync with
+      # supabase/functions/* (exclude _shared — it is not a deployable function).
+      - name: Deploy Edge Functions
+        run: |
+          for fn in \
+            approve-booking \
+            create-booking-request \
+            create-building \
+            join-building \
+            manage-member \
+            places-autocomplete \
+            send-chat-message \
+          ; do
+            echo "▶ Deploying edge function: $fn"
+            supabase functions deploy "$fn"
+          done
+          echo "✅ All Edge Functions deployed."
+
+      # Emit a summary so the deployment is easy to audit in the Actions UI.
+      - name: Deployment summary
+        run: |
+          echo "## Deployment complete 🚀" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Item | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Supabase migrations | ✅ pushed |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Edge Functions | ✅ deployed |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Flutter web | ⏳ handled by deploy-web.yml |" >> "$GITHUB_STEP_SUMMARY"

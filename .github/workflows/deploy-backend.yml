@@ -1,12 +1,22 @@
-# Deploy Supabase migrations and Edge Functions.
-# Requires secrets: SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF
-# Optional: SUPABASE_DB_PASSWORD (if db push prompts for password)
+# ⚠️  MANUAL / EMERGENCY USE ONLY
+#
+# Normal deployments are handled by the "deploy" job inside ci.yml, which is
+# gated on both migration verification and Flutter analysis passing.
+#
+# This workflow exists solely as a manual escape hatch — for example, when you
+# need to push a hotfix migration or redeploy Edge Functions without waiting for
+# the full CI pipeline (e.g., after a direct hotfix commit to a release branch).
+#
+# Trigger: workflow_dispatch only (no automatic triggers).
+#
+# Required GitHub secrets:
+#   SUPABASE_ACCESS_TOKEN   — personal access token for Supabase CLI
+#   SUPABASE_PROJECT_REF    — project ref (e.g. njlbcrcoogpblscvjfah)
+#   SUPABASE_DB_PASSWORD    — database password
 
-name: Deploy backend
+name: Deploy backend (manual / emergency)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -38,7 +48,6 @@ jobs:
 
       - name: Deploy Edge Functions
         run: |
-          # Keep this list in sync with supabase/functions/* (excluding _shared).
           for fn in \
             approve-booking \
             create-booking-request \
@@ -48,7 +57,7 @@ jobs:
             places-autocomplete \
             send-chat-message \
           ; do
-            echo "Deploying $fn..."
+            echo "▶ Deploying $fn..."
             supabase functions deploy "$fn"
           done
-          echo "All Edge Functions deployed."
+          echo "✅ All Edge Functions deployed."
