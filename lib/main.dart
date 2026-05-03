@@ -24,6 +24,17 @@ import 'screens/spots/parking_spots_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'models/profile.dart';
 
+// Detects the PKCE "Code verifier could not be found in local storage" error
+// that can surface on web when a session is restored after a hard reload or
+// a disrupted OAuth redirect. The implicit auth flow (configured below for
+// web) prevents new occurrences, but stale sessions may still trigger it.
+bool _isPkceVerifierError(Object error) {
+  if (error is AuthException) {
+    return error.message.toLowerCase().contains('code verifier');
+  }
+  return error.toString().toLowerCase().contains('code verifier');
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EasyLocalization.ensureInitialized();
@@ -172,12 +183,26 @@ class _AuthWrapperState extends State<AuthWrapper> {
         debugPrint('--- AuthWrapper: authStateChange event=${state.event} ---');
         _handleAuthChange(state).catchError((error) {
           debugPrint('--- AuthWrapper: error handling auth change: $error ---');
-          if (mounted) setState(() => _isLoading = false);
+          if (_isPkceVerifierError(error)) {
+            debugPrint('--- AuthWrapper: PKCE verifier error in handler, clearing session ---');
+            _clearSessionAndGoToAuth();
+          } else {
+            if (mounted) setState(() => _isLoading = false);
+          }
         });
       },
       onError: (error) {
         debugPrint('--- AuthWrapper: auth stream error: $error ---');
-        if (mounted) setState(() => _isLoading = false);
+        if (_isPkceVerifierError(error)) {
+          // The PKCE code verifier was lost (e.g. hard reload during OAuth
+          // redirect, privacy-mode storage, or a stale session from before the
+          // implicit flow was enabled). Clear the broken session and send the
+          // user back to the login screen instead of showing a blank/broken UI.
+          debugPrint('--- AuthWrapper: PKCE verifier error detected, clearing session ---');
+          _clearSessionAndGoToAuth();
+        } else {
+          if (mounted) setState(() => _isLoading = false);
+        }
       },
     );
   }
@@ -186,6 +211,26 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void dispose() {
     _authSubscription?.cancel();
     super.dispose();
+  }
+
+  /// Silently signs out (best-effort) and routes to the login screen.
+  ///
+  /// Called when a PKCE verifier error is detected so the user sees the auth
+  /// screen rather than an unhandled exception or a frozen loading spinner.
+  Future<void> _clearSessionAndGoToAuth() async {
+    try {
+      await _authService.signOut();
+    } catch (e) {
+      // Sign-out can fail when the session is already invalid — that's fine,
+      // we just want to clear local state.
+      debugPrint('--- AuthWrapper: sign-out during PKCE recovery failed (expected): $e ---');
+    }
+    _hasNavigated = false;
+    _navigating = false;
+    if (mounted) {
+      setState(() => _isLoading = false);
+      Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+    }
   }
 
   Future<void> _handleAuthChange(AuthState state) async {

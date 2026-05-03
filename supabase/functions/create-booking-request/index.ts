@@ -169,20 +169,26 @@ serve(async (req) => {
       .single()
 
     if (insertError) {
+      console.error('[create-booking-request] DB insert error:', insertError.message, insertError.details ?? '', insertError.hint ?? '')
       return new Response(
         JSON.stringify({ error: 'Failed to create booking request', details: insertError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    if (lenderPushRecipient) {
-      await sendPushToUser(
-        supabaseClient,
-        lenderPushRecipient.id,
-        'New booking request',
-        'Someone requested your parking spot.',
-        { booking_id: bookingRequest.id, type: 'booking_request' }
-      )
+    if (lenderPushRecipient && bookingRequest?.id != null) {
+      try {
+        await sendPushToUser(
+          supabaseClient,
+          lenderPushRecipient.id,
+          'New booking request',
+          'Someone requested your parking spot.',
+          { booking_id: String(bookingRequest.id), type: 'booking_request' }
+        )
+      } catch (pushError) {
+        // Push failures are non-fatal — the booking was already created successfully.
+        console.error('[create-booking-request] Push notification failed:', pushError?.message ?? pushError)
+      }
     }
 
     return new Response(
@@ -193,8 +199,9 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error) {
+    console.error('[create-booking-request] Unhandled error:', error?.message ?? error, error?.stack ?? '')
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Internal server error', details: error?.message ?? String(error) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
