@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../services/booking_service.dart';
 import '../../services/parking_spot_service.dart';
 import '../../models/parking_spot.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/app_snack.dart';
-import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
 
 class AvailableSpotsScreen extends StatefulWidget {
@@ -20,8 +20,9 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
   final _bookingService = BookingService();
   final _spotService = ParkingSpotService();
   List<ParkingSpot> _spots = [];
-  /// Maps spotId → the earliest end time of an active (currently-live) availability
-  /// period, so we can show "Available until HH:mm" on the card.
+
+  /// Maps spotId → the earliest end time of an active (currently-live)
+  /// availability period, so we can show "Available until HH:mm".
   final Map<String, DateTime> _activeUntil = {};
   bool _isLoading = true;
   String? _errorMessage;
@@ -42,14 +43,11 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
       final spots = await _bookingService.getAvailableSpots();
       if (!mounted) return;
 
-      // For each spot fetch its active (currently-live) availability periods
-      // so we can display the earliest end time on the card.
       final activeUntil = <String, DateTime>{};
       final now = DateTime.now();
       for (final spot in spots) {
         try {
           final periods = await _spotService.getAvailabilityPeriods(spot.id);
-          // Find any non-recurring period that is currently active
           DateTime? earliest;
           for (final p in periods) {
             if (!p.isRecurring &&
@@ -64,7 +62,7 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
             activeUntil[spot.id] = earliest;
           }
         } catch (_) {
-          // Non-fatal: just skip end-time display for this spot.
+          // Non-fatal: skip end-time display for this spot.
         }
       }
 
@@ -86,7 +84,6 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
 
   Future<void> _showBookingDialog(ParkingSpot spot) async {
     final slots = await _spotService.getAvailableTimeSlots(spotId: spot.id);
-
     if (!mounted) return;
 
     if (slots.isEmpty) {
@@ -117,10 +114,10 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'bookings.available.spot_label'.tr(namedArgs: {'id': spot.spotIdentifier}),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  'bookings.available.spot_label'
+                      .tr(namedArgs: {'id': spot.spotIdentifier}),
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 16),
                 Expanded(
@@ -143,7 +140,8 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
                           ),
                           title: Text(fmt.format(start.toLocal())),
                           subtitle: Text(
-                            'bookings.available.until'.tr(namedArgs: {'time': fmt.format(end.toLocal())}),
+                            'bookings.available.until'.tr(
+                                namedArgs: {'time': fmt.format(end.toLocal())}),
                           ),
                           trailing: const Icon(Icons.arrow_forward_ios, size: 14),
                           onTap: () {
@@ -177,7 +175,8 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
         builder: (context, setDialogState) {
           final fmt = DateFormat('EEE MMM d • h:mm a');
           return AlertDialog(
-            title: Text('bookings.available.book_spot_title'.tr(namedArgs: {'id': spot.spotIdentifier})),
+            title: Text('bookings.available.book_spot_title'
+                .tr(namedArgs: {'id': spot.spotIdentifier})),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -208,8 +207,8 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
                     );
                     if (time == null) return;
                     setDialogState(() {
-                      selectedStart = DateTime(date.year, date.month, date.day,
-                          time.hour, time.minute);
+                      selectedStart = DateTime(date.year, date.month,
+                          date.day, time.hour, time.minute);
                     });
                   },
                 ),
@@ -232,8 +231,8 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
                     );
                     if (time == null) return;
                     setDialogState(() {
-                      selectedEnd = DateTime(date.year, date.month, date.day,
-                          time.hour, time.minute);
+                      selectedEnd = DateTime(date.year, date.month,
+                          date.day, time.hour, time.minute);
                     });
                   },
                 ),
@@ -268,8 +267,7 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        AppSnack.error(
-            context, e.toString().replaceAll('Exception: ', ''));
+        AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
       }
     }
   }
@@ -284,7 +282,8 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
         builder: (context, setDialogState) {
           final fmt = DateFormat('EEE MMM d • h:mm a');
           return AlertDialog(
-            title: Text('bookings.available.book_spot_title'.tr(namedArgs: {'id': spot.spotIdentifier})),
+            title: Text('bookings.available.book_spot_title'
+                .tr(namedArgs: {'id': spot.spotIdentifier})),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -365,9 +364,10 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
       ),
     );
 
-    if (confirmed != true || startTime == null || endTime == null || !mounted) {
-      return;
-    }
+    if (confirmed != true ||
+        startTime == null ||
+        endTime == null ||
+        !mounted) return;
 
     try {
       await _bookingService.createBookingRequest(
@@ -381,140 +381,502 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        AppSnack.error(
-            context, e.toString().replaceAll('Exception: ', ''));
+        AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const SkeletonList(count: 4);
-    }
+    if (_isLoading) return const SkeletonList(count: 4);
 
     if (_errorMessage != null) {
-      return EmptyState(
-        icon: Icons.wifi_off_rounded,
-        title: 'bookings.available.load_error_title'.tr(),
-        message: _errorMessage,
-        action: FilledButton.icon(
-          onPressed: _loadSpots,
-          icon: const Icon(Icons.refresh_rounded),
-          label: Text('bookings.available.try_again'.tr()),
-        ),
+      return _FindParkingEmpty(
+        mode: _EmptyMode.error,
+        errorMessage: _errorMessage,
+        onRefresh: _loadSpots,
       );
     }
 
     if (_spots.isEmpty) {
-      return EmptyState(
-        icon: Icons.local_parking_rounded,
-        title: 'bookings.available.no_spots_title'.tr(),
-        message: 'bookings.available.no_spots_message'.tr(),
-        action: FilledButton.icon(
-          onPressed: _loadSpots,
-          icon: const Icon(Icons.refresh_rounded),
-          label: Text('bookings.available.refresh'.tr()),
-        ),
+      return _FindParkingEmpty(
+        mode: _EmptyMode.noSpots,
+        onRefresh: _loadSpots,
       );
     }
 
     return RefreshIndicator(
       onRefresh: _loadSpots,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: _spots.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          final spot = _spots[index];
-          return _AvailableSpotCard(
-            spot: spot,
-            activeUntil: _activeUntil[spot.id],
-            onTap: () => _showBookingDialog(spot),
-          );
-        },
+      color: AppTheme.brandIndigo,
+      child: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: _FindParkingHeader(spotCount: _spots.length),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+            sliver: SliverList.separated(
+              itemCount: _spots.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final spot = _spots[index];
+                return _AvailableSpotCard(
+                  spot: spot,
+                  activeUntil: _activeUntil[spot.id],
+                  index: index,
+                  onTap: () => _showBookingDialog(spot),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _AvailableSpotCard extends StatelessWidget {
-  final ParkingSpot spot;
-  final DateTime? activeUntil;
-  final VoidCallback onTap;
+// ─────────────────────────────────────────────────────────────────────────────
+// Find Parking Header
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const _AvailableSpotCard({
-    required this.spot,
-    required this.onTap,
-    this.activeUntil,
-  });
+class _FindParkingHeader extends StatelessWidget {
+  final int spotCount;
+  const _FindParkingHeader({required this.spotCount});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final timeFmt = DateFormat('HH:mm');
-    final hasEndTime = activeUntil != null;
 
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Spots available now',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: AppTheme.ink,
+              fontWeight: FontWeight.w800,
+              height: 1.15,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '$spotCount neighbor${spotCount == 1 ? '' : 's'} sharing right now',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: AppTheme.inkMuted,
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Live indicator
+          Row(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: scheme.primaryContainer.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(14),
+              _PulseDot(),
+              const SizedBox(width: 7),
+              Text(
+                'Live',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: AppTheme.success,
+                  fontWeight: FontWeight.w700,
                 ),
-                alignment: Alignment.center,
-                child: Icon(Icons.local_parking_rounded,
-                    color: scheme.primary),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(width: 4),
+              Text(
+                '· Pull down to refresh',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: AppTheme.inkSoft,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PulseDot extends StatefulWidget {
+  @override
+  State<_PulseDot> createState() => _PulseDotState();
+}
+
+class _PulseDotState extends State<_PulseDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _scale = Tween<double>(begin: 0.85, end: 1.15).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScaleTransition(
+      scale: _scale,
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: const BoxDecoration(
+          color: AppTheme.success,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Available Spot Card
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AvailableSpotCard extends StatefulWidget {
+  final ParkingSpot spot;
+  final DateTime? activeUntil;
+  final VoidCallback onTap;
+  final int index;
+
+  const _AvailableSpotCard({
+    required this.spot,
+    required this.onTap,
+    required this.index,
+    this.activeUntil,
+  });
+
+  @override
+  State<_AvailableSpotCard> createState() => _AvailableSpotCardState();
+}
+
+class _AvailableSpotCardState extends State<_AvailableSpotCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _entryCtrl;
+  late final Animation<double> _fadeAnim;
+  late final Animation<Offset> _slideAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _entryCtrl = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 350 + widget.index * 50),
+    );
+    _fadeAnim = CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOut);
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.15),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOutCubic));
+
+    // Small stagger delay per card
+    Future.delayed(Duration(milliseconds: widget.index * 45), () {
+      if (mounted) _entryCtrl.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _entryCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final timeFmt = DateFormat('HH:mm');
+    final hasEndTime = widget.activeUntil != null;
+
+    // Time remaining label
+    String? timeRemaining;
+    if (hasEndTime) {
+      final diff = widget.activeUntil!.difference(DateTime.now());
+      final hours = diff.inHours;
+      final mins = diff.inMinutes % 60;
+      if (hours > 0) {
+        timeRemaining = '${hours}h ${mins}m left';
+      } else {
+        timeRemaining = '${mins}m left';
+      }
+    }
+
+    return FadeTransition(
+      opacity: _fadeAnim,
+      child: SlideTransition(
+        position: _slideAnim,
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.cardSurface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppTheme.hairline),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.ink.withValues(alpha: 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: widget.onTap,
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
                   children: [
-                    Text(
-                      'bookings.available.spot_label'
-                          .tr(namedArgs: {'id': spot.spotIdentifier}),
-                      style: theme.textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    if (hasEndTime)
-                      Row(
-                        children: [
-                          Icon(Icons.check_circle_outline_rounded,
-                              size: 14, color: scheme.primary),
-                          const SizedBox(width: 4),
-                          Text(
-                            'spots.availability.available_until'.tr(namedArgs: {
-                              'time': timeFmt.format(activeUntil!),
-                            }),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
+                    // Spot number badge
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        gradient: AppTheme.brandGradient,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                AppTheme.brandIndigo.withValues(alpha: 0.22),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
                           ),
                         ],
-                      )
-                    else
-                      Text(
-                        'bookings.available.tap_to_view'.tr(),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.local_parking_rounded,
+                              color: Colors.white, size: 20),
+                          const SizedBox(height: 1),
+                          Text(
+                            widget.spot.spotIdentifier,
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    // Info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Spot ${widget.spot.spotIdentifier}',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: AppTheme.ink,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          if (hasEndTime) ...[
+                            Row(
+                              children: [
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: const BoxDecoration(
+                                    color: AppTheme.success,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Until ${timeFmt.format(widget.activeUntil!)}',
+                                  style:
+                                      theme.textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.inkMuted,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (timeRemaining != null) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                timeRemaining,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: AppTheme.success,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ] else
+                            Text(
+                              'Tap to see windows',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: AppTheme.inkSoft,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // Pill Book Now button
+                    GestureDetector(
+                      onTap: widget.onTap,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          gradient: AppTheme.brandGradient,
+                          borderRadius: BorderRadius.circular(999),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.brandIndigo
+                                  .withValues(alpha: 0.28),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          'Book Now',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.1,
+                          ),
                         ),
                       ),
+                    ),
                   ],
                 ),
               ),
-              Icon(Icons.arrow_forward_ios,
-                  size: 14, color: scheme.onSurfaceVariant),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Friendly Empty State
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum _EmptyMode { noSpots, error }
+
+class _FindParkingEmpty extends StatefulWidget {
+  final _EmptyMode mode;
+  final String? errorMessage;
+  final VoidCallback onRefresh;
+
+  const _FindParkingEmpty({
+    required this.mode,
+    required this.onRefresh,
+    this.errorMessage,
+  });
+
+  @override
+  State<_FindParkingEmpty> createState() => _FindParkingEmptyState();
+}
+
+class _FindParkingEmptyState extends State<_FindParkingEmpty>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _floatCtrl;
+  late final Animation<double> _floatAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _floatCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    )..repeat(reverse: true);
+    _floatAnim = Tween<double>(begin: -6, end: 6).animate(
+      CurvedAnimation(parent: _floatCtrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _floatCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isError = widget.mode == _EmptyMode.error;
+
+    return RefreshIndicator(
+      onRefresh: () async => widget.onRefresh(),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.7,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Floating illustration
+              AnimatedBuilder(
+                animation: _floatAnim,
+                builder: (context, child) => Transform.translate(
+                  offset: Offset(0, _floatAnim.value),
+                  child: child,
+                ),
+                child: _SleepingCarIllustration(isError: isError),
+              ),
+              const SizedBox(height: 28),
+              Text(
+                isError ? 'Oops! Something went wrong' : 'No spots right now',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: AppTheme.ink,
+                  fontWeight: FontWeight.w800,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 48),
+                child: Text(
+                  isError
+                      ? (widget.errorMessage ?? 'Pull down to try again.')
+                      : "No neighbors are sharing right now.\nCheck back soon — we'll notify you when a spot opens!",
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.inkMuted,
+                    height: 1.55,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 28),
+              OutlinedButton.icon(
+                onPressed: widget.onRefresh,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(isError
+                    ? 'bookings.available.try_again'.tr()
+                    : 'bookings.available.refresh'.tr()),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(140, 46),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 22, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  side: const BorderSide(color: AppTheme.hairline, width: 1.4),
+                  foregroundColor: AppTheme.inkMuted,
+                  textStyle: theme.textTheme.labelMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
             ],
           ),
         ),
@@ -522,6 +884,128 @@ class _AvailableSpotCard extends StatelessWidget {
     );
   }
 }
+
+/// A cute SVG-style sleeping car illustration drawn with CustomPaint.
+class _SleepingCarIllustration extends StatelessWidget {
+  final bool isError;
+  const _SleepingCarIllustration({required this.isError});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 140,
+      height: 140,
+      decoration: BoxDecoration(
+        color: isError
+            ? const Color(0xFFFEE2E2)
+            : AppTheme.brandIndigo.withValues(alpha: 0.08),
+        shape: BoxShape.circle,
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            isError ? Icons.wifi_off_rounded : Icons.directions_car_rounded,
+            size: 60,
+            color: isError
+                ? AppTheme.danger.withValues(alpha: 0.5)
+                : AppTheme.brandIndigo.withValues(alpha: 0.35),
+          ),
+          if (!isError) ...[
+            // ZZZ bubbles
+            Positioned(
+              top: 22,
+              right: 24,
+              child: _ZzzBubble(size: 13, delay: 0),
+            ),
+            Positioned(
+              top: 12,
+              right: 16,
+              child: _ZzzBubble(size: 10, delay: 300),
+            ),
+            Positioned(
+              top: 6,
+              right: 10,
+              child: _ZzzBubble(size: 8, delay: 600),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ZzzBubble extends StatefulWidget {
+  final double size;
+  final int delay;
+  const _ZzzBubble({required this.size, required this.delay});
+
+  @override
+  State<_ZzzBubble> createState() => _ZzzBubbleState();
+}
+
+class _ZzzBubbleState extends State<_ZzzBubble>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _opacity;
+  late final Animation<double> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _opacity = TweenSequence([
+      TweenSequenceItem(
+          tween: Tween<double>(begin: 0, end: 1), weight: 20),
+      TweenSequenceItem(
+          tween: Tween<double>(begin: 1, end: 1), weight: 60),
+      TweenSequenceItem(
+          tween: Tween<double>(begin: 1, end: 0), weight: 20),
+    ]).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+
+    _slide = Tween<double>(begin: 0, end: -8).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeOut),
+    );
+
+    Future.delayed(Duration(milliseconds: widget.delay), () {
+      if (mounted) _ctrl.repeat();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) => Transform.translate(
+        offset: Offset(0, _slide.value),
+        child: Opacity(
+          opacity: _opacity.value,
+          child: Text(
+            'z',
+            style: TextStyle(
+              fontSize: widget.size,
+              color: AppTheme.brandIndigo.withValues(alpha: 0.6),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Time Field (reused in booking dialogs)
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _TimeField extends StatelessWidget {
   final IconData icon;

@@ -6,6 +6,7 @@ import '../../services/admin_service.dart';
 import '../../services/parking_spot_service.dart';
 import '../../services/auth_service.dart';
 import '../../models/parking_spot.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
@@ -14,6 +15,7 @@ import '../admin/admin_dashboard_screen.dart';
 import 'manage_apartment_screen.dart';
 import 'manage_availability_screen.dart';
 import '../bookings/bookings_screen.dart';
+import '../bookings/available_spots_screen.dart';
 
 class ParkingSpotsScreen extends StatefulWidget {
   const ParkingSpotsScreen({super.key});
@@ -22,7 +24,8 @@ class ParkingSpotsScreen extends StatefulWidget {
   State<ParkingSpotsScreen> createState() => _ParkingSpotsScreenState();
 }
 
-class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
+class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
+    with TickerProviderStateMixin {
   final _spotService = ParkingSpotService();
   final _authService = AuthService();
   final _adminService = AdminService();
@@ -33,10 +36,30 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
   bool _isApartmentAdmin = false;
   int _pendingAdminCount = 0;
 
+  int _selectedTab = 0;
+
+  late final AnimationController _tabAnimController;
+  late final Animation<double> _tabFadeAnim;
+
   @override
   void initState() {
     super.initState();
+    _tabAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    );
+    _tabFadeAnim = CurvedAnimation(
+      parent: _tabAnimController,
+      curve: Curves.easeOut,
+    );
+    _tabAnimController.forward();
     _loadSpots();
+  }
+
+  @override
+  void dispose() {
+    _tabAnimController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSpots() async {
@@ -54,14 +77,14 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
         _isLoading = false;
       });
 
-      // Best-effort pending count for building admins — non-blocking.
       if (_isAdmin) {
         _refreshAdminPendingCount();
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      AppSnack.error(context, 'home.could_not_load_spots'.tr(namedArgs: {'error': e.toString()}));
+      AppSnack.error(context,
+          'home.could_not_load_spots'.tr(namedArgs: {'error': e.toString()}));
     }
   }
 
@@ -70,9 +93,7 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
       final pending = await _adminService.getPendingMembers();
       if (!mounted) return;
       setState(() => _pendingAdminCount = pending.length);
-    } catch (_) {
-      // Silent — the main screen keeps loading.
-    }
+    } catch (_) {}
   }
 
   Future<void> _openAdminDashboard() async {
@@ -95,7 +116,8 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
       _loadSpots();
     } catch (e) {
       if (!mounted) return;
-      AppSnack.error(context, 'home.could_not_load_spots'.tr(namedArgs: {'error': e.toString()}));
+      AppSnack.error(context,
+          'home.could_not_load_spots'.tr(namedArgs: {'error': e.toString()}));
     }
   }
 
@@ -135,199 +157,783 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
     }
   }
 
+  void _onTabSelected(int index) {
+    if (index == _selectedTab) return;
+    _tabAnimController.forward(from: 0);
+    setState(() => _selectedTab = index);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final activeCount = _spots.where((s) => s.isActive).length;
+    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('home.title'.tr()),
-        actions: [
-          if (_isAdmin)
-            IconButton(
-              icon: _pendingAdminCount > 0
-                  ? Badge.count(
-                      count: _pendingAdminCount,
-                      backgroundColor: scheme.error,
-                      textColor: scheme.onError,
-                      child: const Icon(Icons.shield_outlined),
-                    )
-                  : const Icon(Icons.shield_outlined),
-              tooltip: 'home.building_admin_tooltip'.tr(),
-              onPressed: _openAdminDashboard,
-            ),
-          if (_isApartmentAdmin)
-            IconButton(
-              icon: const Icon(Icons.manage_accounts_outlined),
-              tooltip: 'home.manage_apartment_tooltip'.tr(),
-              onPressed: _openManageApartment,
-            ),
-          IconButton(
-            icon: const Icon(Icons.directions_car_outlined),
-            tooltip: 'home.bookings_tooltip'.tr(),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const BookingsScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.language_rounded),
-            tooltip: 'language_toggle'.tr(),
-            onPressed: _toggleLanguage,
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            onSelected: (v) {
-              if (v == 'signout') _confirmSignOut();
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'signout',
-                child: Row(
-                  children: [
-                    const Icon(Icons.logout_rounded, size: 20),
-                    const SizedBox(width: 12),
-                    Text('home.sign_out'.tr()),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
+      backgroundColor: AppTheme.appBackground,
+      appBar: _PremiumAppBar(
+        selectedTab: _selectedTab,
+        isAdmin: _isAdmin,
+        isApartmentAdmin: _isApartmentAdmin,
+        pendingAdminCount: _pendingAdminCount,
+        onAdminTap: _openAdminDashboard,
+        onManageApartmentTap: _openManageApartment,
+        onBookingsTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const BookingsScreen()),
+        ),
+        onLanguageTap: _toggleLanguage,
+        onSignOutTap: _confirmSignOut,
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadSpots,
-        child: _isLoading
-            ? const SkeletonList(count: 4)
-            : _spots.isEmpty
-                ? EmptyState(
-                    icon: Icons.local_parking_rounded,
-                    title: 'home.no_spots_title'.tr(),
-                    message: 'home.no_spots_message'.tr(),
-                  )
-                : ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                    children: [
-                      _SummaryBanner(
-                        scheme: scheme,
-                        theme: theme,
-                        displayName: _displayName,
-                        activeCount: activeCount,
-                        totalCount: _spots.length,
-                      ),
-                      const SizedBox(height: 16),
-                      ..._spots.map(
-                        (spot) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _SpotCard(
-                            spot: spot,
-                            onToggle: () => _toggleSpotActive(spot),
-                            onManageAvailability: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      ManageAvailabilityScreen(spot: spot),
-                                ),
-                              );
-                            },
-                          ),
+      body: FadeTransition(
+        opacity: _tabFadeAnim,
+        child: IndexedStack(
+          index: _selectedTab,
+          children: [
+            // Tab 0: My Spots
+            RefreshIndicator(
+              onRefresh: _loadSpots,
+              color: scheme.primary,
+              child: _isLoading
+                  ? const SkeletonList(count: 4)
+                  : _spots.isEmpty
+                      ? EmptyState(
+                          icon: Icons.local_parking_rounded,
+                          title: 'home.no_spots_title'.tr(),
+                          message: 'home.no_spots_message'.tr(),
+                        )
+                      : _MySpotsTab(
+                          spots: _spots,
+                          displayName: _displayName,
+                          onToggle: _toggleSpotActive,
+                          onManageAvailability: (spot) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    ManageAvailabilityScreen(spot: spot),
+                              ),
+                            );
+                          },
                         ),
-                      ),
-                    ],
-                  ),
+            ),
+
+            // Tab 1: Find Parking
+            const AvailableSpotsScreen(),
+          ],
+        ),
+      ),
+      bottomNavigationBar: _PremiumNavBar(
+        selectedIndex: _selectedTab,
+        onDestinationSelected: _onTabSelected,
       ),
     );
   }
 }
 
-class _SummaryBanner extends StatelessWidget {
-  final ColorScheme scheme;
-  final ThemeData theme;
+// ─────────────────────────────────────────────────────────────────────────────
+// Premium App Bar
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
+  final int selectedTab;
+  final bool isAdmin;
+  final bool isApartmentAdmin;
+  final int pendingAdminCount;
+  final VoidCallback onAdminTap;
+  final VoidCallback onManageApartmentTap;
+  final VoidCallback onBookingsTap;
+  final VoidCallback onLanguageTap;
+  final VoidCallback onSignOutTap;
+
+  const _PremiumAppBar({
+    required this.selectedTab,
+    required this.isAdmin,
+    required this.isApartmentAdmin,
+    required this.pendingAdminCount,
+    required this.onAdminTap,
+    required this.onManageApartmentTap,
+    required this.onBookingsTap,
+    required this.onLanguageTap,
+    required this.onSignOutTap,
+  });
+
+  @override
+  Size get preferredSize => const Size.fromHeight(64);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    final title = selectedTab == 0
+        ? 'home.nav_my_spots'.tr()
+        : 'home.nav_find_parking'.tr();
+
+    return Container(
+      height: 64 + MediaQuery.of(context).padding.top,
+      decoration: const BoxDecoration(
+        color: AppTheme.appBackground,
+        border: Border(
+          bottom: BorderSide(color: AppTheme.hairline, width: 1),
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              // Brand icon
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  gradient: AppTheme.brandGradient,
+                  borderRadius: BorderRadius.circular(11),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.brandIndigo.withValues(alpha: 0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.local_parking_rounded,
+                    color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.2),
+                        end: Offset.zero,
+                      ).animate(anim),
+                      child: child,
+                    ),
+                  ),
+                  child: Text(
+                    title,
+                    key: ValueKey(selectedTab),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: AppTheme.ink,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+              // Action row
+              if (isAdmin)
+                _AppBarIconBtn(
+                  icon: pendingAdminCount > 0
+                      ? Badge.count(
+                          count: pendingAdminCount,
+                          backgroundColor: scheme.error,
+                          textColor: scheme.onError,
+                          child: const Icon(Icons.shield_outlined, size: 22),
+                        )
+                      : const Icon(Icons.shield_outlined, size: 22),
+                  onTap: onAdminTap,
+                ),
+              if (isApartmentAdmin)
+                _AppBarIconBtn(
+                  icon: const Icon(Icons.manage_accounts_outlined, size: 22),
+                  onTap: onManageApartmentTap,
+                ),
+              _AppBarIconBtn(
+                icon: const Icon(Icons.receipt_long_outlined, size: 22),
+                onTap: onBookingsTap,
+              ),
+              _AppBarIconBtn(
+                icon: const Icon(Icons.language_rounded, size: 22),
+                onTap: onLanguageTap,
+              ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert_rounded,
+                    size: 22, color: AppTheme.inkMuted),
+                onSelected: (v) {
+                  if (v == 'signout') onSignOutTap();
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'signout',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.logout_rounded, size: 20),
+                        const SizedBox(width: 12),
+                        Text('home.sign_out'.tr()),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AppBarIconBtn extends StatelessWidget {
+  final Widget icon;
+  final VoidCallback onTap;
+  const _AppBarIconBtn({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        margin: const EdgeInsets.only(left: 2),
+        alignment: Alignment.center,
+        child: IconTheme(
+          data: const IconThemeData(color: AppTheme.inkMuted, size: 22),
+          child: icon,
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// My Spots Tab
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _MySpotsTab extends StatelessWidget {
+  final List<ParkingSpot> spots;
+  final String? displayName;
+  final void Function(ParkingSpot) onToggle;
+  final void Function(ParkingSpot) onManageAvailability;
+
+  const _MySpotsTab({
+    required this.spots,
+    required this.displayName,
+    required this.onToggle,
+    required this.onManageAvailability,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final activeCount = spots.where((s) => s.isActive).length;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+      children: [
+        _HeroHeader(
+          displayName: displayName,
+          activeCount: activeCount,
+          totalCount: spots.length,
+        ),
+        const SizedBox(height: 20),
+        ...spots.map(
+          (spot) => Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: _SpotTicketCard(
+              spot: spot,
+              onToggle: () => onToggle(spot),
+              onManageAvailability: () => onManageAvailability(spot),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hero Header
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _HeroHeader extends StatelessWidget {
   final String? displayName;
   final int activeCount;
   final int totalCount;
 
-  const _SummaryBanner({
-    required this.scheme,
-    required this.theme,
+  const _HeroHeader({
     required this.displayName,
     required this.activeCount,
     required this.totalCount,
   });
 
-  @override
-  Widget build(BuildContext context) {
+  String _greeting(BuildContext context) {
+    final hour = DateTime.now().hour;
     final firstName = displayName?.isNotEmpty == true
         ? displayName!.split(' ').first
         : null;
-    final greeting = firstName != null
-        ? 'home.greeting_named'.tr(namedArgs: {'name': firstName})
-        : 'home.greeting_unnamed'.tr();
+    final suffix = firstName != null ? ', $firstName' : '';
+    if (hour < 12) return 'Good morning$suffix 🌤';
+    if (hour < 18) return 'Good afternoon$suffix ☀️';
+    return 'Good evening$suffix 🌙';
+  }
 
-    // Derive text direction from the active locale so that switching to English
-    // (LTR) inside a Hebrew (RTL) ambient context doesn't produce bidi artifacts
-    // like ",Welcome back" or "of 1 spots active 1".
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final isRtl = context.locale.languageCode == 'he';
     final textDir = isRtl ? ui.TextDirection.rtl : ui.TextDirection.ltr;
+    final allActive = activeCount == totalCount && totalCount > 0;
+    final noneActive = activeCount == 0;
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            scheme.primary,
-            Color.lerp(scheme.primary, Colors.black, 0.15)!,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
+    return Directionality(
+      textDirection: textDir,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 20),
+          Text(
+            _greeting(context),
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: AppTheme.inkMuted,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Ready to share your spot?',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: AppTheme.ink,
+              fontWeight: FontWeight.w800,
+              height: 1.15,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _StatPill(
+                icon: Icons.check_circle_rounded,
+                label: '$activeCount shared',
+                color: activeCount > 0 ? AppTheme.success : AppTheme.inkSoft,
+                bgColor: activeCount > 0
+                    ? const Color(0xFFE4F3EA)
+                    : AppTheme.subtleSurface,
+              ),
+              const SizedBox(width: 8),
+              _StatPill(
+                icon: Icons.local_parking_rounded,
+                label: '$totalCount total',
+                color: AppTheme.inkMuted,
+                bgColor: AppTheme.subtleSurface,
+              ),
+              const Spacer(),
+              if (allActive)
+                _StatPill(
+                  icon: Icons.star_rounded,
+                  label: 'All shared!',
+                  color: const Color(0xFF8A5A10),
+                  bgColor: const Color(0xFFFDF1DA),
+                ),
+              if (noneActive && totalCount > 0)
+                _StatPill(
+                  icon: Icons.info_outline_rounded,
+                  label: 'None shared',
+                  color: AppTheme.inkMuted,
+                  bgColor: AppTheme.subtleSurface,
+                ),
+            ],
+          ),
+        ],
       ),
-      child: Directionality(
-        textDirection: textDir,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              greeting,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: scheme.onPrimary.withValues(alpha: 0.85),
-              ),
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final Color bgColor;
+
+  const _StatPill({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.bgColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.1,
             ),
-            const SizedBox(height: 4),
-            Text(
-              'home.spots_active_summary'.tr(namedArgs: {
-                'active': activeCount.toString(),
-                'total': totalCount.toString(),
-              }),
-              style: theme.textTheme.titleLarge?.copyWith(
-                color: scheme.onPrimary,
-                fontWeight: FontWeight.w700,
-              ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Spot Ticket Card — looks like a physical parking pass
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SpotTicketCard extends StatefulWidget {
+  final ParkingSpot spot;
+  final VoidCallback onToggle;
+  final VoidCallback onManageAvailability;
+
+  const _SpotTicketCard({
+    required this.spot,
+    required this.onToggle,
+    required this.onManageAvailability,
+  });
+
+  @override
+  State<_SpotTicketCard> createState() => _SpotTicketCardState();
+}
+
+class _SpotTicketCardState extends State<_SpotTicketCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _glowController;
+  late final Animation<double> _glowAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    );
+    _glowAnim = CurvedAnimation(
+      parent: _glowController,
+      curve: Curves.easeInOut,
+    );
+    if (widget.spot.isActive) {
+      _glowController.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_SpotTicketCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.spot.isActive && !_glowController.isAnimating) {
+      _glowController.repeat(reverse: true);
+    } else if (!widget.spot.isActive && _glowController.isAnimating) {
+      _glowController.stop();
+      _glowController.animateTo(0,
+          duration: const Duration(milliseconds: 300));
+    }
+  }
+
+  @override
+  void dispose() {
+    _glowController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = widget.spot.isActive;
+
+    return AnimatedBuilder(
+      animation: _glowAnim,
+      builder: (context, child) {
+        final glowOpacity =
+            active ? (0.18 + _glowAnim.value * 0.12) : 0.0;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: AppTheme.cardSurface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: active
+                  ? AppTheme.success
+                      .withValues(alpha: 0.4 + _glowAnim.value * 0.2)
+                  : AppTheme.hairline,
+              width: active ? 1.5 : 1.0,
             ),
-            const SizedBox(height: 12),
-            Text(
-              'home.spots_toggle_hint'.tr(),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onPrimary.withValues(alpha: 0.8),
-              ),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: AppTheme.success
+                          .withValues(alpha: glowOpacity),
+                      blurRadius: 16 + _glowAnim.value * 8,
+                      spreadRadius: 0,
+                      offset: const Offset(0, 4),
+                    ),
+                    BoxShadow(
+                      color: AppTheme.ink.withValues(alpha: 0.04),
+                      blurRadius: 12,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: AppTheme.ink.withValues(alpha: 0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+          ),
+          child: child,
+        );
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap:
+                widget.spot.isActive ? widget.onManageAvailability : null,
+            child: Column(
+              children: [
+                _CardHeader(spot: widget.spot),
+                _PerforationDivider(active: widget.spot.isActive),
+                _CardActions(
+                  spot: widget.spot,
+                  onToggle: widget.onToggle,
+                  onManageAvailability: widget.onManageAvailability,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _SpotCard extends StatelessWidget {
+class _CardHeader extends StatelessWidget {
+  final ParkingSpot spot;
+  const _CardHeader({required this.spot});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final active = spot.isActive;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+      decoration: BoxDecoration(
+        gradient: active
+            ? const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFEEFBF3), Color(0xFFF0FDF4)],
+              )
+            : const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFF8F9FC), Color(0xFFF1F3F9)],
+              ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Large spot number badge
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutCubic,
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              gradient: active
+                  ? const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [AppTheme.success, Color(0xFF22C55E)],
+                    )
+                  : const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFFCBD2DD), Color(0xFFB0B8C8)],
+                    ),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: active
+                  ? [
+                      BoxShadow(
+                        color: AppTheme.success.withValues(alpha: 0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : [],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.local_parking_rounded,
+                    color: Colors.white, size: 22),
+                const SizedBox(height: 1),
+                Text(
+                  spot.spotIdentifier,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    letterSpacing: -0.2,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Info column
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'PARKING SPOT',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: AppTheme.inkSoft,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                    fontSize: 10,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  spot.spotIdentifier,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: AppTheme.ink,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: active
+                      ? StatusChip(
+                          key: const ValueKey('active'),
+                          label: '● Shared with neighbors',
+                          tone: StatusTone.success,
+                        )
+                      : StatusChip(
+                          key: const ValueKey('inactive'),
+                          label: 'Not sharing',
+                          tone: StatusTone.neutral,
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PerforationDivider extends StatelessWidget {
+  final bool active;
+  const _PerforationDivider({required this.active});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 24,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          // Left notch
+          Positioned(
+            left: -12,
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: AppTheme.appBackground,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          // Right notch
+          Positioned(
+            right: -12,
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: AppTheme.appBackground,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          // Dashed line
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _DashedLine(
+              color: active
+                  ? AppTheme.success.withValues(alpha: 0.3)
+                  : AppTheme.hairline,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashedLine extends StatelessWidget {
+  final Color color;
+  const _DashedLine({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 1,
+      child: CustomPaint(
+        painter: _DashedLinePainter(color: color),
+        size: Size.infinite,
+      ),
+    );
+  }
+}
+
+class _DashedLinePainter extends CustomPainter {
+  final Color color;
+  const _DashedLinePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.2
+      ..strokeCap = StrokeCap.round;
+
+    double x = 0;
+    const dashWidth = 6.0;
+    const dashSpace = 4.0;
+    while (x < size.width) {
+      canvas.drawLine(Offset(x, 0), Offset(x + dashWidth, 0), paint);
+      x += dashWidth + dashSpace;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedLinePainter old) => old.color != color;
+}
+
+class _CardActions extends StatelessWidget {
   final ParkingSpot spot;
   final VoidCallback onToggle;
   final VoidCallback onManageAvailability;
 
-  const _SpotCard({
+  const _CardActions({
     required this.spot,
     required this.onToggle,
     required this.onManageAvailability,
@@ -336,65 +942,215 @@ class _SpotCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final active = spot.isActive;
 
-    return Card(
-      child: InkWell(
-        onTap: active ? onManageAvailability : null,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Row(
+        children: [
+          // Primary action button
+          Expanded(
+            child: GestureDetector(
+              onTap: onToggle,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.easeOutCubic,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: active
-                      ? scheme.primaryContainer.withValues(alpha: 0.5)
-                      : scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  active ? Icons.local_parking_rounded : Icons.block_rounded,
-                  color: active ? scheme.primary : scheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      spot.spotIdentifier,
-                      style: theme.textTheme.titleMedium,
+                  gradient: active
+                      ? LinearGradient(
+                          colors: [
+                            AppTheme.success,
+                            AppTheme.success.withValues(alpha: 0.85),
+                          ],
+                        )
+                      : const LinearGradient(
+                          colors: [
+                            AppTheme.brandIndigo,
+                            AppTheme.brandViolet,
+                          ],
+                        ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (active
+                              ? AppTheme.success
+                              : AppTheme.brandIndigo)
+                          .withValues(alpha: 0.28),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
                     ),
-                    const SizedBox(height: 4),
-                    StatusChip(
-                      label: active
-                          ? 'home.spot_active'.tr()
-                          : 'home.spot_inactive'.tr(),
-                      tone: active ? StatusTone.success : StatusTone.neutral,
-                      icon: active
-                          ? Icons.check_circle_outline
-                          : Icons.pause_circle_outline,
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      child: Icon(
+                        active
+                            ? Icons.pause_circle_filled_rounded
+                            : Icons.share_rounded,
+                        key: ValueKey(active),
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      child: Text(
+                        active ? 'Stop Sharing' : 'Share Spot',
+                        key: ValueKey(active),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.calendar_today_outlined),
-                tooltip: 'home.manage_availability_tooltip'.tr(),
-                onPressed: active ? onManageAvailability : null,
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Calendar button
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 300),
+            opacity: active ? 1.0 : 0.38,
+            child: GestureDetector(
+              onTap: active ? onManageAvailability : null,
+              child: Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: AppTheme.subtleSurface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.hairline),
+                ),
+                child: const Icon(Icons.calendar_month_rounded,
+                    size: 20, color: AppTheme.inkMuted),
               ),
-              Switch(
-                value: active,
-                onChanged: (_) => onToggle(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Premium Navigation Bar
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PremiumNavBar extends StatelessWidget {
+  final int selectedIndex;
+  final void Function(int) onDestinationSelected;
+
+  const _PremiumNavBar({
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppTheme.cardSurface,
+        border: Border(top: BorderSide(color: AppTheme.hairline, width: 1)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _NavItem(
+                icon: Icons.local_parking_outlined,
+                selectedIcon: Icons.local_parking_rounded,
+                label: 'home.nav_my_spots'.tr(),
+                selected: selectedIndex == 0,
+                onTap: () => onDestinationSelected(0),
+              ),
+              _NavItem(
+                icon: Icons.search_outlined,
+                selectedIcon: Icons.search_rounded,
+                label: 'home.nav_find_parking'.tr(),
+                selected: selectedIndex == 1,
+                onTap: () => onDestinationSelected(1),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _NavItem({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        padding:
+            const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppTheme.brandIndigo.withValues(alpha: 0.10)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: Icon(
+                selected ? selectedIcon : icon,
+                key: ValueKey(selected),
+                color: selected ? AppTheme.brandIndigo : AppTheme.inkSoft,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 4),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 220),
+              style:
+                  (theme.textTheme.labelSmall ?? const TextStyle()).copyWith(
+                color: selected
+                    ? AppTheme.brandIndigo
+                    : AppTheme.inkSoft,
+                fontWeight:
+                    selected ? FontWeight.w700 : FontWeight.w500,
+                letterSpacing: 0.1,
+              ),
+              child: Text(label),
+            ),
+          ],
         ),
       ),
     );
