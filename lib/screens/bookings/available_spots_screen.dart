@@ -388,7 +388,7 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const SkeletonList(count: 4);
+    if (_isLoading) { return const SkeletonList(count: 4); }
 
     if (_errorMessage != null) {
       return _FindParkingEmpty(
@@ -471,7 +471,7 @@ class _FindParkingHeader extends StatelessWidget {
           // Live indicator
           Row(
             children: [
-              _PulseDot(),
+              const _PulseDot(),
               const SizedBox(width: 7),
               Text(
                 'Live',
@@ -496,6 +496,8 @@ class _FindParkingHeader extends StatelessWidget {
 }
 
 class _PulseDot extends StatefulWidget {
+  const _PulseDot();
+
   @override
   State<_PulseDot> createState() => _PulseDotState();
 }
@@ -913,17 +915,17 @@ class _SleepingCarIllustration extends StatelessWidget {
           ),
           if (!isError) ...[
             // ZZZ bubbles
-            Positioned(
+            const Positioned(
               top: 22,
               right: 24,
               child: _ZzzBubble(size: 13, delay: 0),
             ),
-            Positioned(
+            const Positioned(
               top: 12,
               right: 16,
               child: _ZzzBubble(size: 10, delay: 300),
             ),
-            Positioned(
+            const Positioned(
               top: 6,
               right: 10,
               child: _ZzzBubble(size: 8, delay: 600),

@@ -1055,8 +1055,6 @@ class _PremiumNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Container(
       decoration: const BoxDecoration(
         color: AppTheme.cardSurface,
