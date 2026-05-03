@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../services/admin_service.dart';
@@ -269,7 +271,7 @@ class _SummaryBanner extends StatelessWidget {
     // (LTR) inside a Hebrew (RTL) ambient context doesn't produce bidi artifacts
     // like ",Welcome back" or "of 1 spots active 1".
     final isRtl = context.locale.languageCode == 'he';
-    final textDir = isRtl ? TextDirection.rtl : TextDirection.ltr;
+    final textDir = isRtl ? ui.TextDirection.rtl : ui.TextDirection.ltr;
 
     return Container(
       padding: const EdgeInsets.all(20),

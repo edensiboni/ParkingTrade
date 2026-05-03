@@ -225,13 +225,13 @@ class AuthService {
           e.statusCode == '400';
 
       if (isInvalidCredentials) {
-        print('Shadow user not found, creating new one...');
+        debugPrint('Shadow user not found, creating new one...');
         try {
           await _supabase.auth.signUp(
             email: shadowEmail,
             password: password,
           );
-          print('Shadow user created: $shadowEmail — retrying sign-in...');
+          debugPrint('Shadow user created: $shadowEmail — retrying sign-in...');
           await Future.delayed(const Duration(seconds: 1));
           return await _supabase.auth.signInWithPassword(
             email: shadowEmail,

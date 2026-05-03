@@ -1,6 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../services/booking_service.dart';
 import '../../services/parking_spot_service.dart';
 import '../../models/parking_spot.dart';
