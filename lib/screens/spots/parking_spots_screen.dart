@@ -265,6 +265,12 @@ class _SummaryBanner extends StatelessWidget {
         ? 'home.greeting_named'.tr(namedArgs: {'name': firstName})
         : 'home.greeting_unnamed'.tr();
 
+    // Derive text direction from the active locale so that switching to English
+    // (LTR) inside a Hebrew (RTL) ambient context doesn't produce bidi artifacts
+    // like ",Welcome back" or "of 1 spots active 1".
+    final isRtl = context.locale.languageCode == 'he';
+    final textDir = isRtl ? TextDirection.rtl : TextDirection.ltr;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -278,34 +284,37 @@ class _SummaryBanner extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            greeting,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: scheme.onPrimary.withValues(alpha: 0.85),
+      child: Directionality(
+        textDirection: textDir,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              greeting,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: scheme.onPrimary.withValues(alpha: 0.85),
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'home.spots_active_summary'.tr(namedArgs: {
-              'active': activeCount.toString(),
-              'total': totalCount.toString(),
-            }),
-            style: theme.textTheme.titleLarge?.copyWith(
-              color: scheme.onPrimary,
-              fontWeight: FontWeight.w700,
+            const SizedBox(height: 4),
+            Text(
+              'home.spots_active_summary'.tr(namedArgs: {
+                'active': activeCount.toString(),
+                'total': totalCount.toString(),
+              }),
+              style: theme.textTheme.titleLarge?.copyWith(
+                color: scheme.onPrimary,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'home.spots_toggle_hint'.tr(),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onPrimary.withValues(alpha: 0.8),
+            const SizedBox(height: 12),
+            Text(
+              'home.spots_toggle_hint'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onPrimary.withValues(alpha: 0.8),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

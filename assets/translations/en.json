@@ -74,7 +74,7 @@
     "sign_out_dialog_message": "You can always sign back in with your phone.",
     "cancel": "Cancel",
     "greeting_named": "Hi {name},",
-    "greeting_unnamed": "Welcome back,",
+    "greeting_unnamed": "Welcome back",
     "spots_active_summary": "{active} of {total} spots active",
     "spots_toggle_hint": "Toggle a spot off anytime to stop new booking requests.",
     "no_spots_title": "No spots assigned",

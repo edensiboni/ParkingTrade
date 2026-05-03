@@ -119,6 +119,10 @@ class ParkingTradeApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Derive app-wide text direction from the active locale.
+    // Hebrew ('he') is RTL; English ('en') is LTR.
+    final isRtl = context.locale.languageCode == 'he';
+
     return MaterialApp(
       title: 'Parking Trade',
       navigatorKey: rootNavigatorKey,
@@ -127,6 +131,10 @@ class ParkingTradeApp extends StatelessWidget {
       localizationsDelegates: context.localizationDelegates,
       supportedLocales: context.supportedLocales,
       locale: context.locale,
+      builder: (context, child) => Directionality(
+        textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+        child: child!,
+      ),
       home: const AuthWrapper(),
       routes: {
         '/auth': (context) => DevAuthConfig.isEnabled

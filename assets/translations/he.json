@@ -74,7 +74,7 @@
     "sign_out_dialog_message": "תוכל תמיד להתחבר שוב עם הטלפון שלך.",
     "cancel": "ביטול",
     "greeting_named": "שלום {name},",
-    "greeting_unnamed": "ברוך שובך,",
+    "greeting_unnamed": "ברוך שובך",
     "spots_active_summary": "{active} מתוך {total} חניות פעילות",
     "spots_toggle_hint": "כבה חנייה בכל עת כדי לעצור בקשות הזמנה חדשות.",
     "no_spots_title": "לא הוקצו חניות",
