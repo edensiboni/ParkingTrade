@@ -56,10 +56,10 @@ class RejectedScreen extends StatelessWidget {
               const Spacer(),
               FilledButton.tonalIcon(
                 onPressed: () async {
-                  final navigator = Navigator.of(context);
                   await authService.signOut();
                   if (context.mounted) {
-                    navigator.pushReplacementNamed('/auth');
+                    Navigator.of(context)
+                        .pushNamedAndRemoveUntil('/auth', (route) => false);
                   }
                 },
                 icon: const Icon(Icons.logout_rounded),

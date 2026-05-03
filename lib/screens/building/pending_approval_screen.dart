@@ -68,10 +68,10 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
               const SizedBox(height: 8),
               TextButton(
                 onPressed: () async {
-                  final navigator = Navigator.of(context);
                   await _authService.signOut();
                   if (mounted) {
-                    navigator.pushReplacementNamed('/auth');
+                    Navigator.of(context)
+                        .pushNamedAndRemoveUntil('/auth', (route) => false);
                   }
                 },
                 child: const Text('Sign out'),

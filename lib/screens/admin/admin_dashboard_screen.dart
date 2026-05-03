@@ -245,6 +245,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             icon: const Icon(Icons.logout_rounded),
             onPressed: () async {
               await AuthService().signOut();
+              if (context.mounted) {
+                Navigator.of(context)
+                    .pushNamedAndRemoveUntil('/auth', (route) => false);
+              }
             },
           ),
           const SizedBox(width: 16),
