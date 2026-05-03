@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -51,7 +52,6 @@ class _BookingsScreenState extends State<BookingsScreen>
     setState(() => _isLoading = true);
 
     try {
-      // Resolve the user's apartment once, then load bookings in parallel.
       final aptRow = await Supabase.instance.client
           .from('profiles')
           .select('apartment_id')
@@ -63,7 +63,6 @@ class _BookingsScreenState extends State<BookingsScreen>
         _bookingService.getUserBookings(),
         _bookingService.getPendingBookingsForLender(),
       ]);
-      // Merge both lists (unique by id) so we fetch joined data in one batch.
       final merged = <String, BookingRequest>{};
       for (final b in [...myBookings, ...pendingRequests]) {
         merged[b.id] = b;
@@ -80,7 +79,7 @@ class _BookingsScreenState extends State<BookingsScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      AppSnack.error(context, 'Could not load bookings: $e');
+      AppSnack.error(context, 'bookings.could_not_load'.tr(namedArgs: {'error': e.toString()}));
     }
   }
 
@@ -89,23 +88,23 @@ class _BookingsScreenState extends State<BookingsScreen>
     final isBorrower = booking.borrowerApartmentId == aptId;
     final details = _detailsById[booking.id];
     final counterparty = details?.counterpartyNameFor(aptId) ??
-        (isBorrower ? 'The lender' : 'The borrower');
+        (isBorrower ? 'bookings.lender'.tr() : 'bookings.borrower'.tr());
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Cancel booking?'),
-        content: Text('$counterparty will be notified.'),
+        title: Text('bookings.cancel_dialog_title'.tr()),
+        content: Text('bookings.cancel_dialog_message'.tr(namedArgs: {'counterparty': counterparty})),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Keep it'),
+            child: Text('bookings.keep_it'.tr()),
           ),
           FilledButton.tonal(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('Cancel booking'),
+            child: Text('bookings.cancel_booking'.tr()),
           ),
         ],
       ),
@@ -116,14 +115,14 @@ class _BookingsScreenState extends State<BookingsScreen>
     try {
       await _bookingService.cancelBooking(booking.id);
       if (mounted) {
-        AppSnack.success(context, 'Booking cancelled');
+        AppSnack.success(context, 'bookings.booking_cancelled'.tr());
         _loadBookings();
       }
     } catch (e) {
       if (mounted) {
         AppSnack.error(
             context,
-            'Could not cancel: ${e.toString().replaceAll('Exception: ', '')}');
+            'bookings.could_not_cancel'.tr(namedArgs: {'error': e.toString().replaceAll('Exception: ', '')}));
       }
     }
   }
@@ -133,31 +132,37 @@ class _BookingsScreenState extends State<BookingsScreen>
     switch (booking.status) {
       case BookingStatus.pending:
         return _StatusDescriptor(
-          label: isBorrower ? 'Waiting for approval' : 'Needs your review',
+          label: isBorrower
+              ? 'bookings.status_waiting_approval'.tr()
+              : 'bookings.status_needs_review'.tr(),
           tone: StatusTone.warning,
           icon: Icons.hourglass_top_rounded,
         );
       case BookingStatus.approved:
         return _StatusDescriptor(
-          label: isBorrower ? 'Approved' : 'You approved',
+          label: isBorrower
+              ? 'bookings.status_approved_borrower'.tr()
+              : 'bookings.status_approved_lender'.tr(),
           tone: StatusTone.success,
           icon: Icons.check_circle_outline,
         );
       case BookingStatus.rejected:
         return _StatusDescriptor(
-          label: isBorrower ? 'Declined' : 'You declined',
+          label: isBorrower
+              ? 'bookings.status_declined_borrower'.tr()
+              : 'bookings.status_declined_lender'.tr(),
           tone: StatusTone.danger,
           icon: Icons.cancel_outlined,
         );
       case BookingStatus.cancelled:
         return _StatusDescriptor(
-          label: 'Cancelled',
+          label: 'bookings.status_cancelled'.tr(),
           tone: StatusTone.neutral,
           icon: Icons.block_rounded,
         );
       case BookingStatus.completed:
         return _StatusDescriptor(
-          label: 'Completed',
+          label: 'bookings.status_completed'.tr(),
           tone: StatusTone.info,
           icon: Icons.done_all_rounded,
         );
@@ -179,10 +184,12 @@ class _BookingsScreenState extends State<BookingsScreen>
 
     final details = _detailsById[booking.id];
     final title = details?.spotIdentifier != null
-        ? 'Spot ${details!.spotIdentifier}'
-        : 'Parking booking';
+        ? 'bookings.spot_label'.tr(namedArgs: {'id': details!.spotIdentifier!})
+        : 'bookings.parking_booking'.tr();
     final counterpartyName = details?.counterpartyNameFor(aptId);
-    final counterpartyRole = isBorrower ? 'Lender' : 'Borrower';
+    final counterpartyRole = isBorrower
+        ? 'bookings.lender'.tr()
+        : 'bookings.borrower'.tr();
     final subtitle = counterpartyName != null
         ? '$counterpartyRole · $counterpartyName'
         : null;
@@ -262,7 +269,7 @@ class _BookingsScreenState extends State<BookingsScreen>
                     icon: Icon(Icons.close_rounded,
                         size: 18, color: scheme.error),
                     label: Text(
-                      'Cancel',
+                      'bookings.cancel'.tr(),
                       style: TextStyle(color: scheme.error),
                     ),
                   ),
@@ -278,17 +285,17 @@ class _BookingsScreenState extends State<BookingsScreen>
   @override
   Widget build(BuildContext context) {
     final pendingLabel = _pendingRequests.isEmpty
-        ? 'Pending'
-        : 'Pending (${_pendingRequests.length})';
+        ? 'bookings.tab_pending'.tr()
+        : 'bookings.tab_pending_count'.tr(namedArgs: {'count': _pendingRequests.length.toString()});
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bookings'),
+        title: Text('bookings.title'.tr()),
         bottom: TabBar(
           controller: _tabController,
           tabs: [
-            const Tab(text: 'Available'),
-            const Tab(text: 'My bookings'),
+            Tab(text: 'bookings.tab_available'.tr()),
+            Tab(text: 'bookings.tab_my_bookings'.tr()),
             Tab(text: pendingLabel),
           ],
         ),
@@ -312,10 +319,10 @@ class _BookingsScreenState extends State<BookingsScreen>
   Widget _buildMyBookingsList() {
     if (_isLoading) return const SkeletonList(count: 3);
     if (_myBookings.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.event_note_rounded,
-        title: 'No bookings yet',
-        message: 'Book a spot from the Available tab to see it here.',
+        title: 'bookings.no_bookings_title'.tr(),
+        message: 'bookings.no_bookings_message'.tr(),
       );
     }
     return RefreshIndicator(
@@ -333,10 +340,10 @@ class _BookingsScreenState extends State<BookingsScreen>
   Widget _buildPendingList() {
     if (_isLoading) return const SkeletonList(count: 3);
     if (_pendingRequests.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.inbox_rounded,
-        title: 'Inbox zero',
-        message: 'No requests waiting on your approval.',
+        title: 'bookings.inbox_zero_title'.tr(),
+        message: 'bookings.inbox_zero_message'.tr(),
       );
     }
     return RefreshIndicator(

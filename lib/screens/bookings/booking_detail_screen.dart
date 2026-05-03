@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/booking_service.dart';
@@ -33,7 +34,6 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   Future<void> _loadBooking() async {
     setState(() => _isLoading = true);
     try {
-      // Load booking details and current user's apartment in parallel.
       final results = await Future.wait([
         _bookingService.getBookingDetails(widget.bookingId),
         _authService.getCurrentProfile(),
@@ -48,7 +48,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      AppSnack.error(context, 'Could not load booking: $e');
+      AppSnack.error(context, 'bookings.detail.could_not_load'.tr(namedArgs: {'error': e.toString()}));
     }
   }
 
@@ -63,7 +63,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       setState(() => _isProcessing = false);
-      if (mounted) AppSnack.error(context, 'Error: $e');
+      if (mounted) AppSnack.error(context, 'bookings.detail.could_not_load'.tr(namedArgs: {'error': e.toString()}));
     }
   }
 
@@ -73,23 +73,25 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     final counterparty = _details!.counterpartyNameFor(
           _currentApartmentId ?? '',
         ) ??
-        (isLender ? 'the borrower' : 'the lender');
+        (isLender
+            ? 'bookings.detail.the_borrower'.tr()
+            : 'bookings.detail.the_lender'.tr());
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Cancel booking?'),
-        content: Text('$counterparty will be notified.'),
+        title: Text('bookings.cancel_dialog_title'.tr()),
+        content: Text('bookings.cancel_dialog_message'.tr(namedArgs: {'counterparty': counterparty})),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Keep it'),
+            child: Text('bookings.keep_it'.tr()),
           ),
           FilledButton.tonal(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('Cancel booking'),
+            child: Text('bookings.cancel_booking'.tr()),
           ),
         ],
       ),
@@ -100,7 +102,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
       await _bookingService.cancelBooking(_details!.booking.id);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      if (mounted) AppSnack.error(context, 'Error: $e');
+      if (mounted) AppSnack.error(context, 'bookings.detail.could_not_load'.tr(namedArgs: {'error': e.toString()}));
     }
   }
 
@@ -115,31 +117,31 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     switch (s) {
       case BookingStatus.pending:
         return (
-          label: 'Pending',
+          label: 'bookings.detail.status_pending'.tr(),
           tone: StatusTone.warning,
           icon: Icons.hourglass_top_rounded,
         );
       case BookingStatus.approved:
         return (
-          label: 'Approved',
+          label: 'bookings.detail.status_approved'.tr(),
           tone: StatusTone.success,
           icon: Icons.check_circle_outline,
         );
       case BookingStatus.rejected:
         return (
-          label: 'Declined',
+          label: 'bookings.detail.status_declined'.tr(),
           tone: StatusTone.danger,
           icon: Icons.cancel_outlined,
         );
       case BookingStatus.cancelled:
         return (
-          label: 'Cancelled',
+          label: 'bookings.detail.status_cancelled'.tr(),
           tone: StatusTone.neutral,
           icon: Icons.block_rounded,
         );
       case BookingStatus.completed:
         return (
-          label: 'Completed',
+          label: 'bookings.detail.status_completed'.tr(),
           tone: StatusTone.info,
           icon: Icons.done_all_rounded,
         );
@@ -150,15 +152,15 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Booking')),
+        appBar: AppBar(title: Text('bookings.detail.title'.tr())),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_details == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Booking')),
-        body: const Center(child: Text('Booking not found')),
+        appBar: AppBar(title: Text('bookings.detail.title'.tr())),
+        body: Center(child: Text('bookings.detail.not_found'.tr())),
       );
     }
 
@@ -172,15 +174,17 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     final timeFmt = DateFormat('h:mm a');
 
     final spotLabel = d.spotIdentifier != null
-        ? 'Spot ${d.spotIdentifier}'
-        : 'Parking booking';
+        ? 'bookings.detail.spot_label'.tr(namedArgs: {'id': d.spotIdentifier!})
+        : 'bookings.detail.parking_booking'.tr();
     final counterpartyLabel = isLender
-        ? (d.borrowerDisplayName ?? 'Borrower')
-        : (d.lenderDisplayName ?? 'Lender');
-    final counterpartyRole = isLender ? 'Borrower' : 'Lender';
+        ? (d.borrowerDisplayName ?? 'bookings.detail.borrower_label'.tr())
+        : (d.lenderDisplayName ?? 'bookings.detail.lender_label'.tr());
+    final counterpartyRole = isLender
+        ? 'bookings.detail.borrower_label'.tr()
+        : 'bookings.detail.lender_label'.tr();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Booking')),
+      appBar: AppBar(title: Text('bookings.detail.title'.tr())),
       body: Column(
         children: [
           Expanded(
@@ -201,14 +205,14 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'When',
+                          'bookings.detail.when_label'.tr(),
                           style: theme.textTheme.labelMedium?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(height: 16),
                         _TimeRow(
-                          label: 'Starts',
+                          label: 'bookings.detail.starts'.tr(),
                           date: dateFmt.format(b.startTime.toLocal()),
                           time: timeFmt.format(b.startTime.toLocal()),
                         ),
@@ -216,7 +220,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                         Divider(color: scheme.outlineVariant),
                         const SizedBox(height: 12),
                         _TimeRow(
-                          label: 'Ends',
+                          label: 'bookings.detail.ends'.tr(),
                           date: dateFmt.format(b.endTime.toLocal()),
                           time: timeFmt.format(b.endTime.toLocal()),
                         ),
@@ -234,7 +238,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                               ? null
                               : () => _approveBooking(false),
                           icon: Icon(Icons.close_rounded, color: scheme.error),
-                          label: Text('Decline',
+                          label: Text('bookings.detail.decline'.tr(),
                               style: TextStyle(color: scheme.error)),
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(color: scheme.error),
@@ -248,7 +252,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                               ? null
                               : () => _approveBooking(true),
                           icon: const Icon(Icons.check_rounded),
-                          label: const Text('Approve'),
+                          label: Text('bookings.detail.approve'.tr()),
                         ),
                       ),
                     ],
@@ -258,7 +262,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                   OutlinedButton.icon(
                     onPressed: _cancelBooking,
                     icon: Icon(Icons.close_rounded, color: scheme.error),
-                    label: Text('Cancel booking',
+                    label: Text('bookings.cancel_booking'.tr(),
                         style: TextStyle(color: scheme.error)),
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(color: scheme.error),
@@ -283,7 +287,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                   );
                 },
                 icon: const Icon(Icons.chat_bubble_outline_rounded),
-                label: const Text('Open chat'),
+                label: Text('bookings.detail.open_chat'.tr()),
               ),
             ),
           ),

@@ -21,7 +21,30 @@
     "admin_login_link": "Building admin? Log in here",
     "admin_welcome": "Admin Sign In",
     "admin_tagline": "Sign in with your Google account to manage your building.",
-    "back_to_tenant": "Back to Tenant Login"
+    "back_to_tenant": "Back to Tenant Login",
+
+    "not_registered": {
+      "title": "Not Registered",
+      "message": "Your phone number is not registered to any apartment. Please contact your building admin to be added.",
+      "sign_out": "Sign Out",
+      "admin_link": "Are you a building admin? Create a new building"
+    }
+  },
+
+  "building": {
+    "pending_approval": {
+      "title": "Pending approval",
+      "waiting_title": "Waiting on your building admin",
+      "waiting_message": "We've sent your request. You'll get access as soon as it's approved.",
+      "check_again": "Check again",
+      "sign_out": "Sign out"
+    },
+    "rejected": {
+      "title": "Access denied",
+      "heading": "Membership not approved",
+      "message": "The admin for this building declined your request. If this looks wrong, reach out to them directly — they can re-invite you any time.",
+      "sign_out": "Sign out"
+    }
   },
 
   "setup": {
@@ -39,6 +62,176 @@
     "success_title": "Building Setup Complete!",
     "success_message": "Your building is ready. You can now start adding apartments and managing residents.",
     "go_to_dashboard": "Go to Dashboard"
+  },
+
+  "home": {
+    "title": "My parking",
+    "building_admin_tooltip": "Building admin",
+    "manage_apartment_tooltip": "Manage apartment",
+    "bookings_tooltip": "Bookings",
+    "sign_out": "Sign out",
+    "sign_out_dialog_title": "Sign out?",
+    "sign_out_dialog_message": "You can always sign back in with your phone.",
+    "cancel": "Cancel",
+    "greeting_named": "Hi {name},",
+    "greeting_unnamed": "Welcome back,",
+    "spots_active_summary": "{active} of {total} spots active",
+    "spots_toggle_hint": "Toggle a spot off anytime to stop new booking requests.",
+    "no_spots_title": "No spots assigned",
+    "no_spots_message": "Your parking spot will appear here once it has been assigned to your apartment.",
+    "spot_active": "Active",
+    "spot_inactive": "Inactive",
+    "manage_availability_tooltip": "Manage availability",
+    "could_not_load_spots": "Could not load spots: {error}"
+  },
+
+  "bookings": {
+    "title": "Bookings",
+    "tab_available": "Available",
+    "tab_my_bookings": "My bookings",
+    "tab_pending": "Pending",
+    "tab_pending_count": "Pending ({count})",
+    "no_bookings_title": "No bookings yet",
+    "no_bookings_message": "Book a spot from the Available tab to see it here.",
+    "inbox_zero_title": "Inbox zero",
+    "inbox_zero_message": "No requests waiting on your approval.",
+    "cancel_dialog_title": "Cancel booking?",
+    "cancel_dialog_message": "{counterparty} will be notified.",
+    "keep_it": "Keep it",
+    "cancel_booking": "Cancel booking",
+    "booking_cancelled": "Booking cancelled",
+    "could_not_load": "Could not load bookings: {error}",
+    "could_not_cancel": "Could not cancel: {error}",
+    "spot_label": "Spot {id}",
+    "parking_booking": "Parking booking",
+    "lender": "Lender",
+    "borrower": "Borrower",
+    "cancel": "Cancel",
+    "status_waiting_approval": "Waiting for approval",
+    "status_needs_review": "Needs your review",
+    "status_approved_borrower": "Approved",
+    "status_approved_lender": "You approved",
+    "status_declined_borrower": "Declined",
+    "status_declined_lender": "You declined",
+    "status_cancelled": "Cancelled",
+    "status_completed": "Completed",
+
+    "detail": {
+      "title": "Booking",
+      "not_found": "Booking not found",
+      "when_label": "When",
+      "starts": "Starts",
+      "ends": "Ends",
+      "decline": "Decline",
+      "approve": "Approve",
+      "open_chat": "Open chat",
+      "could_not_load": "Could not load booking: {error}",
+      "status_pending": "Pending",
+      "status_approved": "Approved",
+      "status_declined": "Declined",
+      "status_cancelled": "Cancelled",
+      "status_completed": "Completed",
+      "the_borrower": "the borrower",
+      "the_lender": "the lender",
+      "borrower_label": "Borrower",
+      "lender_label": "Lender",
+      "spot_label": "Spot {id}",
+      "parking_booking": "Parking booking"
+    },
+
+    "available": {
+      "spot_label": "Spot {id}",
+      "tap_to_view": "Tap to view available windows",
+      "pick_time": "Pick a time",
+      "no_spots_title": "No open spots right now",
+      "no_spots_message": "Check back later — neighbors haven't shared any spots yet.",
+      "load_error_title": "Couldn't load spots",
+      "refresh": "Refresh",
+      "try_again": "Try again",
+      "book_spot_title": "Book spot {id}",
+      "within_window": "Within {start} → {end}",
+      "always_available": "This spot is always available. Choose your window.",
+      "starts": "Starts",
+      "ends": "Ends",
+      "select_start": "Select start",
+      "select_end": "Select end",
+      "cancel": "Cancel",
+      "send_request": "Send request",
+      "request_sent": "Request sent",
+      "until": "until {time}"
+    }
+  },
+
+  "spots": {
+    "manage_apartment": {
+      "title": "Manage apartment",
+      "residents_section": "Residents",
+      "residents_count_one": "{count} person in your apartment",
+      "residents_count_other": "{count} people in your apartment",
+      "no_residents_title": "No residents found",
+      "no_residents_message": "No profiles are currently linked to your apartment.",
+      "resident_fallback": "Resident",
+      "apartment_admin_tooltip": "Apartment admin",
+      "push_notifications": "Push notifications",
+      "chat_notifications": "Chat notifications"
+    },
+
+    "availability": {
+      "title": "Spot {id}",
+      "when_free_heading": "When is this spot free?",
+      "no_windows_hint": "No windows yet — your spot is open for booking any time it's active.",
+      "has_windows_hint": "Neighbors can only request times that fall inside the windows below.",
+      "no_windows_title": "No windows set",
+      "no_windows_message": "Add a window to restrict when neighbors can book this spot.",
+      "add_window": "Add window",
+      "one_time": "One-time availability",
+      "one_time_subtitle": "Open this spot for a specific window",
+      "weekly": "Weekly recurring",
+      "weekly_subtitle": "Same days and hours every week",
+      "repeat_on": "Repeat on",
+      "repeat_until": "Repeat until",
+      "forever": "Forever",
+      "forever_subtitle": "Keeps repeating until you remove it",
+      "pick_end_date": "Pick an end date",
+      "pick_end_date_subtitle": "Stop repeating after this date",
+      "remove_dialog_title": "Remove this window?",
+      "remove_dialog_message": "Future bookings inside this window will no longer be possible. Existing approved bookings aren't affected.",
+      "keep_it": "Keep it",
+      "remove": "Remove",
+      "window_removed": "Window removed",
+      "availability_added": "Availability added",
+      "recurring_added": "Recurring availability added",
+      "could_not_load": "Could not load periods: {error}",
+      "could_not_add": "Could not add availability: {error}",
+      "could_not_remove": "Could not remove: {error}",
+      "end_before_start": "End time must be after start time",
+      "remove_tooltip": "Remove window",
+      "one_time_chip": "One-time",
+      "weekly_label": "Weekly · {days}",
+      "weekly_label_plain": "Weekly",
+      "until_suffix": " · until {date}",
+      "repeats_label": "Repeats: {type}",
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun",
+      "ok": "OK",
+      "cancel": "Cancel"
+    }
+  },
+
+  "chat": {
+    "title": "Chat",
+    "say_hi_title": "Say hi",
+    "say_hi_message": "Coordinate arrival and hand-off with the other resident.",
+    "message_hint": "Message…",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "could_not_load": "Could not load messages: {error}",
+    "could_not_send": "Could not send: {error}"
   },
 
   "admin": {
@@ -106,7 +299,7 @@
       "remove_phone_tooltip": "Remove phone",
       "phone_already_added": "This number is already in the list.",
       "at_least_one_phone": "Add at least one phone number.",
-      "spots_label": "Parking Spots (חניות)",
+      "spots_label": "Parking Spots",
       "spots_hint": "e.g. A1, and press Enter",
       "spots_helper": "Add one or more parking spot numbers assigned to this apartment.",
       "spots_empty": "No spots assigned.",

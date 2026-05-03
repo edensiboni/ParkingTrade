@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/parking_spot_service.dart';
@@ -49,15 +50,14 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
         _isLoading = false;
       });
       if (mounted) {
-        AppSnack.error(context, 'Could not load periods: $e');
+        AppSnack.error(context, 'spots.availability.could_not_load'.tr(namedArgs: {'error': e.toString()}));
       }
     }
   }
 
   Future<void> _addAvailabilityPeriod() async {
     final now = DateTime.now();
-    
-    // Pick start date
+
     final startDate = await showDatePicker(
       context: context,
       initialDate: now,
@@ -66,7 +66,6 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     );
     if (startDate == null || !mounted) return;
 
-    // Pick start time
     final startTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
@@ -81,7 +80,6 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       startTime.minute,
     );
 
-    // Pick end date
     final endDate = await showDatePicker(
       context: context,
       initialDate: startDateTime,
@@ -90,7 +88,6 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     );
     if (endDate == null || !mounted) return;
 
-    // Pick end time
     final endTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(startDateTime.add(const Duration(hours: 1))),
@@ -107,17 +104,16 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
 
     if (!endDateTime.isAfter(startDateTime)) {
       if (!mounted) return;
-      AppSnack.error(context, 'End time must be after start time');
+      AppSnack.error(context, 'spots.availability.end_before_start'.tr());
       return;
     }
 
     try {
-      // Debug: Print what we're about to save
       debugPrint('📅 Creating availability period:');
       debugPrint('   Local time: ${startDateTime.toLocal()} to ${endDateTime.toLocal()}');
       debugPrint('   UTC time: ${startDateTime.toUtc()} to ${endDateTime.toUtc()}');
       debugPrint('   ISO string: ${startDateTime.toIso8601String()} to ${endDateTime.toIso8601String()}');
-      
+
       await _spotService.addAvailabilityPeriod(
         spotId: widget.spot.id,
         startTime: startDateTime,
@@ -125,11 +121,11 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       );
       _loadPeriods();
       if (mounted) {
-        AppSnack.success(context, 'Availability added');
+        AppSnack.success(context, 'spots.availability.availability_added'.tr());
       }
     } catch (e) {
       if (mounted) {
-        AppSnack.error(context, 'Could not add availability: $e');
+        AppSnack.error(context, 'spots.availability.could_not_add'.tr(namedArgs: {'error': e.toString()}));
       }
     }
   }
@@ -147,14 +143,14 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
               children: [
                 ListTile(
                   leading: const Icon(Icons.event_rounded),
-                  title: const Text('One-time availability'),
-                  subtitle: const Text('Open this spot for a specific window'),
+                  title: Text('spots.availability.one_time'.tr()),
+                  subtitle: Text('spots.availability.one_time_subtitle'.tr()),
                   onTap: () => Navigator.of(context).pop('once'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.event_repeat_rounded),
-                  title: const Text('Weekly recurring'),
-                  subtitle: const Text('Same days and hours every week'),
+                  title: Text('spots.availability.weekly'.tr()),
+                  subtitle: Text('spots.availability.weekly_subtitle'.tr()),
                   onTap: () => Navigator.of(context).pop('weekly'),
                 ),
               ],
@@ -173,7 +169,6 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
   }
 
   Future<void> _addRecurringPeriod() async {
-    // Pick start date (first occurrence anchor).
     final now = DateTime.now();
     final startDate = await showDatePicker(
       context: context,
@@ -183,14 +178,12 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     );
     if (startDate == null || !mounted) return;
 
-    // Pick start time-of-day.
     final startTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
     );
     if (startTime == null || !mounted) return;
 
-    // Pick end time-of-day.
     final endTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(
@@ -200,15 +193,12 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     );
     if (endTime == null || !mounted) return;
 
-    // Pick weekdays.
     final days = await _pickWeekdays(startDate.weekday);
     if (!mounted || days == null || days.isEmpty) return;
 
-    // Pick an optional "repeat until" end date.
     final untilResult = await _pickRepeatUntil(startDate);
     if (!mounted || untilResult.isCancelled) return;
 
-    // Build start/end DateTimes on the anchor date.
     final anchor = DateTime(
       startDate.year,
       startDate.month,
@@ -224,7 +214,6 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       endTime.minute,
     );
     if (!endAnchor.isAfter(anchor)) {
-      // Treat as same-day window that wraps — bump end to next day.
       endAnchor = endAnchor.add(const Duration(days: 1));
     }
 
@@ -232,8 +221,6 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     final pattern = jsonEncode({
       'type': 'weekly',
       'days': days.toList()..sort(),
-      // Expansion reads `until` as UTC — store end-of-day so the last day is
-      // inclusive. Forever is encoded by omitting the key.
       if (untilDate != null)
         'until': DateTime.utc(
           untilDate.year,
@@ -254,24 +241,25 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       );
       _loadPeriods();
       if (mounted) {
-        AppSnack.success(context, 'Recurring availability added');
+        AppSnack.success(context, 'spots.availability.recurring_added'.tr());
       }
     } catch (e) {
       if (mounted) {
-        AppSnack.error(context, 'Could not add availability: $e');
+        AppSnack.error(context, 'spots.availability.could_not_add'.tr(namedArgs: {'error': e.toString()}));
       }
     }
   }
 
   Future<Set<String>?> _pickWeekdays(int defaultWeekday) async {
-    const labels = <String, String>{
-      'MON': 'Mon',
-      'TUE': 'Tue',
-      'WED': 'Wed',
-      'THU': 'Thu',
-      'FRI': 'Fri',
-      'SAT': 'Sat',
-      'SUN': 'Sun',
+    // Day codes → localization keys
+    final dayKeys = <String, String>{
+      'MON': 'spots.availability.mon',
+      'TUE': 'spots.availability.tue',
+      'WED': 'spots.availability.wed',
+      'THU': 'spots.availability.thu',
+      'FRI': 'spots.availability.fri',
+      'SAT': 'spots.availability.sat',
+      'SUN': 'spots.availability.sun',
     };
     const weekdayToCode = <int, String>{
       DateTime.monday: 'MON',
@@ -290,14 +278,14 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setStateDialog) => AlertDialog(
-            title: const Text('Repeat on'),
+            title: Text('spots.availability.repeat_on'.tr()),
             content: Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: labels.entries.map((entry) {
+              children: dayKeys.entries.map((entry) {
                 final isSelected = selected.contains(entry.key);
                 return FilterChip(
-                  label: Text(entry.value),
+                  label: Text(entry.value.tr()),
                   selected: isSelected,
                   onSelected: (v) {
                     setStateDialog(() {
@@ -314,13 +302,13 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(null),
-                child: const Text('Cancel'),
+                child: Text('spots.availability.cancel'.tr()),
               ),
               TextButton(
                 onPressed: selected.isEmpty
                     ? null
                     : () => Navigator.of(context).pop(selected),
-                child: const Text('OK'),
+                child: Text('spots.availability.ok'.tr()),
               ),
             ],
           ),
@@ -329,10 +317,6 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     );
   }
 
-  /// Ask the user how long the recurrence should last. Three outcomes:
-  ///   - `_UntilResult.cancelled` — caller should abort;
-  ///   - `_UntilResult.forever` — recurs indefinitely (no `until` key written);
-  ///   - `_UntilResult.date(d)` — stop repeating after `d`.
   Future<_UntilResult> _pickRepeatUntil(DateTime anchor) async {
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -349,21 +333,21 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Repeat until',
+                      'spots.availability.repeat_until'.tr(),
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.all_inclusive_rounded),
-                  title: const Text('Forever'),
-                  subtitle: const Text('Keeps repeating until you remove it'),
+                  title: Text('spots.availability.forever'.tr()),
+                  subtitle: Text('spots.availability.forever_subtitle'.tr()),
                   onTap: () => Navigator.of(context).pop('forever'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.event_busy_rounded),
-                  title: const Text('Pick an end date'),
-                  subtitle: const Text('Stop repeating after this date'),
+                  title: Text('spots.availability.pick_end_date'.tr()),
+                  subtitle: Text('spots.availability.pick_end_date_subtitle'.tr()),
                   onTap: () => Navigator.of(context).pop('date'),
                 ),
               ],
@@ -382,7 +366,7 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       initialDate: anchor.add(const Duration(days: 30)),
       firstDate: anchor,
       lastDate: anchor.add(const Duration(days: 365 * 2)),
-      helpText: 'Repeat until',
+      helpText: 'spots.availability.repeat_until'.tr(),
     );
     if (picked == null) return const _UntilResult.cancelled();
     return _UntilResult.date(picked);
@@ -398,63 +382,68 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
         if (decoded is Map) {
           final type = decoded['type']?.toString() ?? 'weekly';
 
-          // Optional "until" suffix shown as "until Apr 30".
           String untilSuffix = '';
           final untilRaw = decoded['until'];
           if (untilRaw is String && untilRaw.isNotEmpty) {
             final untilDate = DateTime.tryParse(untilRaw)?.toLocal();
             if (untilDate != null) {
-              untilSuffix = ' · until ${DateFormat('MMM d').format(untilDate)}';
+              untilSuffix = 'spots.availability.until_suffix'.tr(
+                namedArgs: {'date': DateFormat('MMM d').format(untilDate)},
+              );
             }
           }
 
           if (type == 'weekly') {
             final daysRaw = decoded['days'];
             if (daysRaw is List && daysRaw.isNotEmpty) {
-              const labels = <String, String>{
-                'MON': 'Mon',
-                'TUE': 'Tue',
-                'WED': 'Wed',
-                'THU': 'Thu',
-                'FRI': 'Fri',
-                'SAT': 'Sat',
-                'SUN': 'Sun',
+              // Map day codes to localized labels
+              final dayKeyMap = <String, String>{
+                'MON': 'spots.availability.mon',
+                'TUE': 'spots.availability.tue',
+                'WED': 'spots.availability.wed',
+                'THU': 'spots.availability.thu',
+                'FRI': 'spots.availability.fri',
+                'SAT': 'spots.availability.sat',
+                'SUN': 'spots.availability.sun',
               };
               final days = daysRaw
-                  .map((d) => labels[d.toString().toUpperCase()] ?? d.toString())
+                  .map((d) {
+                    final key = dayKeyMap[d.toString().toUpperCase()];
+                    return key != null ? key.tr() : d.toString();
+                  })
                   .join(', ');
-              return 'Weekly · $days$untilSuffix';
+              return 'spots.availability.weekly_label'.tr(
+                namedArgs: {'days': days + untilSuffix},
+              );
             }
-            return 'Weekly$untilSuffix';
+            return 'spots.availability.weekly_label_plain'.tr() + untilSuffix;
           }
-          return 'Repeats: $type$untilSuffix';
+          return 'spots.availability.repeats_label'.tr(namedArgs: {'type': type}) + untilSuffix;
         }
       } catch (_) {
         // Fall through to raw pattern.
       }
     }
-    return 'Repeats: $raw';
+    return 'spots.availability.repeats_label'.tr(namedArgs: {'type': raw});
   }
 
   Future<void> _deletePeriod(SpotAvailabilityPeriod period) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove this window?'),
-        content: const Text(
-            'Future bookings inside this window will no longer be possible. '
-            'Existing approved bookings aren\'t affected.'),
+        title: Text('spots.availability.remove_dialog_title'.tr()),
+        content: Text('spots.availability.remove_dialog_message'.tr()),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Keep it'),
+            child: Text('spots.availability.keep_it'.tr()),
           ),
           FilledButton.tonal(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('Remove'),
+            child: Text('spots.availability.remove'.tr()),
           ),
         ],
       ),
@@ -466,11 +455,11 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       await _spotService.deleteAvailabilityPeriod(period.id);
       _loadPeriods();
       if (mounted) {
-        AppSnack.success(context, 'Window removed');
+        AppSnack.success(context, 'spots.availability.window_removed'.tr());
       }
     } catch (e) {
       if (mounted) {
-        AppSnack.error(context, 'Could not remove: $e');
+        AppSnack.error(context, 'spots.availability.could_not_remove'.tr(namedArgs: {'error': e.toString()}));
       }
     }
   }
@@ -482,7 +471,7 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Spot ${widget.spot.spotIdentifier}'),
+        title: Text('spots.availability.title'.tr(namedArgs: {'id': widget.spot.spotIdentifier})),
       ),
       body: _isLoading
           ? const SkeletonList(count: 4)
@@ -501,14 +490,14 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'When is this spot free?',
+                          'spots.availability.when_free_heading'.tr(),
                           style: theme.textTheme.titleMedium,
                         ),
                         const SizedBox(height: 6),
                         Text(
                           _periods.isEmpty
-                              ? 'No windows yet — your spot is open for booking any time it\'s active.'
-                              : 'Neighbors can only request times that fall inside the windows below.',
+                              ? 'spots.availability.no_windows_hint'.tr()
+                              : 'spots.availability.has_windows_hint'.tr(),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
@@ -518,13 +507,12 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
                   ),
                   const SizedBox(height: 16),
                   if (_periods.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 24),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 24),
                       child: EmptyState(
                         icon: Icons.event_available_rounded,
-                        title: 'No windows set',
-                        message:
-                            'Add a window to restrict when neighbors can book this spot.',
+                        title: 'spots.availability.no_windows_title'.tr(),
+                        message: 'spots.availability.no_windows_message'.tr(),
                       ),
                     )
                   else
@@ -579,8 +567,8 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
                                               icon: Icons.event_repeat_rounded,
                                             )
                                           else
-                                            const StatusChip(
-                                              label: 'One-time',
+                                            StatusChip(
+                                              label: 'spots.availability.one_time_chip'.tr(),
                                               tone: StatusTone.neutral,
                                               icon: Icons.event_rounded,
                                             ),
@@ -595,7 +583,7 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
                                   ),
                                 ),
                                 IconButton(
-                                  tooltip: 'Remove window',
+                                  tooltip: 'spots.availability.remove_tooltip'.tr(),
                                   icon: Icon(Icons.delete_outline_rounded,
                                       color: scheme.error),
                                   onPressed: () => _deletePeriod(period),
@@ -612,7 +600,7 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddSheet,
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Add window'),
+        label: Text('spots.availability.add_window'.tr()),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
@@ -621,18 +609,16 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
   String _formatDuration(DateTime start, DateTime end) {
     final duration = end.difference(start);
     if (duration.inDays > 0) {
-      return '${duration.inDays} day${duration.inDays > 1 ? 's' : ''}';
+      return '${duration.inDays}d';
     } else if (duration.inHours > 0) {
-      return '${duration.inHours} hour${duration.inHours > 1 ? 's' : ''}';
+      return '${duration.inHours}h';
     } else {
-      return '${duration.inMinutes} minute${duration.inMinutes > 1 ? 's' : ''}';
+      return '${duration.inMinutes}m';
     }
   }
 }
 
-/// Tri-state return from the "repeat until" picker. Using an explicit type
-/// instead of `DateTime?` lets us distinguish user-cancelled from "forever"
-/// without overloading `null`.
+/// Tri-state return from the "repeat until" picker.
 class _UntilResult {
   final bool isCancelled;
   final bool isForever;

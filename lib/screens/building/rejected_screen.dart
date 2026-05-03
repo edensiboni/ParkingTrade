@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 
@@ -12,7 +13,7 @@ class RejectedScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Access denied'),
+        title: Text('building.rejected.title'.tr()),
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
@@ -37,7 +38,7 @@ class RejectedScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               Text(
-                'Membership not approved',
+                'building.rejected.heading'.tr(),
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -45,9 +46,7 @@ class RejectedScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                'The admin for this building declined your request. '
-                'If this looks wrong, reach out to them directly — they can '
-                're-invite you any time.',
+                'building.rejected.message'.tr(),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -63,7 +62,7 @@ class RejectedScreen extends StatelessWidget {
                   }
                 },
                 icon: const Icon(Icons.logout_rounded),
-                label: const Text('Sign out'),
+                label: Text('building.rejected.sign_out'.tr()),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
                 ),

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../models/profile.dart';
@@ -39,15 +40,14 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pending approval'),
+        title: Text('building.pending_approval.title'.tr()),
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
         child: EmptyState(
           icon: Icons.hourglass_top_rounded,
-          title: 'Waiting on your building admin',
-          message:
-              'We\'ve sent your request. You\'ll get access as soon as it\'s approved.',
+          title: 'building.pending_approval.waiting_title'.tr(),
+          message: 'building.pending_approval.waiting_message'.tr(),
           action: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -63,7 +63,7 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
                         ),
                       )
                     : const Icon(Icons.refresh_rounded),
-                label: const Text('Check again'),
+                label: Text('building.pending_approval.check_again'.tr()),
               ),
               const SizedBox(height: 8),
               TextButton(
@@ -74,7 +74,7 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
                         .pushNamedAndRemoveUntil('/auth', (route) => false);
                   }
                 },
-                child: const Text('Sign out'),
+                child: Text('building.pending_approval.sign_out'.tr()),
               ),
             ],
           ),

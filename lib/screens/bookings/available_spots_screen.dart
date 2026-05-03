@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/booking_service.dart';
@@ -79,12 +80,12 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Pick a time',
+                  'bookings.available.pick_time'.tr(),
                   style: theme.textTheme.titleLarge,
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Spot ${spot.spotIdentifier}',
+                  'bookings.available.spot_label'.tr(namedArgs: {'id': spot.spotIdentifier}),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -110,7 +111,7 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
                           ),
                           title: Text(fmt.format(start.toLocal())),
                           subtitle: Text(
-                            'until ${fmt.format(end.toLocal())}',
+                            'bookings.available.until'.tr(namedArgs: {'time': fmt.format(end.toLocal())}),
                           ),
                           trailing: const Icon(Icons.arrow_forward_ios, size: 14),
                           onTap: () {
@@ -144,19 +145,22 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
         builder: (context, setDialogState) {
           final fmt = DateFormat('EEE MMM d • h:mm a');
           return AlertDialog(
-            title: Text('Book spot ${spot.spotIdentifier}'),
+            title: Text('bookings.available.book_spot_title'.tr(namedArgs: {'id': spot.spotIdentifier})),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Within ${fmt.format(slotStart.toLocal())} → ${fmt.format(slotEnd.toLocal())}',
+                  'bookings.available.within_window'.tr(namedArgs: {
+                    'start': fmt.format(slotStart.toLocal()),
+                    'end': fmt.format(slotEnd.toLocal()),
+                  }),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 16),
                 _TimeField(
                   icon: Icons.play_arrow_rounded,
-                  label: 'Starts',
+                  label: 'bookings.available.starts'.tr(),
                   value: fmt.format(selectedStart),
                   onTap: () async {
                     final date = await showDatePicker(
@@ -180,7 +184,7 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
                 const SizedBox(height: 8),
                 _TimeField(
                   icon: Icons.stop_rounded,
-                  label: 'Ends',
+                  label: 'bookings.available.ends'.tr(),
                   value: fmt.format(selectedEnd),
                   onTap: () async {
                     final date = await showDatePicker(
@@ -206,11 +210,11 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
+                child: Text('bookings.available.cancel'.tr()),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Send request'),
+                child: Text('bookings.available.send_request'.tr()),
               ),
             ],
           );
@@ -227,7 +231,7 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
         endTime: selectedEnd,
       );
       if (mounted) {
-        AppSnack.success(context, 'Request sent');
+        AppSnack.success(context, 'bookings.available.request_sent'.tr());
         widget.onBookingCreated?.call();
       }
     } catch (e) {
@@ -248,21 +252,21 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
         builder: (context, setDialogState) {
           final fmt = DateFormat('EEE MMM d • h:mm a');
           return AlertDialog(
-            title: Text('Book spot ${spot.spotIdentifier}'),
+            title: Text('bookings.available.book_spot_title'.tr(namedArgs: {'id': spot.spotIdentifier})),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'This spot is always available. Choose your window.',
+                  'bookings.available.always_available'.tr(),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 16),
                 _TimeField(
                   icon: Icons.play_arrow_rounded,
-                  label: 'Starts',
+                  label: 'bookings.available.starts'.tr(),
                   value: startTime == null ? null : fmt.format(startTime!),
-                  placeholder: 'Select start',
+                  placeholder: 'bookings.available.select_start'.tr(),
                   onTap: () async {
                     final now = DateTime.now();
                     final date = await showDatePicker(
@@ -286,9 +290,9 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
                 const SizedBox(height: 8),
                 _TimeField(
                   icon: Icons.stop_rounded,
-                  label: 'Ends',
+                  label: 'bookings.available.ends'.tr(),
                   value: endTime == null ? null : fmt.format(endTime!),
-                  placeholder: 'Select end',
+                  placeholder: 'bookings.available.select_end'.tr(),
                   onTap: () async {
                     final initial = startTime ?? DateTime.now();
                     final date = await showDatePicker(
@@ -315,13 +319,13 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
+                child: Text('bookings.available.cancel'.tr()),
               ),
               FilledButton(
                 onPressed: startTime != null && endTime != null
                     ? () => Navigator.of(context).pop(true)
                     : null,
-                child: const Text('Send request'),
+                child: Text('bookings.available.send_request'.tr()),
               ),
             ],
           );
@@ -340,7 +344,7 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
         endTime: endTime!,
       );
       if (mounted) {
-        AppSnack.success(context, 'Request sent');
+        AppSnack.success(context, 'bookings.available.request_sent'.tr());
         widget.onBookingCreated?.call();
       }
     } catch (e) {
@@ -360,12 +364,12 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
     if (_errorMessage != null) {
       return EmptyState(
         icon: Icons.wifi_off_rounded,
-        title: 'Couldn\'t load spots',
+        title: 'bookings.available.load_error_title'.tr(),
         message: _errorMessage,
         action: FilledButton.icon(
           onPressed: _loadSpots,
           icon: const Icon(Icons.refresh_rounded),
-          label: const Text('Try again'),
+          label: Text('bookings.available.try_again'.tr()),
         ),
       );
     }
@@ -373,13 +377,12 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
     if (_spots.isEmpty) {
       return EmptyState(
         icon: Icons.local_parking_rounded,
-        title: 'No open spots right now',
-        message:
-            'Check back later, or post a request in the "Request spot" tab.',
+        title: 'bookings.available.no_spots_title'.tr(),
+        message: 'bookings.available.no_spots_message'.tr(),
         action: FilledButton.icon(
           onPressed: _loadSpots,
           icon: const Icon(Icons.refresh_rounded),
-          label: const Text('Refresh'),
+          label: Text('bookings.available.refresh'.tr()),
         ),
       );
     }
@@ -436,12 +439,12 @@ class _AvailableSpotCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Spot ${spot.spotIdentifier}',
+                      'bookings.available.spot_label'.tr(namedArgs: {'id': spot.spotIdentifier}),
                       style: theme.textTheme.titleMedium,
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Tap to view available windows',
+                      'bookings.available.tap_to_view'.tr(),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),

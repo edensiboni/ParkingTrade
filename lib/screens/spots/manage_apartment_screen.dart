@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../services/apartment_service.dart';
 import '../../widgets/app_snack.dart';
@@ -57,7 +58,6 @@ class _ManageApartmentScreenState extends State<ManageApartmentScreen> {
         receivesPush: value,
       );
       if (!mounted) return;
-      // Optimistically update local state.
       setState(() {
         final idx = _profiles.indexWhere((p) => p.profile.id == id);
         if (idx != -1) {
@@ -90,7 +90,6 @@ class _ManageApartmentScreenState extends State<ManageApartmentScreen> {
         receivesChat: value,
       );
       if (!mounted) return;
-      // Optimistically update local state.
       setState(() {
         final idx = _profiles.indexWhere((p) => p.profile.id == id);
         if (idx != -1) {
@@ -117,26 +116,28 @@ class _ManageApartmentScreenState extends State<ManageApartmentScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manage apartment'),
+        title: Text('spots.manage_apartment.title'.tr()),
       ),
       body: RefreshIndicator(
         onRefresh: _loadProfiles,
         child: _isLoading
             ? const SkeletonList(count: 4)
             : _profiles.isEmpty
-                ? const EmptyState(
+                ? EmptyState(
                     icon: Icons.people_outline_rounded,
-                    title: 'No residents found',
-                    message:
-                        'No profiles are currently linked to your apartment.',
+                    title: 'spots.manage_apartment.no_residents_title'.tr(),
+                    message: 'spots.manage_apartment.no_residents_message'.tr(),
                   )
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                     children: [
                       _SectionHeader(
-                        title: 'Residents',
-                        subtitle:
-                            '${_profiles.length} ${_profiles.length == 1 ? 'person' : 'people'} in your apartment',
+                        title: 'spots.manage_apartment.residents_section'.tr(),
+                        subtitle: _profiles.length == 1
+                            ? 'spots.manage_apartment.residents_count_one'.tr(
+                                namedArgs: {'count': _profiles.length.toString()})
+                            : 'spots.manage_apartment.residents_count_other'.tr(
+                                namedArgs: {'count': _profiles.length.toString()}),
                       ),
                       const SizedBox(height: 8),
                       ..._profiles.map(
@@ -260,7 +261,7 @@ class _ResidentCard extends StatelessWidget {
                         ),
                       if (displayName == null && phone == null)
                         Text(
-                          'Resident',
+                          'spots.manage_apartment.resident_fallback'.tr(),
                           style: theme.textTheme.titleSmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
@@ -281,7 +282,7 @@ class _ResidentCard extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(left: 8),
                     child: Tooltip(
-                      message: 'Apartment admin',
+                      message: 'spots.manage_apartment.apartment_admin_tooltip'.tr(),
                       child: Icon(
                         Icons.manage_accounts_outlined,
                         size: 18,
@@ -297,7 +298,7 @@ class _ResidentCard extends StatelessWidget {
             // ── Toggle rows ────────────────────────────────────────────
             _ToggleRow(
               icon: Icons.notifications_outlined,
-              label: 'Push notifications',
+              label: 'spots.manage_apartment.push_notifications'.tr(),
               value: profile.receivesPushNotifications,
               enabled: !isUpdating,
               onChanged: onTogglePush,
@@ -305,7 +306,7 @@ class _ResidentCard extends StatelessWidget {
             const SizedBox(height: 4),
             _ToggleRow(
               icon: Icons.chat_bubble_outline_rounded,
-              label: 'Chat notifications',
+              label: 'spots.manage_apartment.chat_notifications'.tr(),
               value: profile.receivesChatNotifications,
               enabled: !isUpdating,
               onChanged: onToggleChat,

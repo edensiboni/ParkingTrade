@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/chat_service.dart';
@@ -63,7 +64,7 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      AppSnack.error(context, 'Could not load messages: $e');
+      AppSnack.error(context, 'chat.could_not_load'.tr(namedArgs: {'error': e.toString()}));
     }
   }
 
@@ -97,7 +98,7 @@ class _ChatScreenState extends State<ChatScreen> {
         content: content,
       );
     } catch (e) {
-      if (mounted) AppSnack.error(context, 'Could not send: $e');
+      if (mounted) AppSnack.error(context, 'chat.could_not_send'.tr(namedArgs: {'error': e.toString()}));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -128,8 +129,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final diff = today.difference(day).inDays;
-    if (diff == 0) return 'Today';
-    if (diff == 1) return 'Yesterday';
+    if (diff == 0) return 'chat.today'.tr();
+    if (diff == 1) return 'chat.yesterday'.tr();
     if (diff < 7) return DateFormat('EEEE').format(day);
     return DateFormat('MMM d, y').format(day);
   }
@@ -141,7 +142,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chat'),
+        title: Text('chat.title'.tr()),
       ),
       body: Column(
         children: [
@@ -149,11 +150,10 @@ class _ChatScreenState extends State<ChatScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _messages.isEmpty
-                    ? const EmptyState(
+                    ? EmptyState(
                         icon: Icons.forum_outlined,
-                        title: 'Say hi',
-                        message:
-                            'Coordinate arrival and hand-off with the other resident.',
+                        title: 'chat.say_hi_title'.tr(),
+                        message: 'chat.say_hi_message'.tr(),
                       )
                     : _buildMessageList(scheme, theme),
           ),
@@ -162,6 +162,7 @@ class _ChatScreenState extends State<ChatScreen> {
             hasText: _hasText,
             sending: _sending,
             onSend: _sendMessage,
+            hintText: 'chat.message_hint'.tr(),
           ),
         ],
       ),
@@ -305,12 +306,14 @@ class _Composer extends StatelessWidget {
   final bool hasText;
   final bool sending;
   final VoidCallback onSend;
+  final String hintText;
 
   const _Composer({
     required this.controller,
     required this.hasText,
     required this.sending,
     required this.onSend,
+    required this.hintText,
   });
 
   @override
@@ -342,7 +345,7 @@ class _Composer extends StatelessWidget {
                   textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.newline,
                   decoration: InputDecoration(
-                    hintText: 'Message…',
+                    hintText: hintText,
                     filled: true,
                     fillColor:
                         scheme.surfaceContainerHighest.withValues(alpha: 0.4),

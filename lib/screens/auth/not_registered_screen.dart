@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 
@@ -26,19 +27,18 @@ class NotRegisteredScreen extends StatelessWidget {
                 color: Colors.grey,
               ),
               const SizedBox(height: 32),
-              const Text(
-                'Not Registered',
-                style: TextStyle(
+              Text(
+                'auth.not_registered.title'.tr(),
+                style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Your phone number is not registered to any apartment. '
-                'Please contact your building admin to be added.',
+              Text(
+                'auth.not_registered.message'.tr(),
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 16,
                   color: Colors.black54,
                   height: 1.5,
@@ -52,13 +52,13 @@ class NotRegisteredScreen extends StatelessWidget {
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  child: const Text('Sign Out'),
+                  child: Text('auth.not_registered.sign_out'.tr()),
                 ),
               ),
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => Navigator.of(context).pushNamed('/setup'),
-                child: const Text('Are you a building admin? Create a new building'),
+                child: Text('auth.not_registered.admin_link'.tr()),
               ),
             ],
           ),

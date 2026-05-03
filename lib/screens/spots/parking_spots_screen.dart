@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../services/admin_service.dart';
 import '../../services/parking_spot_service.dart';
@@ -58,7 +59,7 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      AppSnack.error(context, 'Could not load spots: $e');
+      AppSnack.error(context, 'home.could_not_load_spots'.tr(namedArgs: {'error': e.toString()}));
     }
   }
 
@@ -92,7 +93,7 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
       _loadSpots();
     } catch (e) {
       if (!mounted) return;
-      AppSnack.error(context, 'Could not update spot: $e');
+      AppSnack.error(context, 'home.could_not_load_spots'.tr(namedArgs: {'error': e.toString()}));
     }
   }
 
@@ -100,16 +101,16 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Sign out?'),
-        content: const Text('You can always sign back in with your phone.'),
+        title: Text('home.sign_out_dialog_title'.tr()),
+        content: Text('home.sign_out_dialog_message'.tr()),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text('home.cancel'.tr()),
           ),
           FilledButton.tonal(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Sign out'),
+            child: Text('home.sign_out'.tr()),
           ),
         ],
       ),
@@ -123,6 +124,15 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
     }
   }
 
+  void _toggleLanguage() {
+    final current = context.locale;
+    if (current.languageCode == 'he') {
+      context.setLocale(const Locale('en'));
+    } else {
+      context.setLocale(const Locale('he'));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -131,7 +141,7 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My parking'),
+        title: Text('home.title'.tr()),
         actions: [
           if (_isAdmin)
             IconButton(
@@ -143,37 +153,42 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
                       child: const Icon(Icons.shield_outlined),
                     )
                   : const Icon(Icons.shield_outlined),
-              tooltip: 'Building admin',
+              tooltip: 'home.building_admin_tooltip'.tr(),
               onPressed: _openAdminDashboard,
             ),
           if (_isApartmentAdmin)
             IconButton(
               icon: const Icon(Icons.manage_accounts_outlined),
-              tooltip: 'Manage apartment',
+              tooltip: 'home.manage_apartment_tooltip'.tr(),
               onPressed: _openManageApartment,
             ),
           IconButton(
             icon: const Icon(Icons.directions_car_outlined),
-            tooltip: 'Bookings',
+            tooltip: 'home.bookings_tooltip'.tr(),
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const BookingsScreen()),
               );
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.language_rounded),
+            tooltip: 'language_toggle'.tr(),
+            onPressed: _toggleLanguage,
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (v) {
               if (v == 'signout') _confirmSignOut();
             },
-            itemBuilder: (context) => const [
+            itemBuilder: (context) => [
               PopupMenuItem(
                 value: 'signout',
                 child: Row(
                   children: [
-                    Icon(Icons.logout_rounded, size: 20),
-                    SizedBox(width: 12),
-                    Text('Sign out'),
+                    const Icon(Icons.logout_rounded, size: 20),
+                    const SizedBox(width: 12),
+                    Text('home.sign_out'.tr()),
                   ],
                 ),
               ),
@@ -186,11 +201,10 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen> {
         child: _isLoading
             ? const SkeletonList(count: 4)
             : _spots.isEmpty
-                ? const EmptyState(
+                ? EmptyState(
                     icon: Icons.local_parking_rounded,
-                    title: 'No spots assigned',
-                    message:
-                        'Your parking spot will appear here once it has been assigned to your apartment.',
+                    title: 'home.no_spots_title'.tr(),
+                    message: 'home.no_spots_message'.tr(),
                   )
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -244,9 +258,13 @@ class _SummaryBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final greeting = displayName?.isNotEmpty == true
-        ? 'Hi ${displayName!.split(' ').first},'
-        : 'Welcome back,';
+    final firstName = displayName?.isNotEmpty == true
+        ? displayName!.split(' ').first
+        : null;
+    final greeting = firstName != null
+        ? 'home.greeting_named'.tr(namedArgs: {'name': firstName})
+        : 'home.greeting_unnamed'.tr();
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -271,7 +289,10 @@ class _SummaryBanner extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '$activeCount of $totalCount spots active',
+            'home.spots_active_summary'.tr(namedArgs: {
+              'active': activeCount.toString(),
+              'total': totalCount.toString(),
+            }),
             style: theme.textTheme.titleLarge?.copyWith(
               color: scheme.onPrimary,
               fontWeight: FontWeight.w700,
@@ -279,7 +300,7 @@ class _SummaryBanner extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Toggle a spot off anytime to stop new booking requests.',
+            'home.spots_toggle_hint'.tr(),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onPrimary.withValues(alpha: 0.8),
             ),
@@ -341,7 +362,9 @@ class _SpotCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     StatusChip(
-                      label: active ? 'Active' : 'Inactive',
+                      label: active
+                          ? 'home.spot_active'.tr()
+                          : 'home.spot_inactive'.tr(),
                       tone: active ? StatusTone.success : StatusTone.neutral,
                       icon: active
                           ? Icons.check_circle_outline
@@ -352,7 +375,7 @@ class _SpotCard extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.calendar_today_outlined),
-                tooltip: 'Manage availability',
+                tooltip: 'home.manage_availability_tooltip'.tr(),
                 onPressed: active ? onManageAvailability : null,
               ),
               Switch(

@@ -21,7 +21,30 @@
     "admin_login_link": "מנהל בניין? התחבר כאן",
     "admin_welcome": "כניסה למנהל בניין",
     "admin_tagline": "התחבר עם חשבון Google שלך כדי לנהל את הבניין.",
-    "back_to_tenant": "חזור להתחברות דייר"
+    "back_to_tenant": "חזור להתחברות דייר",
+
+    "not_registered": {
+      "title": "לא רשום",
+      "message": "מספר הטלפון שלך אינו רשום לאף דירה. אנא פנה למנהל הבניין שלך כדי שיוסיף אותך.",
+      "sign_out": "התנתק",
+      "admin_link": "האם אתה מנהל בניין? צור בניין חדש"
+    }
+  },
+
+  "building": {
+    "pending_approval": {
+      "title": "ממתין לאישור",
+      "waiting_title": "ממתין למנהל הבניין שלך",
+      "waiting_message": "שלחנו את בקשתך. תקבל גישה ברגע שתאושר.",
+      "check_again": "בדוק שוב",
+      "sign_out": "התנתק"
+    },
+    "rejected": {
+      "title": "הגישה נדחתה",
+      "heading": "החברות לא אושרה",
+      "message": "מנהל הבניין דחה את בקשתך. אם זה נראה שגוי, פנה אליו ישירות — הוא יכול להזמין אותך מחדש בכל עת.",
+      "sign_out": "התנתק"
+    }
   },
 
   "setup": {
@@ -39,6 +62,176 @@
     "success_title": "הגדרת הבניין הושלמה!",
     "success_message": "הבניין שלך מוכן. כעת תוכל להתחיל להוסיף דירות ולנהל דיירים.",
     "go_to_dashboard": "עבור ללוח הבקרה"
+  },
+
+  "home": {
+    "title": "החניות שלי",
+    "building_admin_tooltip": "מנהל בניין",
+    "manage_apartment_tooltip": "נהל דירה",
+    "bookings_tooltip": "הזמנות",
+    "sign_out": "התנתק",
+    "sign_out_dialog_title": "להתנתק?",
+    "sign_out_dialog_message": "תוכל תמיד להתחבר שוב עם הטלפון שלך.",
+    "cancel": "ביטול",
+    "greeting_named": "שלום {name},",
+    "greeting_unnamed": "ברוך שובך,",
+    "spots_active_summary": "{active} מתוך {total} חניות פעילות",
+    "spots_toggle_hint": "כבה חנייה בכל עת כדי לעצור בקשות הזמנה חדשות.",
+    "no_spots_title": "לא הוקצו חניות",
+    "no_spots_message": "החנייה שלך תופיע כאן לאחר שתוקצה לדירתך.",
+    "spot_active": "פעיל",
+    "spot_inactive": "לא פעיל",
+    "manage_availability_tooltip": "נהל זמינות",
+    "could_not_load_spots": "לא ניתן לטעון חניות: {error}"
+  },
+
+  "bookings": {
+    "title": "הזמנות",
+    "tab_available": "זמינות",
+    "tab_my_bookings": "ההזמנות שלי",
+    "tab_pending": "ממתינות",
+    "tab_pending_count": "ממתינות ({count})",
+    "no_bookings_title": "אין הזמנות עדיין",
+    "no_bookings_message": "הזמן חנייה מהכרטיסייה 'זמינות' כדי לראות אותה כאן.",
+    "inbox_zero_title": "אין בקשות ממתינות",
+    "inbox_zero_message": "אין בקשות שממתינות לאישורך.",
+    "cancel_dialog_title": "לבטל הזמנה?",
+    "cancel_dialog_message": "{counterparty} יקבל התראה.",
+    "keep_it": "השאר",
+    "cancel_booking": "בטל הזמנה",
+    "booking_cancelled": "ההזמנה בוטלה",
+    "could_not_load": "לא ניתן לטעון הזמנות: {error}",
+    "could_not_cancel": "לא ניתן לבטל: {error}",
+    "spot_label": "חנייה {id}",
+    "parking_booking": "הזמנת חנייה",
+    "lender": "משאיל",
+    "borrower": "שוכר",
+    "cancel": "ביטול",
+    "status_waiting_approval": "ממתין לאישור",
+    "status_needs_review": "דורש את בדיקתך",
+    "status_approved_borrower": "אושר",
+    "status_approved_lender": "אישרת",
+    "status_declined_borrower": "נדחה",
+    "status_declined_lender": "דחית",
+    "status_cancelled": "בוטל",
+    "status_completed": "הושלם",
+
+    "detail": {
+      "title": "הזמנה",
+      "not_found": "ההזמנה לא נמצאה",
+      "when_label": "מתי",
+      "starts": "מתחיל",
+      "ends": "מסתיים",
+      "decline": "דחה",
+      "approve": "אשר",
+      "open_chat": "פתח צ'אט",
+      "could_not_load": "לא ניתן לטעון הזמנה: {error}",
+      "status_pending": "ממתין",
+      "status_approved": "אושר",
+      "status_declined": "נדחה",
+      "status_cancelled": "בוטל",
+      "status_completed": "הושלם",
+      "the_borrower": "השוכר",
+      "the_lender": "המשאיל",
+      "borrower_label": "שוכר",
+      "lender_label": "משאיל",
+      "spot_label": "חנייה {id}",
+      "parking_booking": "הזמנת חנייה"
+    },
+
+    "available": {
+      "spot_label": "חנייה {id}",
+      "tap_to_view": "לחץ לצפייה בחלונות הזמינים",
+      "pick_time": "בחר שעה",
+      "no_spots_title": "אין חניות פנויות כרגע",
+      "no_spots_message": "בדוק שוב מאוחר יותר — השכנים עדיין לא שיתפו חניות.",
+      "load_error_title": "לא ניתן לטעון חניות",
+      "refresh": "רענן",
+      "try_again": "נסה שוב",
+      "book_spot_title": "הזמן חנייה {id}",
+      "within_window": "בתוך {start} → {end}",
+      "always_available": "חנייה זו זמינה תמיד. בחר את החלון שלך.",
+      "starts": "מתחיל",
+      "ends": "מסתיים",
+      "select_start": "בחר שעת התחלה",
+      "select_end": "בחר שעת סיום",
+      "cancel": "ביטול",
+      "send_request": "שלח בקשה",
+      "request_sent": "הבקשה נשלחה",
+      "until": "עד {time}"
+    }
+  },
+
+  "spots": {
+    "manage_apartment": {
+      "title": "נהל דירה",
+      "residents_section": "דיירים",
+      "residents_count_one": "אדם {count} בדירתך",
+      "residents_count_other": "{count} אנשים בדירתך",
+      "no_residents_title": "לא נמצאו דיירים",
+      "no_residents_message": "אין פרופילים המקושרים כרגע לדירתך.",
+      "resident_fallback": "דייר",
+      "apartment_admin_tooltip": "מנהל דירה",
+      "push_notifications": "התראות דחיפה",
+      "chat_notifications": "התראות צ'אט"
+    },
+
+    "availability": {
+      "title": "חנייה {id}",
+      "when_free_heading": "מתי חנייה זו פנויה?",
+      "no_windows_hint": "אין חלונות עדיין — החנייה שלך פתוחה להזמנה בכל עת שהיא פעילה.",
+      "has_windows_hint": "השכנים יוכלו לבקש רק זמנים שנמצאים בתוך החלונות שלהלן.",
+      "no_windows_title": "לא הוגדרו חלונות",
+      "no_windows_message": "הוסף חלון כדי להגביל מתי שכנים יוכלו להזמין חנייה זו.",
+      "add_window": "הוסף חלון",
+      "one_time": "זמינות חד-פעמית",
+      "one_time_subtitle": "פתח חנייה זו לחלון זמן ספציפי",
+      "weekly": "חזרה שבועית",
+      "weekly_subtitle": "אותם ימים ושעות כל שבוע",
+      "repeat_on": "חזור ב",
+      "repeat_until": "חזור עד",
+      "forever": "לתמיד",
+      "forever_subtitle": "ממשיך לחזור עד שתסיר",
+      "pick_end_date": "בחר תאריך סיום",
+      "pick_end_date_subtitle": "הפסק לחזור לאחר תאריך זה",
+      "remove_dialog_title": "להסיר חלון זה?",
+      "remove_dialog_message": "הזמנות עתידיות בחלון זה לא יהיו אפשריות יותר. הזמנות קיימות שאושרו אינן מושפעות.",
+      "keep_it": "השאר",
+      "remove": "הסר",
+      "window_removed": "החלון הוסר",
+      "availability_added": "זמינות נוספה",
+      "recurring_added": "זמינות חוזרת נוספה",
+      "could_not_load": "לא ניתן לטעון תקופות: {error}",
+      "could_not_add": "לא ניתן להוסיף זמינות: {error}",
+      "could_not_remove": "לא ניתן להסיר: {error}",
+      "end_before_start": "זמן הסיום חייב להיות אחרי זמן ההתחלה",
+      "remove_tooltip": "הסר חלון",
+      "one_time_chip": "חד-פעמי",
+      "weekly_label": "שבועי · {days}",
+      "weekly_label_plain": "שבועי",
+      "until_suffix": " · עד {date}",
+      "repeats_label": "חוזר: {type}",
+      "mon": "שני",
+      "tue": "שלישי",
+      "wed": "רביעי",
+      "thu": "חמישי",
+      "fri": "שישי",
+      "sat": "שבת",
+      "sun": "ראשון",
+      "ok": "אישור",
+      "cancel": "ביטול"
+    }
+  },
+
+  "chat": {
+    "title": "צ'אט",
+    "say_hi_title": "שלח שלום",
+    "say_hi_message": "תאם הגעה ומסירה עם הדייר האחר.",
+    "message_hint": "הודעה…",
+    "today": "היום",
+    "yesterday": "אתמול",
+    "could_not_load": "לא ניתן לטעון הודעות: {error}",
+    "could_not_send": "לא ניתן לשלוח: {error}"
   },
 
   "admin": {
