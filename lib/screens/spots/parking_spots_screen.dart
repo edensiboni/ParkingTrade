@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import '../../models/spot_availability_period.dart';
 import '../../services/admin_service.dart';
 import '../../services/parking_spot_service.dart';
 import '../../services/auth_service.dart';
@@ -30,6 +31,8 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
   final _authService = AuthService();
   final _adminService = AdminService();
   List<ParkingSpot> _spots = [];
+  /// Maps spotId → active/future availability periods for display on the card.
+  final Map<String, List<SpotAvailabilityPeriod>> _spotPeriods = {};
   bool _isLoading = true;
   String? _displayName;
   bool _isAdmin = false;
@@ -72,8 +75,26 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
 
       final spots = await _spotService.getUserSpots();
       if (!mounted) return;
+
+      // Load availability periods for each active spot (non-fatal)
+      final periodsMap = <String, List<SpotAvailabilityPeriod>>{};
+      for (final spot in spots) {
+        if (spot.isActive) {
+          try {
+            final periods = await _spotService.getAvailabilityPeriods(spot.id);
+            periodsMap[spot.id] = periods;
+          } catch (_) {
+            // Non-fatal: skip period display for this spot
+          }
+        }
+      }
+
+      if (!mounted) return;
       setState(() {
         _spots = spots;
+        _spotPeriods
+          ..clear()
+          ..addAll(periodsMap);
         _isLoading = false;
       });
 
@@ -201,6 +222,7 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
                         )
                       : _MySpotsTab(
                           spots: _spots,
+                          spotPeriods: _spotPeriods,
                           displayName: _displayName,
                           onToggle: _toggleSpotActive,
                           onManageAvailability: (spot) {
@@ -209,7 +231,7 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
                                 builder: (_) =>
                                     ManageAvailabilityScreen(spot: spot),
                               ),
-                            );
+                            ).then((_) => _loadSpots());
                           },
                         ),
             ),
@@ -404,12 +426,14 @@ class _AppBarIconBtn extends StatelessWidget {
 
 class _MySpotsTab extends StatelessWidget {
   final List<ParkingSpot> spots;
+  final Map<String, List<SpotAvailabilityPeriod>> spotPeriods;
   final String? displayName;
   final void Function(ParkingSpot) onToggle;
   final void Function(ParkingSpot) onManageAvailability;
 
   const _MySpotsTab({
     required this.spots,
+    required this.spotPeriods,
     required this.displayName,
     required this.onToggle,
     required this.onManageAvailability,
@@ -433,6 +457,7 @@ class _MySpotsTab extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 14),
             child: _SpotTicketCard(
               spot: spot,
+              periods: spotPeriods[spot.id] ?? [],
               onToggle: () => onToggle(spot),
               onManageAvailability: () => onManageAvailability(spot),
             ),
@@ -463,10 +488,22 @@ class _HeroHeader extends StatelessWidget {
     final firstName = displayName?.isNotEmpty == true
         ? displayName!.split(' ').first
         : null;
-    final suffix = firstName != null ? ', $firstName' : '';
-    if (hour < 12) return 'Good morning$suffix 🌤';
-    if (hour < 18) return 'Good afternoon$suffix ☀️';
-    return 'Good evening$suffix 🌙';
+    final String base;
+    final String emoji;
+    if (hour < 12) {
+      base = 'home.greeting_morning'.tr();
+      emoji = '🌤';
+    } else if (hour < 18) {
+      base = 'home.greeting_afternoon'.tr();
+      emoji = '☀️';
+    } else {
+      base = 'home.greeting_evening'.tr();
+      emoji = '🌙';
+    }
+    if (firstName != null) {
+      return '$base, $firstName $emoji';
+    }
+    return '$base $emoji';
   }
 
   @override
@@ -492,7 +529,7 @@ class _HeroHeader extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Ready to share your spot?',
+            'home.ready_to_share'.tr(),
             style: theme.textTheme.headlineSmall?.copyWith(
               color: AppTheme.ink,
               fontWeight: FontWeight.w800,
@@ -504,7 +541,7 @@ class _HeroHeader extends StatelessWidget {
             children: [
               _StatPill(
                 icon: Icons.check_circle_rounded,
-                label: '$activeCount shared',
+                label: 'home.stat_shared'.tr(namedArgs: {'shared': '$activeCount'}),
                 color: activeCount > 0 ? AppTheme.success : AppTheme.inkSoft,
                 bgColor: activeCount > 0
                     ? const Color(0xFFE4F3EA)
@@ -513,7 +550,7 @@ class _HeroHeader extends StatelessWidget {
               const SizedBox(width: 8),
               _StatPill(
                 icon: Icons.local_parking_rounded,
-                label: '$totalCount total',
+                label: 'home.stat_total'.tr(namedArgs: {'total': '$totalCount'}),
                 color: AppTheme.inkMuted,
                 bgColor: AppTheme.subtleSurface,
               ),
@@ -521,14 +558,14 @@ class _HeroHeader extends StatelessWidget {
               if (allActive)
                 _StatPill(
                   icon: Icons.star_rounded,
-                  label: 'All shared!',
+                  label: 'home.all_shared'.tr(),
                   color: const Color(0xFF8A5A10),
                   bgColor: const Color(0xFFFDF1DA),
                 ),
               if (noneActive && totalCount > 0)
                 _StatPill(
                   icon: Icons.info_outline_rounded,
-                  label: 'None shared',
+                  label: 'home.none_shared'.tr(),
                   color: AppTheme.inkMuted,
                   bgColor: AppTheme.subtleSurface,
                 ),
@@ -586,11 +623,13 @@ class _StatPill extends StatelessWidget {
 
 class _SpotTicketCard extends StatefulWidget {
   final ParkingSpot spot;
+  final List<SpotAvailabilityPeriod> periods;
   final VoidCallback onToggle;
   final VoidCallback onManageAvailability;
 
   const _SpotTicketCard({
     required this.spot,
+    required this.periods,
     required this.onToggle,
     required this.onManageAvailability,
   });
@@ -695,7 +734,7 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
                 widget.spot.isActive ? widget.onManageAvailability : null,
             child: Column(
               children: [
-                _CardHeader(spot: widget.spot),
+                _CardHeader(spot: widget.spot, periods: widget.periods),
                 _PerforationDivider(active: widget.spot.isActive),
                 _CardActions(
                   spot: widget.spot,
@@ -713,12 +752,59 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
 
 class _CardHeader extends StatelessWidget {
   final ParkingSpot spot;
-  const _CardHeader({required this.spot});
+  final List<SpotAvailabilityPeriod> periods;
+  const _CardHeader({required this.spot, required this.periods});
+
+  /// Finds the best availability window to display:
+  /// 1. Currently active (now is within start–end)
+  /// 2. Next upcoming (soonest future start)
+  SpotAvailabilityPeriod? _bestPeriod() {
+    final now = DateTime.now();
+    // Filter to non-recurring, future or active periods
+    final relevant = periods
+        .where((p) => !p.isRecurring && p.endTime.isAfter(now))
+        .toList()
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+    if (relevant.isEmpty) return null;
+    // Prefer an actively-live period
+    final active = relevant.where(
+      (p) => p.startTime.isBefore(now) && p.endTime.isAfter(now),
+    );
+    return active.isNotEmpty ? active.first : relevant.first;
+  }
+
+  String _formatWindowLabel(SpotAvailabilityPeriod period) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final startDay =
+        DateTime(period.startTime.year, period.startTime.month, period.startTime.day);
+
+    final timeFmt = DateFormat('HH:mm');
+    final start = timeFmt.format(period.startTime.toLocal());
+    final end = timeFmt.format(period.endTime.toLocal());
+
+    if (startDay == today) {
+      return 'home.availability_today'.tr(namedArgs: {'start': start, 'end': end});
+    } else if (startDay == tomorrow) {
+      return 'home.availability_tomorrow'.tr(namedArgs: {'start': start, 'end': end});
+    } else {
+      final dateFmt = DateFormat('d MMM');
+      final date = dateFmt.format(period.startTime.toLocal());
+      return 'home.availability_date'.tr(namedArgs: {'date': date, 'start': start, 'end': end});
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final active = spot.isActive;
+    final bestPeriod = active ? _bestPeriod() : null;
+    final windowLabel = bestPeriod != null ? _formatWindowLabel(bestPeriod) : null;
+    final now = DateTime.now();
+    final isLiveNow = bestPeriod != null &&
+        bestPeriod.startTime.isBefore(now) &&
+        bestPeriod.endTime.isAfter(now);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 400),
@@ -796,7 +882,7 @@ class _CardHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'PARKING SPOT',
+                  'home.parking_spot_label'.tr(),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: AppTheme.inkSoft,
                     fontWeight: FontWeight.w700,
@@ -819,16 +905,82 @@ class _CardHeader extends StatelessWidget {
                   child: active
                       ? StatusChip(
                           key: const ValueKey('active'),
-                          label: '● Shared with neighbors',
+                          label: '● ${'home.shared_with_neighbors'.tr()}',
                           tone: StatusTone.success,
                         )
                       : StatusChip(
                           key: const ValueKey('inactive'),
-                          label: 'Not sharing',
+                          label: 'home.not_sharing'.tr(),
                           tone: StatusTone.neutral,
                         ),
                 ),
+                // ── Time window chip ──────────────────────────────────────
+                if (windowLabel != null) ...[
+                  const SizedBox(height: 10),
+                  _TimeWindowChip(
+                    label: windowLabel,
+                    isLive: isLiveNow,
+                  ),
+                ],
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A pill-shaped chip showing the exact availability timeframe.
+class _TimeWindowChip extends StatelessWidget {
+  final String label;
+  final bool isLive;
+
+  const _TimeWindowChip({required this.label, required this.isLive});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    // Live = green tones; upcoming = indigo tones
+    final bgColor = isLive
+        ? const Color(0xFFDCFCE7)
+        : AppTheme.brandIndigo.withValues(alpha: 0.09);
+    final borderColor = isLive
+        ? AppTheme.success.withValues(alpha: 0.45)
+        : AppTheme.brandIndigo.withValues(alpha: 0.22);
+    final iconColor = isLive ? AppTheme.success : AppTheme.brandIndigo;
+    final textColor = isLive
+        ? const Color(0xFF166534)
+        : AppTheme.brandIndigo;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isLive ? Icons.access_time_filled_rounded : Icons.calendar_today_rounded,
+            size: 12,
+            color: iconColor,
+          ),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              label,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: textColor,
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+                letterSpacing: 0.1,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -1001,7 +1153,7 @@ class _CardActions extends StatelessWidget {
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 250),
                       child: Text(
-                        active ? 'Stop Sharing' : 'Share Spot',
+                        active ? 'home.stop_sharing'.tr() : 'home.share_spot'.tr(),
                         key: ValueKey(active),
                         style: theme.textTheme.labelMedium?.copyWith(
                           color: Colors.white,

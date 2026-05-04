@@ -24,6 +24,34 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
   /// Maps spotId → the earliest end time of an active (currently-live)
   /// availability period, so we can show "Available until HH:mm".
   final Map<String, DateTime> _activeUntil = {};
+
+  /// Maps spotId → all its availability periods (used for time-filter matching).
+  final Map<String, List<_PeriodWindow>> _spotWindows = {};
+
+  // ── Time filter state ────────────────────────────────────────────────────
+  DateTime? _filterDate;
+  TimeOfDay? _filterTime;
+
+  bool get _isFilterActive => _filterDate != null && _filterTime != null;
+
+  DateTime get _filterDateTime {
+    final d = _filterDate!;
+    final t = _filterTime!;
+    return DateTime(d.year, d.month, d.day, t.hour, t.minute);
+  }
+
+  List<ParkingSpot> get _filteredSpots {
+    if (!_isFilterActive) return _spots;
+    final target = _filterDateTime;
+    return _spots.where((spot) {
+      final windows = _spotWindows[spot.id] ?? [];
+      return windows.any(
+        (w) =>
+            !target.isBefore(w.start) && !target.isAfter(w.end),
+      );
+    }).toList();
+  }
+
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -44,20 +72,29 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
       if (!mounted) return;
 
       final activeUntil = <String, DateTime>{};
+      final spotWindows = <String, List<_PeriodWindow>>{};
       final now = DateTime.now();
       for (final spot in spots) {
         try {
           final periods = await _spotService.getAvailabilityPeriods(spot.id);
           DateTime? earliest;
+          final windows = <_PeriodWindow>[];
           for (final p in periods) {
-            if (!p.isRecurring &&
-                p.startTime.isBefore(now) &&
-                p.endTime.isAfter(now)) {
-              if (earliest == null || p.endTime.isBefore(earliest)) {
-                earliest = p.endTime;
+            if (!p.isRecurring && p.endTime.isAfter(now)) {
+              // Collect all current/future windows for filter matching
+              windows.add(_PeriodWindow(
+                start: p.startTime.toLocal(),
+                end: p.endTime.toLocal(),
+              ));
+              // Also determine "active until" for live display
+              if (p.startTime.isBefore(now)) {
+                if (earliest == null || p.endTime.isBefore(earliest)) {
+                  earliest = p.endTime;
+                }
               }
             }
           }
+          spotWindows[spot.id] = windows;
           if (earliest != null) {
             activeUntil[spot.id] = earliest;
           }
@@ -71,6 +108,9 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
         _activeUntil
           ..clear()
           ..addAll(activeUntil);
+        _spotWindows
+          ..clear()
+          ..addAll(spotWindows);
         _isLoading = false;
       });
     } catch (e) {
@@ -80,6 +120,38 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
         _errorMessage = e.toString().replaceAll('Exception: ', '');
       });
     }
+  }
+
+  // ── Filter pickers ───────────────────────────────────────────────────────
+
+  Future<void> _pickFilterDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _filterDate ?? now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 90)),
+    );
+    if (picked != null && mounted) {
+      setState(() => _filterDate = picked);
+    }
+  }
+
+  Future<void> _pickFilterTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _filterTime ?? TimeOfDay.now(),
+    );
+    if (picked != null && mounted) {
+      setState(() => _filterTime = picked);
+    }
+  }
+
+  void _clearFilter() {
+    setState(() {
+      _filterDate = null;
+      _filterTime = null;
+    });
   }
 
   Future<void> _showBookingDialog(ParkingSpot spot) async {
@@ -405,6 +477,8 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
       );
     }
 
+    final displaySpots = _filteredSpots;
+
     return RefreshIndicator(
       onRefresh: _loadSpots,
       color: AppTheme.brandIndigo,
@@ -413,22 +487,40 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
           SliverToBoxAdapter(
             child: _FindParkingHeader(spotCount: _spots.length),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-            sliver: SliverList.separated(
-              itemCount: _spots.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final spot = _spots[index];
-                return _AvailableSpotCard(
-                  spot: spot,
-                  activeUntil: _activeUntil[spot.id],
-                  index: index,
-                  onTap: () => _showBookingDialog(spot),
-                );
-              },
+          // ── Time filter bar ──────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: _TimeFilterBar(
+              filterDate: _filterDate,
+              filterTime: _filterTime,
+              isFilterActive: _isFilterActive,
+              onPickDate: _pickFilterDate,
+              onPickTime: _pickFilterTime,
+              onClear: _clearFilter,
             ),
           ),
+          // ── Results ──────────────────────────────────────────────────
+          if (displaySpots.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _FilterEmptyState(onClear: _clearFilter),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+              sliver: SliverList.separated(
+                itemCount: displaySpots.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final spot = displaySpots[index];
+                  return _AvailableSpotCard(
+                    spot: spot,
+                    activeUntil: _activeUntil[spot.id],
+                    index: index,
+                    onTap: () => _showBookingDialog(spot),
+                  );
+                },
+              ),
+            ),
         ],
       ),
     );
@@ -453,7 +545,7 @@ class _FindParkingHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Spots available now',
+            'bookings.available.spots_available_now'.tr(),
             style: theme.textTheme.headlineSmall?.copyWith(
               color: AppTheme.ink,
               fontWeight: FontWeight.w800,
@@ -462,7 +554,7 @@ class _FindParkingHeader extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '$spotCount neighbor${spotCount == 1 ? '' : 's'} sharing right now',
+            'bookings.available.neighbors_sharing'.tr(namedArgs: {'count': '$spotCount'}),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: AppTheme.inkMuted,
             ),
@@ -474,7 +566,7 @@ class _FindParkingHeader extends StatelessWidget {
               const _PulseDot(),
               const SizedBox(width: 7),
               Text(
-                'Live',
+                'bookings.available.live_label'.tr(),
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: AppTheme.success,
                   fontWeight: FontWeight.w700,
@@ -482,7 +574,7 @@ class _FindParkingHeader extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               Text(
-                '· Pull down to refresh',
+                'bookings.available.pull_to_refresh'.tr(),
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: AppTheme.inkSoft,
                 ),
@@ -606,9 +698,11 @@ class _AvailableSpotCardState extends State<_AvailableSpotCard>
       final hours = diff.inHours;
       final mins = diff.inMinutes % 60;
       if (hours > 0) {
-        timeRemaining = '${hours}h ${mins}m left';
+        timeRemaining = 'bookings.available.time_remaining_hours'
+            .tr(namedArgs: {'hours': '$hours', 'mins': '$mins'});
       } else {
-        timeRemaining = '${mins}m left';
+        timeRemaining = 'bookings.available.time_remaining_mins'
+            .tr(namedArgs: {'mins': '$mins'});
       }
     }
 
@@ -680,7 +774,7 @@ class _AvailableSpotCardState extends State<_AvailableSpotCard>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Spot ${widget.spot.spotIdentifier}',
+                            'bookings.available.spot_number'.tr(namedArgs: {'number': widget.spot.spotIdentifier}),
                             style: theme.textTheme.titleMedium?.copyWith(
                               color: AppTheme.ink,
                               fontWeight: FontWeight.w700,
@@ -700,7 +794,7 @@ class _AvailableSpotCardState extends State<_AvailableSpotCard>
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
-                                  'Until ${timeFmt.format(widget.activeUntil!)}',
+                                  'bookings.available.until'.tr(namedArgs: {'time': timeFmt.format(widget.activeUntil!)}),
                                   style:
                                       theme.textTheme.bodySmall?.copyWith(
                                     color: AppTheme.inkMuted,
@@ -721,7 +815,7 @@ class _AvailableSpotCardState extends State<_AvailableSpotCard>
                             ],
                           ] else
                             Text(
-                              'Tap to see windows',
+                              'bookings.available.tap_to_see_windows'.tr(),
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: AppTheme.inkSoft,
                               ),
@@ -749,7 +843,7 @@ class _AvailableSpotCardState extends State<_AvailableSpotCard>
                           ],
                         ),
                         child: Text(
-                          'Book Now',
+                          'bookings.available.book_now'.tr(),
                           style: theme.textTheme.labelMedium?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
@@ -838,7 +932,9 @@ class _FindParkingEmptyState extends State<_FindParkingEmpty>
               ),
               const SizedBox(height: 28),
               Text(
-                isError ? 'Oops! Something went wrong' : 'No spots right now',
+                isError
+                    ? 'bookings.available.error_title'.tr()
+                    : 'bookings.available.no_spots_now_title'.tr(),
                 style: theme.textTheme.titleLarge?.copyWith(
                   color: AppTheme.ink,
                   fontWeight: FontWeight.w800,
@@ -850,8 +946,8 @@ class _FindParkingEmptyState extends State<_FindParkingEmpty>
                 padding: const EdgeInsets.symmetric(horizontal: 48),
                 child: Text(
                   isError
-                      ? (widget.errorMessage ?? 'Pull down to try again.')
-                      : "No neighbors are sharing right now.\nCheck back soon — we'll notify you when a spot opens!",
+                      ? (widget.errorMessage ?? 'bookings.available.pull_to_try_again'.tr())
+                      : 'bookings.available.no_spots_now_message'.tr(),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: AppTheme.inkMuted,
                     height: 1.55,
@@ -1000,6 +1096,267 @@ class _ZzzBubbleState extends State<_ZzzBubble>
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Simple data class for a concrete availability window
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PeriodWindow {
+  final DateTime start;
+  final DateTime end;
+  const _PeriodWindow({required this.start, required this.end});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Time Filter Bar
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TimeFilterBar extends StatelessWidget {
+  final DateTime? filterDate;
+  final TimeOfDay? filterTime;
+  final bool isFilterActive;
+  final VoidCallback onPickDate;
+  final VoidCallback onPickTime;
+  final VoidCallback onClear;
+
+  const _TimeFilterBar({
+    required this.filterDate,
+    required this.filterTime,
+    required this.isFilterActive,
+    required this.onPickDate,
+    required this.onPickTime,
+    required this.onClear,
+  });
+
+  String _dateLabel(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final d = DateTime(date.year, date.month, date.day);
+    if (d == today) return 'bookings.available.filter_today'.tr();
+    if (d == tomorrow) return 'bookings.available.filter_tomorrow'.tr();
+    return DateFormat('d MMM').format(date);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isFilterActive
+            ? AppTheme.brandIndigo.withValues(alpha: 0.06)
+            : AppTheme.subtleSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isFilterActive
+              ? AppTheme.brandIndigo.withValues(alpha: 0.30)
+              : AppTheme.hairline,
+          width: isFilterActive ? 1.5 : 1.0,
+        ),
+      ),
+      child: Row(
+        children: [
+          // ── Date picker pill ──────────────────────────────────────────
+          Expanded(
+            child: _FilterPill(
+              icon: Icons.calendar_today_rounded,
+              label: filterDate != null
+                  ? _dateLabel(filterDate!)
+                  : 'bookings.available.filter_select_date'.tr(),
+              isSet: filterDate != null,
+              onTap: onPickDate,
+            ),
+          ),
+          const SizedBox(width: 8),
+          // ── Time picker pill ──────────────────────────────────────────
+          Expanded(
+            child: _FilterPill(
+              icon: Icons.access_time_rounded,
+              label: filterTime != null
+                  ? filterTime!.format(context)
+                  : 'bookings.available.filter_select_time'.tr(),
+              isSet: filterTime != null,
+              onTap: onPickTime,
+            ),
+          ),
+          // ── Clear button ──────────────────────────────────────────────
+          if (isFilterActive) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: onClear,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.danger.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: AppTheme.danger.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.close_rounded,
+                        size: 13, color: AppTheme.danger),
+                    const SizedBox(width: 4),
+                    Text(
+                      'bookings.available.filter_clear'.tr(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: AppTheme.danger,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isSet;
+  final VoidCallback onTap;
+
+  const _FilterPill({
+    required this.icon,
+    required this.label,
+    required this.isSet,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = isSet ? AppTheme.brandIndigo : AppTheme.inkSoft;
+    final bgColor = isSet
+        ? AppTheme.brandIndigo.withValues(alpha: 0.10)
+        : AppTheme.cardSurface;
+    final borderColor = isSet
+        ? AppTheme.brandIndigo.withValues(alpha: 0.28)
+        : AppTheme.hairline;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: color,
+                  fontWeight: isSet ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 12,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Icon(Icons.expand_more_rounded, size: 14, color: color),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filter empty state
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FilterEmptyState extends StatelessWidget {
+  final VoidCallback onClear;
+  const _FilterEmptyState({required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 48),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              color: AppTheme.brandIndigo.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.search_off_rounded,
+              size: 48,
+              color: AppTheme.brandIndigo.withValues(alpha: 0.45),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'bookings.available.filter_no_results_title'.tr(),
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: AppTheme.ink,
+              fontWeight: FontWeight.w800,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'bookings.available.filter_no_results_message'.tr(),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: AppTheme.inkMuted,
+              height: 1.55,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          OutlinedButton.icon(
+            onPressed: onClear,
+            icon: const Icon(Icons.filter_alt_off_rounded, size: 16),
+            label: Text('bookings.available.filter_clear'.tr()),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(140, 44),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+              side: BorderSide(
+                color: AppTheme.brandIndigo.withValues(alpha: 0.35),
+                width: 1.4,
+              ),
+              foregroundColor: AppTheme.brandIndigo,
+              textStyle: theme.textTheme.labelMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
       ),
     );
   }
