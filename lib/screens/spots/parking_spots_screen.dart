@@ -165,6 +165,34 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
     }
   }
 
+  /// Immediately shares [spot] until [endTime] without opening any sheet.
+  /// Used by the quick-preset chips on the spot card.
+  Future<void> _quickSharePreset(ParkingSpot spot, DateTime endTime) async {
+    final now = DateTime.now();
+    try {
+      await _spotService.addAvailabilityPeriod(
+        spotId: spot.id,
+        startTime: now,
+        endTime: endTime,
+      );
+      if (!mounted) return;
+      final timeFmt = DateFormat('HH:mm');
+      AppSnack.success(
+        context,
+        'home.quick_share_added'.tr(
+          namedArgs: {'time': timeFmt.format(endTime.toLocal())},
+        ),
+      );
+      _loadSpots();
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.error(
+        context,
+        'home.quick_share_error'.tr(namedArgs: {'error': e.toString()}),
+      );
+    }
+  }
+
   /// Deletes the currently-active availability period for the spot, effectively
   /// stopping sharing immediately.
   Future<void> _stopSharing(ParkingSpot spot) async {
@@ -291,6 +319,7 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
                           displayName: _displayName,
                           hasActivePeriod: _hasActivePeriod,
                           onQuickShare: _quickShare,
+                          onQuickSharePreset: _quickSharePreset,
                           onStopSharing: _stopSharing,
                           onManageAvailability: (spot) {
                             Navigator.of(context).push(
@@ -496,8 +525,9 @@ class _MySpotsTab extends StatelessWidget {
   final Map<String, List<SpotAvailabilityPeriod>> spotPeriods;
   final String? displayName;
   final bool Function(String spotId) hasActivePeriod;
-  final void Function(ParkingSpot) onQuickShare;
-  final void Function(ParkingSpot) onStopSharing;
+  final Future<void> Function(ParkingSpot) onQuickShare;
+  final Future<void> Function(ParkingSpot, DateTime endTime) onQuickSharePreset;
+  final Future<void> Function(ParkingSpot) onStopSharing;
   final void Function(ParkingSpot) onManageAvailability;
 
   const _MySpotsTab({
@@ -506,6 +536,7 @@ class _MySpotsTab extends StatelessWidget {
     required this.displayName,
     required this.hasActivePeriod,
     required this.onQuickShare,
+    required this.onQuickSharePreset,
     required this.onStopSharing,
     required this.onManageAvailability,
   });
@@ -534,6 +565,7 @@ class _MySpotsTab extends StatelessWidget {
                 periods: spotPeriods[spot.id] ?? [],
                 isShared: isShared,
                 onQuickShare: () => onQuickShare(spot),
+                onQuickSharePreset: (endTime) => onQuickSharePreset(spot, endTime),
                 onStopSharing: () => onStopSharing(spot),
                 onManageAvailability: () => onManageAvailability(spot),
               ),
@@ -703,8 +735,9 @@ class _SpotTicketCard extends StatefulWidget {
   final List<SpotAvailabilityPeriod> periods;
   /// True when there is a currently-active availability window for this spot.
   final bool isShared;
-  final VoidCallback onQuickShare;
-  final VoidCallback onStopSharing;
+  final Future<void> Function() onQuickShare;
+  final Future<void> Function(DateTime endTime) onQuickSharePreset;
+  final Future<void> Function() onStopSharing;
   final VoidCallback onManageAvailability;
 
   const _SpotTicketCard({
@@ -712,6 +745,7 @@ class _SpotTicketCard extends StatefulWidget {
     required this.periods,
     required this.isShared,
     required this.onQuickShare,
+    required this.onQuickSharePreset,
     required this.onStopSharing,
     required this.onManageAvailability,
   });
@@ -721,13 +755,25 @@ class _SpotTicketCard extends StatefulWidget {
 }
 
 class _SpotTicketCardState extends State<_SpotTicketCard>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _glowController;
   late final Animation<double> _glowAnim;
+
+  // ── Success checkmark overlay animation ──────────────────────────────────
+  late final AnimationController _checkController;
+  late final Animation<double> _checkScale;
+  late final Animation<double> _checkOpacity;
+  bool _showCheck = false;
+
+  // ── Stop-sharing dismiss animation ────────────────────────────────────────
+  late final AnimationController _stopController;
+  late final Animation<double> _stopScale;
 
   @override
   void initState() {
     super.initState();
+
+    // Glow pulse (existing)
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -739,6 +785,61 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
     if (widget.isShared) {
       _glowController.repeat(reverse: true);
     }
+
+    // Success checkmark: scale 0→1.15→1 with bounce, opacity 0→1→0
+    _checkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _checkScale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 0.0, end: 1.15)
+            .chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 25,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.15, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 15,
+      ),
+      TweenSequenceItem(
+        tween: ConstantTween<double>(1.0),
+        weight: 35,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 0.0)
+            .chain(CurveTween(curve: Curves.easeIn)),
+        weight: 25,
+      ),
+    ]).animate(_checkController);
+    _checkOpacity = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 10),
+      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 65),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 25),
+    ]).animate(_checkController);
+    _checkController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() => _showCheck = false);
+      }
+    });
+
+    // Stop-sharing button: subtle scale-down then back up
+    _stopController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _stopScale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 0.88)
+            .chain(CurveTween(curve: Curves.easeIn)),
+        weight: 35,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 0.88, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 65,
+      ),
+    ]).animate(_stopController);
   }
 
   @override
@@ -756,7 +857,34 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
   @override
   void dispose() {
     _glowController.dispose();
+    _checkController.dispose();
+    _stopController.dispose();
     super.dispose();
+  }
+
+  /// Called when any "share" action succeeds. Pops the checkmark overlay.
+  void _triggerShareSuccess() {
+    if (!mounted) return;
+    setState(() => _showCheck = true);
+    _checkController.forward(from: 0);
+  }
+
+  /// Called when stop-sharing is tapped. Plays dismiss animation then executes.
+  Future<void> _handleStopSharing() async {
+    _stopController.forward(from: 0);
+    await widget.onStopSharing();
+  }
+
+  /// Wraps a share preset call with the success animation.
+  Future<void> _handleQuickSharePreset(DateTime endTime) async {
+    await widget.onQuickSharePreset(endTime);
+    _triggerShareSuccess();
+  }
+
+  /// Wraps the custom sheet share call with the success animation.
+  Future<void> _handleQuickShare() async {
+    await widget.onQuickShare();
+    _triggerShareSuccess();
   }
 
   @override
@@ -813,21 +941,64 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
           color: Colors.transparent,
           child: InkWell(
             onTap: isShared ? widget.onManageAvailability : null,
-            child: Column(
+            child: Stack(
               children: [
-                _CardHeader(
-                  spot: widget.spot,
-                  periods: widget.periods,
-                  isShared: widget.isShared,
+                Column(
+                  children: [
+                    _CardHeader(
+                      spot: widget.spot,
+                      periods: widget.periods,
+                      isShared: widget.isShared,
+                    ),
+                    _PerforationDivider(active: isShared),
+                    _CardActions(
+                      spot: widget.spot,
+                      isShared: isShared,
+                      onQuickShare: _handleQuickShare,
+                      onQuickSharePreset: _handleQuickSharePreset,
+                      onStopSharing: _handleStopSharing,
+                      onStopScale: _stopScale,
+                      onManageAvailability: widget.onManageAvailability,
+                    ),
+                  ],
                 ),
-                _PerforationDivider(active: isShared),
-                _CardActions(
-                  spot: widget.spot,
-                  isShared: isShared,
-                  onQuickShare: widget.onQuickShare,
-                  onStopSharing: widget.onStopSharing,
-                  onManageAvailability: widget.onManageAvailability,
-                ),
+                // ── Success checkmark overlay ─────────────────────────────
+                if (_showCheck)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedBuilder(
+                        animation: _checkController,
+                        builder: (context, _) => Opacity(
+                          opacity: _checkOpacity.value,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.82),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Center(
+                              child: Transform.scale(
+                                scale: _checkScale.value,
+                                child: Container(
+                                  width: 72,
+                                  height: 72,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.success
+                                        .withValues(alpha: 0.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.check_circle_rounded,
+                                    color: AppTheme.success,
+                                    size: 44,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1176,15 +1347,20 @@ class _CardActions extends StatelessWidget {
   final ParkingSpot spot;
   /// True when there is a currently-active availability window.
   final bool isShared;
-  final VoidCallback onQuickShare;
-  final VoidCallback onStopSharing;
+  final Future<void> Function() onQuickShare;
+  final Future<void> Function(DateTime endTime) onQuickSharePreset;
+  final Future<void> Function() onStopSharing;
+  /// Scale animation driven by the stop-sharing dismiss effect.
+  final Animation<double> onStopScale;
   final VoidCallback onManageAvailability;
 
   const _CardActions({
     required this.spot,
     required this.isShared,
     required this.onQuickShare,
+    required this.onQuickSharePreset,
     required this.onStopSharing,
+    required this.onStopScale,
     required this.onManageAvailability,
   });
 
@@ -1192,96 +1368,233 @@ class _CardActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      child: Row(
-        children: [
-          // Primary action button
-          Expanded(
-            child: GestureDetector(
-              onTap: isShared ? onStopSharing : onQuickShare,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeOutCubic,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  gradient: isShared
-                      ? LinearGradient(
-                          colors: [
-                            AppTheme.success,
-                            AppTheme.success.withValues(alpha: 0.85),
-                          ],
-                        )
-                      : const LinearGradient(
-                          colors: [
-                            AppTheme.brandIndigo,
-                            AppTheme.brandViolet,
-                          ],
-                        ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: (isShared
-                              ? AppTheme.success
-                              : AppTheme.brandIndigo)
-                          .withValues(alpha: 0.28),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      child: Icon(
-                        isShared
-                            ? Icons.pause_circle_filled_rounded
-                            : Icons.share_rounded,
-                        key: ValueKey(isShared),
-                        color: Colors.white,
-                        size: 18,
+    if (isShared) {
+      // ── Shared state: single "Stop Sharing" button + calendar ──────────
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: onStopSharing,
+                child: AnimatedBuilder(
+                  animation: onStopScale,
+                  builder: (context, child) => Transform.scale(
+                    scale: onStopScale.value,
+                    child: child,
+                  ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeOutCubic,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppTheme.success,
+                          AppTheme.success.withValues(alpha: 0.85),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      child: Text(
-                        isShared
-                            ? 'home.stop_sharing'.tr()
-                            : 'home.share_spot'.tr(),
-                        key: ValueKey(isShared),
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.success.withValues(alpha: 0.28),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.pause_circle_filled_rounded,
+                            color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          'home.stop_sharing'.tr(),
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: onManageAvailability,
+              child: Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: AppTheme.subtleSurface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.hairline),
+                ),
+                child: const Icon(Icons.calendar_month_rounded,
+                    size: 20, color: AppTheme.inkMuted),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Not shared: Quick-Share Presets row ─────────────────────────────
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _QuickSharePresetsRow(
+            onPreset: (endTime) => onQuickSharePreset(endTime),
+            onCustom: onQuickShare,
           ),
-          const SizedBox(width: 10),
-          // Calendar button — always tappable so users can manage windows
-          // even when the spot is not currently shared.
+          const SizedBox(height: 8),
+          // Subtle manage-availability link below presets
           GestureDetector(
             onTap: onManageAvailability,
-            child: Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: AppTheme.subtleSurface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.hairline),
-              ),
-              child: const Icon(Icons.calendar_month_rounded,
-                  size: 20, color: AppTheme.inkMuted),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.calendar_month_rounded,
+                    size: 14, color: AppTheme.inkSoft),
+                const SizedBox(width: 5),
+                Text(
+                  'home.manage_availability_tooltip'.tr(),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: AppTheme.inkSoft,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quick-Share Presets Row
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _QuickSharePresetsRow extends StatelessWidget {
+  final Future<void> Function(DateTime endTime) onPreset;
+  final Future<void> Function() onCustom;
+
+  const _QuickSharePresetsRow({
+    required this.onPreset,
+    required this.onCustom,
+  });
+
+  /// Calculates the next occurrence of 07:00 AM (tomorrow morning if it's
+  /// already past 07:00 today, otherwise today's 07:00).
+  static DateTime _nextSevenAM() {
+    final now = DateTime.now();
+    final todayAt7 =
+        DateTime(now.year, now.month, now.day, 7, 0);
+    if (now.isBefore(todayAt7)) return todayAt7;
+    // Already past 07:00 — use tomorrow
+    return todayAt7.add(const Duration(days: 1));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final morningEnd = _nextSevenAM();
+    final twoHoursEnd = now.add(const Duration(hours: 2));
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.none,
+      child: Row(
+        children: [
+          _PresetChip(
+            label: 'home.quick_share_morning'.tr(),
+            onTap: () => onPreset(morningEnd),
+            color: AppTheme.brandIndigo,
+            bgColor: AppTheme.brandIndigo.withValues(alpha: 0.08),
+            borderColor: AppTheme.brandIndigo.withValues(alpha: 0.22),
+          ),
+          const SizedBox(width: 8),
+          _PresetChip(
+            label: 'home.quick_share_2h'.tr(),
+            onTap: () => onPreset(twoHoursEnd),
+            color: AppTheme.brandViolet,
+            bgColor: AppTheme.brandViolet.withValues(alpha: 0.08),
+            borderColor: AppTheme.brandViolet.withValues(alpha: 0.22),
+          ),
+          const SizedBox(width: 8),
+          _PresetChip(
+            label: 'home.quick_share_custom'.tr(),
+            onTap: onCustom,
+            color: AppTheme.inkMuted,
+            bgColor: AppTheme.subtleSurface,
+            borderColor: AppTheme.hairline,
+            isCustom: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PresetChip extends StatelessWidget {
+  final String label;
+  final Future<void> Function() onTap;
+  final Color color;
+  final Color bgColor;
+  final Color borderColor;
+  final bool isCustom;
+
+  const _PresetChip({
+    required this.label,
+    required this.onTap,
+    required this.color,
+    required this.bgColor,
+    required this.borderColor,
+    this.isCustom = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor, width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isCustom ? Icons.tune_rounded : Icons.flash_on_rounded,
+              size: 14,
+              color: color,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

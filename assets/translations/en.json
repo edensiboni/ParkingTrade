@@ -107,7 +107,10 @@
     "availability_label": "Available",
     "quick_share_added": "Spot shared until {time}",
     "quick_share_stopped": "Sharing stopped",
-    "quick_share_error": "Could not update sharing: {error}"
+    "quick_share_error": "Could not update sharing: {error}",
+    "quick_share_morning": "Until tomorrow 07:00 🌅",
+    "quick_share_2h": "Next 2 hours ⏳",
+    "quick_share_custom": "Custom time... ⚙️"
   },
 
   "bookings": {
