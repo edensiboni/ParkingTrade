@@ -11,6 +11,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
+import '../../widgets/add_availability_duration_sheet.dart';
 import '../../widgets/status_chip.dart';
 import '../admin/admin_dashboard_screen.dart';
 import 'manage_apartment_screen.dart';
@@ -148,7 +149,7 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
       );
       if (!mounted) return;
       final timeFmt = DateFormat('HH:mm');
-      AppSnack.show(
+      AppSnack.success(
         context,
         'home.quick_share_added'.tr(
           namedArgs: {'time': timeFmt.format(duration.endTime.toLocal())},
@@ -173,7 +174,7 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
     try {
       await _spotService.deleteAvailabilityPeriod(active.id);
       if (!mounted) return;
-      AppSnack.show(context, 'home.quick_share_stopped'.tr());
+      AppSnack.success(context, 'home.quick_share_stopped'.tr());
       _loadSpots();
     } catch (e) {
       if (!mounted) return;
@@ -1173,19 +1174,23 @@ class _DashedLinePainter extends CustomPainter {
 
 class _CardActions extends StatelessWidget {
   final ParkingSpot spot;
-  final VoidCallback onToggle;
+  /// True when there is a currently-active availability window.
+  final bool isShared;
+  final VoidCallback onQuickShare;
+  final VoidCallback onStopSharing;
   final VoidCallback onManageAvailability;
 
   const _CardActions({
     required this.spot,
-    required this.onToggle,
+    required this.isShared,
+    required this.onQuickShare,
+    required this.onStopSharing,
     required this.onManageAvailability,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final active = spot.isActive;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -1194,14 +1199,14 @@ class _CardActions extends StatelessWidget {
           // Primary action button
           Expanded(
             child: GestureDetector(
-              onTap: onToggle,
+              onTap: isShared ? onStopSharing : onQuickShare,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 350),
                 curve: Curves.easeOutCubic,
                 padding: const EdgeInsets.symmetric(
                     horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  gradient: active
+                  gradient: isShared
                       ? LinearGradient(
                           colors: [
                             AppTheme.success,
@@ -1217,7 +1222,7 @@ class _CardActions extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: (active
+                      color: (isShared
                               ? AppTheme.success
                               : AppTheme.brandIndigo)
                           .withValues(alpha: 0.28),
@@ -1232,10 +1237,10 @@ class _CardActions extends StatelessWidget {
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 250),
                       child: Icon(
-                        active
+                        isShared
                             ? Icons.pause_circle_filled_rounded
                             : Icons.share_rounded,
-                        key: ValueKey(active),
+                        key: ValueKey(isShared),
                         color: Colors.white,
                         size: 18,
                       ),
@@ -1244,8 +1249,10 @@ class _CardActions extends StatelessWidget {
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 250),
                       child: Text(
-                        active ? 'home.stop_sharing'.tr() : 'home.share_spot'.tr(),
-                        key: ValueKey(active),
+                        isShared
+                            ? 'home.stop_sharing'.tr()
+                            : 'home.share_spot'.tr(),
+                        key: ValueKey(isShared),
                         style: theme.textTheme.labelMedium?.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
@@ -1258,23 +1265,20 @@ class _CardActions extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          // Calendar button
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 300),
-            opacity: active ? 1.0 : 0.38,
-            child: GestureDetector(
-              onTap: active ? onManageAvailability : null,
-              child: Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: AppTheme.subtleSurface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.hairline),
-                ),
-                child: const Icon(Icons.calendar_month_rounded,
-                    size: 20, color: AppTheme.inkMuted),
+          // Calendar button — always tappable so users can manage windows
+          // even when the spot is not currently shared.
+          GestureDetector(
+            onTap: onManageAvailability,
+            child: Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: AppTheme.subtleSurface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.hairline),
               ),
+              child: const Icon(Icons.calendar_month_rounded,
+                  size: 20, color: AppTheme.inkMuted),
             ),
           ),
         ],
