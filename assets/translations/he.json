@@ -107,7 +107,10 @@
     "availability_label": "פנוי",
     "quick_share_added": "החנייה משותפת עד {time}",
     "quick_share_stopped": "השיתוף הופסק",
-    "quick_share_error": "לא ניתן לעדכן שיתוף: {error}"
+    "quick_share_error": "לא ניתן לעדכן שיתוף: {error}",
+    "quick_share_morning": "עד מחר ב-07:00 🌅",
+    "quick_share_2h": "לשעתיים הקרובות ⏳",
+    "quick_share_custom": "שעה אחרת... ⚙️"
   },
 
   "bookings": {
