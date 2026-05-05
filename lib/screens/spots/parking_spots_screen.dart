@@ -76,16 +76,14 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
       final spots = await _spotService.getUserSpots();
       if (!mounted) return;
 
-      // Load availability periods for each active spot (non-fatal)
+      // Load availability periods for ALL spots (needed to determine true share state)
       final periodsMap = <String, List<SpotAvailabilityPeriod>>{};
       for (final spot in spots) {
-        if (spot.isActive) {
-          try {
-            final periods = await _spotService.getAvailabilityPeriods(spot.id);
-            periodsMap[spot.id] = periods;
-          } catch (_) {
-            // Non-fatal: skip period display for this spot
-          }
+        try {
+          final periods = await _spotService.getAvailabilityPeriods(spot.id);
+          periodsMap[spot.id] = periods;
+        } catch (_) {
+          // Non-fatal: skip period display for this spot
         }
       }
 
@@ -109,6 +107,83 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
     }
   }
 
+  /// Returns true if there is at least one non-recurring availability period
+  /// for [spotId] that is currently active (now is between start and end).
+  bool _hasActivePeriod(String spotId) {
+    final periods = _spotPeriods[spotId] ?? [];
+    final now = DateTime.now();
+    return periods.any(
+      (p) => !p.isRecurring &&
+          p.startTime.isBefore(now) &&
+          p.endTime.isAfter(now),
+    );
+  }
+
+  /// Returns the first active period for a spot, or null.
+  SpotAvailabilityPeriod? _activePeriod(String spotId) {
+    final periods = _spotPeriods[spotId] ?? [];
+    final now = DateTime.now();
+    try {
+      return periods.firstWhere(
+        (p) => !p.isRecurring &&
+            p.startTime.isBefore(now) &&
+            p.endTime.isAfter(now),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Opens the duration sheet and, if a duration is selected, creates a
+  /// spot_availability_periods record. The card becomes green only after this.
+  Future<void> _quickShare(ParkingSpot spot) async {
+    final duration = await showAddAvailabilityDurationSheet(context);
+    if (duration == null || !mounted) return;
+
+    try {
+      await _spotService.addAvailabilityPeriod(
+        spotId: spot.id,
+        startTime: duration.startTime,
+        endTime: duration.endTime,
+      );
+      if (!mounted) return;
+      final timeFmt = DateFormat('HH:mm');
+      AppSnack.show(
+        context,
+        'home.quick_share_added'.tr(
+          namedArgs: {'time': timeFmt.format(duration.endTime.toLocal())},
+        ),
+      );
+      _loadSpots();
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.error(
+        context,
+        'home.quick_share_error'.tr(namedArgs: {'error': e.toString()}),
+      );
+    }
+  }
+
+  /// Deletes the currently-active availability period for the spot, effectively
+  /// stopping sharing immediately.
+  Future<void> _stopSharing(ParkingSpot spot) async {
+    final active = _activePeriod(spot.id);
+    if (active == null) return;
+
+    try {
+      await _spotService.deleteAvailabilityPeriod(active.id);
+      if (!mounted) return;
+      AppSnack.show(context, 'home.quick_share_stopped'.tr());
+      _loadSpots();
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.error(
+        context,
+        'home.quick_share_error'.tr(namedArgs: {'error': e.toString()}),
+      );
+    }
+  }
+
   Future<void> _refreshAdminPendingCount() async {
     try {
       final pending = await _adminService.getPendingMembers();
@@ -129,17 +204,6 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const ManageApartmentScreen()),
     );
-  }
-
-  Future<void> _toggleSpotActive(ParkingSpot spot) async {
-    try {
-      await _spotService.updateSpot(spotId: spot.id, isActive: !spot.isActive);
-      _loadSpots();
-    } catch (e) {
-      if (!mounted) return;
-      AppSnack.error(context,
-          'home.could_not_load_spots'.tr(namedArgs: {'error': e.toString()}));
-    }
   }
 
   Future<void> _confirmSignOut() async {
@@ -224,7 +288,9 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
                           spots: _spots,
                           spotPeriods: _spotPeriods,
                           displayName: _displayName,
-                          onToggle: _toggleSpotActive,
+                          hasActivePeriod: _hasActivePeriod,
+                          onQuickShare: _quickShare,
+                          onStopSharing: _stopSharing,
                           onManageAvailability: (spot) {
                             Navigator.of(context).push(
                               MaterialPageRoute(
@@ -428,20 +494,25 @@ class _MySpotsTab extends StatelessWidget {
   final List<ParkingSpot> spots;
   final Map<String, List<SpotAvailabilityPeriod>> spotPeriods;
   final String? displayName;
-  final void Function(ParkingSpot) onToggle;
+  final bool Function(String spotId) hasActivePeriod;
+  final void Function(ParkingSpot) onQuickShare;
+  final void Function(ParkingSpot) onStopSharing;
   final void Function(ParkingSpot) onManageAvailability;
 
   const _MySpotsTab({
     required this.spots,
     required this.spotPeriods,
     required this.displayName,
-    required this.onToggle,
+    required this.hasActivePeriod,
+    required this.onQuickShare,
+    required this.onStopSharing,
     required this.onManageAvailability,
   });
 
   @override
   Widget build(BuildContext context) {
-    final activeCount = spots.where((s) => s.isActive).length;
+    // "Shared" count now based on active availability periods, not isActive flag.
+    final activeCount = spots.where((s) => hasActivePeriod(s.id)).length;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
@@ -453,15 +524,20 @@ class _MySpotsTab extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         ...spots.map(
-          (spot) => Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: _SpotTicketCard(
-              spot: spot,
-              periods: spotPeriods[spot.id] ?? [],
-              onToggle: () => onToggle(spot),
-              onManageAvailability: () => onManageAvailability(spot),
-            ),
-          ),
+          (spot) {
+            final isShared = hasActivePeriod(spot.id);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: _SpotTicketCard(
+                spot: spot,
+                periods: spotPeriods[spot.id] ?? [],
+                isShared: isShared,
+                onQuickShare: () => onQuickShare(spot),
+                onStopSharing: () => onStopSharing(spot),
+                onManageAvailability: () => onManageAvailability(spot),
+              ),
+            );
+          },
         ),
       ],
     );
@@ -624,13 +700,18 @@ class _StatPill extends StatelessWidget {
 class _SpotTicketCard extends StatefulWidget {
   final ParkingSpot spot;
   final List<SpotAvailabilityPeriod> periods;
-  final VoidCallback onToggle;
+  /// True when there is a currently-active availability window for this spot.
+  final bool isShared;
+  final VoidCallback onQuickShare;
+  final VoidCallback onStopSharing;
   final VoidCallback onManageAvailability;
 
   const _SpotTicketCard({
     required this.spot,
     required this.periods,
-    required this.onToggle,
+    required this.isShared,
+    required this.onQuickShare,
+    required this.onStopSharing,
     required this.onManageAvailability,
   });
 
@@ -654,7 +735,7 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
       parent: _glowController,
       curve: Curves.easeInOut,
     );
-    if (widget.spot.isActive) {
+    if (widget.isShared) {
       _glowController.repeat(reverse: true);
     }
   }
@@ -662,9 +743,9 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
   @override
   void didUpdateWidget(_SpotTicketCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.spot.isActive && !_glowController.isAnimating) {
+    if (widget.isShared && !_glowController.isAnimating) {
       _glowController.repeat(reverse: true);
-    } else if (!widget.spot.isActive && _glowController.isAnimating) {
+    } else if (!widget.isShared && _glowController.isAnimating) {
       _glowController.stop();
       _glowController.animateTo(0,
           duration: const Duration(milliseconds: 300));
@@ -679,13 +760,13 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
 
   @override
   Widget build(BuildContext context) {
-    final active = widget.spot.isActive;
+    final isShared = widget.isShared;
 
     return AnimatedBuilder(
       animation: _glowAnim,
       builder: (context, child) {
         final glowOpacity =
-            active ? (0.18 + _glowAnim.value * 0.12) : 0.0;
+            isShared ? (0.18 + _glowAnim.value * 0.12) : 0.0;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 400),
           curve: Curves.easeOutCubic,
@@ -693,13 +774,13 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
             color: AppTheme.cardSurface,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: active
+              color: isShared
                   ? AppTheme.success
                       .withValues(alpha: 0.4 + _glowAnim.value * 0.2)
                   : AppTheme.hairline,
-              width: active ? 1.5 : 1.0,
+              width: isShared ? 1.5 : 1.0,
             ),
-            boxShadow: active
+            boxShadow: isShared
                 ? [
                     BoxShadow(
                       color: AppTheme.success
@@ -730,15 +811,20 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap:
-                widget.spot.isActive ? widget.onManageAvailability : null,
+            onTap: isShared ? widget.onManageAvailability : null,
             child: Column(
               children: [
-                _CardHeader(spot: widget.spot, periods: widget.periods),
-                _PerforationDivider(active: widget.spot.isActive),
+                _CardHeader(
+                  spot: widget.spot,
+                  periods: widget.periods,
+                  isShared: widget.isShared,
+                ),
+                _PerforationDivider(active: isShared),
                 _CardActions(
                   spot: widget.spot,
-                  onToggle: widget.onToggle,
+                  isShared: isShared,
+                  onQuickShare: widget.onQuickShare,
+                  onStopSharing: widget.onStopSharing,
                   onManageAvailability: widget.onManageAvailability,
                 ),
               ],
@@ -753,24 +839,30 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
 class _CardHeader extends StatelessWidget {
   final ParkingSpot spot;
   final List<SpotAvailabilityPeriod> periods;
-  const _CardHeader({required this.spot, required this.periods});
+  /// True when there is a currently-active availability window.
+  final bool isShared;
+  const _CardHeader({
+    required this.spot,
+    required this.periods,
+    required this.isShared,
+  });
 
   /// Finds the best availability window to display:
   /// 1. Currently active (now is within start–end)
   /// 2. Next upcoming (soonest future start)
   SpotAvailabilityPeriod? _bestPeriod() {
     final now = DateTime.now();
-    // Filter to non-recurring, future or active periods
+    // Filter to non-recurring, future or currently-active periods
     final relevant = periods
         .where((p) => !p.isRecurring && p.endTime.isAfter(now))
         .toList()
       ..sort((a, b) => a.startTime.compareTo(b.startTime));
     if (relevant.isEmpty) return null;
     // Prefer an actively-live period
-    final active = relevant.where(
+    final livePeriods = relevant.where(
       (p) => p.startTime.isBefore(now) && p.endTime.isAfter(now),
     );
-    return active.isNotEmpty ? active.first : relevant.first;
+    return livePeriods.isNotEmpty ? livePeriods.first : relevant.first;
   }
 
   String _formatWindowLabel(SpotAvailabilityPeriod period) {
@@ -798,8 +890,7 @@ class _CardHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final active = spot.isActive;
-    final bestPeriod = active ? _bestPeriod() : null;
+    final bestPeriod = _bestPeriod();
     final windowLabel = bestPeriod != null ? _formatWindowLabel(bestPeriod) : null;
     final now = DateTime.now();
     final isLiveNow = bestPeriod != null &&
@@ -811,7 +902,7 @@ class _CardHeader extends StatelessWidget {
       curve: Curves.easeOutCubic,
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
       decoration: BoxDecoration(
-        gradient: active
+        gradient: isShared
             ? const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -833,7 +924,7 @@ class _CardHeader extends StatelessWidget {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              gradient: active
+              gradient: isShared
                   ? const LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -845,7 +936,7 @@ class _CardHeader extends StatelessWidget {
                       colors: [Color(0xFFCBD2DD), Color(0xFFB0B8C8)],
                     ),
               borderRadius: BorderRadius.circular(18),
-              boxShadow: active
+              boxShadow: isShared
                   ? [
                       BoxShadow(
                         color: AppTheme.success.withValues(alpha: 0.3),
@@ -902,14 +993,14 @@ class _CardHeader extends StatelessWidget {
                 const SizedBox(height: 8),
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
-                  child: active
+                  child: isShared
                       ? StatusChip(
-                          key: const ValueKey('active'),
+                          key: const ValueKey('shared'),
                           label: '● ${'home.shared_with_neighbors'.tr()}',
                           tone: StatusTone.success,
                         )
                       : StatusChip(
-                          key: const ValueKey('inactive'),
+                          key: const ValueKey('not_shared'),
                           label: 'home.not_sharing'.tr(),
                           tone: StatusTone.neutral,
                         ),

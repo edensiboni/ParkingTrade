@@ -104,7 +104,10 @@
     "availability_tomorrow": "Tomorrow, {start} – {end}",
     "availability_date": "{date}, {start} – {end}",
     "availability_until": "Until {time}",
-    "availability_label": "Available"
+    "availability_label": "Available",
+    "quick_share_added": "Spot shared until {time}",
+    "quick_share_stopped": "Sharing stopped",
+    "quick_share_error": "Could not update sharing: {error}"
   },
 
   "bookings": {

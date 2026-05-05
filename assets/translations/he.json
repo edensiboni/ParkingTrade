@@ -104,7 +104,10 @@
     "availability_tomorrow": "מחר, {start} – {end}",
     "availability_date": "{date}, {start} – {end}",
     "availability_until": "עד {time}",
-    "availability_label": "פנוי"
+    "availability_label": "פנוי",
+    "quick_share_added": "החנייה משותפת עד {time}",
+    "quick_share_stopped": "השיתוף הופסק",
+    "quick_share_error": "לא ניתן לעדכן שיתוף: {error}"
   },
 
   "bookings": {
