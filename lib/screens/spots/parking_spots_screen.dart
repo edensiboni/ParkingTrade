@@ -525,9 +525,9 @@ class _MySpotsTab extends StatelessWidget {
   final Map<String, List<SpotAvailabilityPeriod>> spotPeriods;
   final String? displayName;
   final bool Function(String spotId) hasActivePeriod;
-  final void Function(ParkingSpot) onQuickShare;
-  final void Function(ParkingSpot, DateTime endTime) onQuickSharePreset;
-  final void Function(ParkingSpot) onStopSharing;
+  final Future<void> Function(ParkingSpot) onQuickShare;
+  final Future<void> Function(ParkingSpot, DateTime endTime) onQuickSharePreset;
+  final Future<void> Function(ParkingSpot) onStopSharing;
   final void Function(ParkingSpot) onManageAvailability;
 
   const _MySpotsTab({
@@ -735,9 +735,9 @@ class _SpotTicketCard extends StatefulWidget {
   final List<SpotAvailabilityPeriod> periods;
   /// True when there is a currently-active availability window for this spot.
   final bool isShared;
-  final VoidCallback onQuickShare;
-  final void Function(DateTime endTime) onQuickSharePreset;
-  final VoidCallback onStopSharing;
+  final Future<void> Function() onQuickShare;
+  final Future<void> Function(DateTime endTime) onQuickSharePreset;
+  final Future<void> Function() onStopSharing;
   final VoidCallback onManageAvailability;
 
   const _SpotTicketCard({
@@ -755,13 +755,25 @@ class _SpotTicketCard extends StatefulWidget {
 }
 
 class _SpotTicketCardState extends State<_SpotTicketCard>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _glowController;
   late final Animation<double> _glowAnim;
+
+  // ── Success checkmark overlay animation ──────────────────────────────────
+  late final AnimationController _checkController;
+  late final Animation<double> _checkScale;
+  late final Animation<double> _checkOpacity;
+  bool _showCheck = false;
+
+  // ── Stop-sharing dismiss animation ────────────────────────────────────────
+  late final AnimationController _stopController;
+  late final Animation<double> _stopScale;
 
   @override
   void initState() {
     super.initState();
+
+    // Glow pulse (existing)
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -773,6 +785,61 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
     if (widget.isShared) {
       _glowController.repeat(reverse: true);
     }
+
+    // Success checkmark: scale 0→1.15→1 with bounce, opacity 0→1→0
+    _checkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _checkScale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 0.0, end: 1.15)
+            .chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 25,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.15, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 15,
+      ),
+      TweenSequenceItem(
+        tween: ConstantTween<double>(1.0),
+        weight: 35,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 0.0)
+            .chain(CurveTween(curve: Curves.easeIn)),
+        weight: 25,
+      ),
+    ]).animate(_checkController);
+    _checkOpacity = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 10),
+      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 65),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 25),
+    ]).animate(_checkController);
+    _checkController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() => _showCheck = false);
+      }
+    });
+
+    // Stop-sharing button: subtle scale-down then back up
+    _stopController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _stopScale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 0.88)
+            .chain(CurveTween(curve: Curves.easeIn)),
+        weight: 35,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 0.88, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 65,
+      ),
+    ]).animate(_stopController);
   }
 
   @override
@@ -790,7 +857,34 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
   @override
   void dispose() {
     _glowController.dispose();
+    _checkController.dispose();
+    _stopController.dispose();
     super.dispose();
+  }
+
+  /// Called when any "share" action succeeds. Pops the checkmark overlay.
+  void _triggerShareSuccess() {
+    if (!mounted) return;
+    setState(() => _showCheck = true);
+    _checkController.forward(from: 0);
+  }
+
+  /// Called when stop-sharing is tapped. Plays dismiss animation then executes.
+  Future<void> _handleStopSharing() async {
+    _stopController.forward(from: 0);
+    await widget.onStopSharing();
+  }
+
+  /// Wraps a share preset call with the success animation.
+  Future<void> _handleQuickSharePreset(DateTime endTime) async {
+    await widget.onQuickSharePreset(endTime);
+    _triggerShareSuccess();
+  }
+
+  /// Wraps the custom sheet share call with the success animation.
+  Future<void> _handleQuickShare() async {
+    await widget.onQuickShare();
+    _triggerShareSuccess();
   }
 
   @override
@@ -847,22 +941,64 @@ class _SpotTicketCardState extends State<_SpotTicketCard>
           color: Colors.transparent,
           child: InkWell(
             onTap: isShared ? widget.onManageAvailability : null,
-            child: Column(
+            child: Stack(
               children: [
-                _CardHeader(
-                  spot: widget.spot,
-                  periods: widget.periods,
-                  isShared: widget.isShared,
+                Column(
+                  children: [
+                    _CardHeader(
+                      spot: widget.spot,
+                      periods: widget.periods,
+                      isShared: widget.isShared,
+                    ),
+                    _PerforationDivider(active: isShared),
+                    _CardActions(
+                      spot: widget.spot,
+                      isShared: isShared,
+                      onQuickShare: _handleQuickShare,
+                      onQuickSharePreset: _handleQuickSharePreset,
+                      onStopSharing: _handleStopSharing,
+                      onStopScale: _stopScale,
+                      onManageAvailability: widget.onManageAvailability,
+                    ),
+                  ],
                 ),
-                _PerforationDivider(active: isShared),
-                _CardActions(
-                  spot: widget.spot,
-                  isShared: isShared,
-                  onQuickShare: widget.onQuickShare,
-                  onQuickSharePreset: widget.onQuickSharePreset,
-                  onStopSharing: widget.onStopSharing,
-                  onManageAvailability: widget.onManageAvailability,
-                ),
+                // ── Success checkmark overlay ─────────────────────────────
+                if (_showCheck)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedBuilder(
+                        animation: _checkController,
+                        builder: (context, _) => Opacity(
+                          opacity: _checkOpacity.value,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.82),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Center(
+                              child: Transform.scale(
+                                scale: _checkScale.value,
+                                child: Container(
+                                  width: 72,
+                                  height: 72,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.success
+                                        .withValues(alpha: 0.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.check_circle_rounded,
+                                    color: AppTheme.success,
+                                    size: 44,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1211,9 +1347,11 @@ class _CardActions extends StatelessWidget {
   final ParkingSpot spot;
   /// True when there is a currently-active availability window.
   final bool isShared;
-  final VoidCallback onQuickShare;
-  final void Function(DateTime endTime) onQuickSharePreset;
-  final VoidCallback onStopSharing;
+  final Future<void> Function() onQuickShare;
+  final Future<void> Function(DateTime endTime) onQuickSharePreset;
+  final Future<void> Function() onStopSharing;
+  /// Scale animation driven by the stop-sharing dismiss effect.
+  final Animation<double> onStopScale;
   final VoidCallback onManageAvailability;
 
   const _CardActions({
@@ -1222,6 +1360,7 @@ class _CardActions extends StatelessWidget {
     required this.onQuickShare,
     required this.onQuickSharePreset,
     required this.onStopSharing,
+    required this.onStopScale,
     required this.onManageAvailability,
   });
 
@@ -1238,41 +1377,48 @@ class _CardActions extends StatelessWidget {
             Expanded(
               child: GestureDetector(
                 onTap: onStopSharing,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 350),
-                  curve: Curves.easeOutCubic,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.success,
-                        AppTheme.success.withValues(alpha: 0.85),
+                child: AnimatedBuilder(
+                  animation: onStopScale,
+                  builder: (context, child) => Transform.scale(
+                    scale: onStopScale.value,
+                    child: child,
+                  ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeOutCubic,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppTheme.success,
+                          AppTheme.success.withValues(alpha: 0.85),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.success.withValues(alpha: 0.28),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.success.withValues(alpha: 0.28),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.pause_circle_filled_rounded,
-                          color: Colors.white, size: 18),
-                      const SizedBox(width: 8),
-                      Text(
-                        'home.stop_sharing'.tr(),
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.pause_circle_filled_rounded,
+                            color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          'home.stop_sharing'.tr(),
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1304,7 +1450,7 @@ class _CardActions extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _QuickSharePresetsRow(
-            onPreset: onQuickSharePreset,
+            onPreset: (endTime) => onQuickSharePreset(endTime),
             onCustom: onQuickShare,
           ),
           const SizedBox(height: 8),
@@ -1339,8 +1485,8 @@ class _CardActions extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _QuickSharePresetsRow extends StatelessWidget {
-  final void Function(DateTime endTime) onPreset;
-  final VoidCallback onCustom;
+  final Future<void> Function(DateTime endTime) onPreset;
+  final Future<void> Function() onCustom;
 
   const _QuickSharePresetsRow({
     required this.onPreset,
@@ -1401,7 +1547,7 @@ class _QuickSharePresetsRow extends StatelessWidget {
 
 class _PresetChip extends StatelessWidget {
   final String label;
-  final VoidCallback onTap;
+  final Future<void> Function() onTap;
   final Color color;
   final Color bgColor;
   final Color borderColor;
