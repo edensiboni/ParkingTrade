@@ -50,9 +50,12 @@ jobs:
         run: |
           for fn in \
             approve-booking \
+            admin-bulk-import \
             create-booking-request \
             create-building \
-            join-building \
+            create-building-admin \
+            create-join-request \
+            handle-join-request \
             manage-member \
             places-autocomplete \
             send-chat-message \

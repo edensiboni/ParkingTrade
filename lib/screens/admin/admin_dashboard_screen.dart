@@ -8,6 +8,7 @@ import '../../services/admin_service.dart';
 import '../../services/building_service.dart';
 import '../../services/auth_service.dart';
 import '../../models/authorized_apartment.dart';
+import '../../models/building_join_request.dart';
 import '../../models/building.dart';
 import '../../models/profile.dart';
 import '../../widgets/address_autocomplete_field.dart';
@@ -17,6 +18,7 @@ import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/status_chip.dart';
+import '../../widgets/who_am_i_strip.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -31,12 +33,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   late TabController _tabController;
   List<Profile> _pendingMembers = [];
   List<Profile> _allMembers = [];
+  List<BuildingJoinRequest> _pendingJoinRequests = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _loadData();
   }
 
@@ -49,14 +52,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final [pending, all] = await Future.wait([
+      final results = await Future.wait([
         _adminService.getPendingMembers(),
         _adminService.getBuildingMembers(),
+        _adminService.getPendingJoinRequests(),
       ]);
+      final pending = results[0] as List<Profile>;
+      final all = results[1] as List<Profile>;
+      final joinRequests = results[2] as List<BuildingJoinRequest>;
       if (!mounted) return;
       setState(() {
         _pendingMembers = pending;
         _allMembers = all;
+        _pendingJoinRequests = joinRequests;
         _isLoading = false;
       });
     } catch (e) {
@@ -65,6 +73,99 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       AppSnack.error(
           context, e.toString().replaceAll('Exception: ', ''));
     }
+  }
+
+  Future<void> _handleJoinRequest(BuildingJoinRequest r, String action) async {
+    final isDestructive = action != 'approve';
+    final name = (r.requesterName?.trim().isNotEmpty ?? false)
+        ? r.requesterName!.trim()
+        : tr('admin.join_requests.unnamed');
+
+    final title = action == 'approve'
+        ? tr('admin.join_requests.dialog_approve_title')
+        : tr('admin.join_requests.dialog_decline_title');
+    final body = action == 'approve'
+        ? tr('admin.join_requests.dialog_approve_body',
+            namedArgs: {'name': name})
+        : tr('admin.join_requests.dialog_decline_body',
+            namedArgs: {'name': name});
+    final confirm = action == 'approve'
+        ? tr('admin.join_requests.approve')
+        : tr('admin.join_requests.decline');
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('admin.dialog.cancel'.tr()),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: isDestructive
+                ? FilledButton.styleFrom(
+                    foregroundColor:
+                        Theme.of(context).colorScheme.error,
+                  )
+                : null,
+            child: Text(confirm),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await _adminService.handleJoinRequest(
+        requestId: r.id,
+        action: action == 'approve' ? 'approve' : 'decline',
+      );
+      if (!mounted) return;
+      AppSnack.success(
+        context,
+        action == 'approve'
+            ? tr('admin.join_requests.approved_success')
+            : tr('admin.join_requests.declined_success'),
+      );
+      _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.error(
+          context, e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  Widget _buildJoinRequestsList() {
+    if (_isLoading) return const SkeletonList(count: 3);
+
+    if (_pendingJoinRequests.isEmpty) {
+      return EmptyState(
+        icon: Icons.inbox_rounded,
+        title: 'admin.join_requests.empty_title'.tr(),
+        message: 'admin.join_requests.empty_message'.tr(),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(32, 28, 32, 32),
+        itemCount: _pendingJoinRequests.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 14),
+        itemBuilder: (context, index) {
+          final r = _pendingJoinRequests[index];
+          return _JoinRequestCard(
+            request: r,
+            onApprove: () => _handleJoinRequest(r, 'approve'),
+            onDecline: () => _handleJoinRequest(r, 'decline'),
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _handleAction(Profile member, String action) async {
@@ -254,9 +355,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           const SizedBox(width: 16),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60),
+          preferredSize: const Size.fromHeight(34 + 60),
           child: Column(
             children: [
+              const WhoAmIStrip(
+                padding: EdgeInsetsDirectional.fromSTEB(12, 0, 12, 8),
+              ),
               Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: ConstrainedBox(
@@ -278,6 +382,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                                   namedArgs: {
                                       'count': '${_pendingMembers.length}'
                                     }),
+                        ),
+                        Tab(
+                          text: _pendingJoinRequests.isEmpty
+                              ? 'admin.tab_join_requests'.tr()
+                              : tr('admin.tab_join_requests_count',
+                                  namedArgs: {
+                                    'count': '${_pendingJoinRequests.length}'
+                                  }),
                         ),
                         Tab(
                           text: tr('admin.tab_members',
@@ -316,6 +428,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               controller: _tabController,
               children: [
                 _buildPendingList(),
+                _buildJoinRequestsList(),
                 _buildAllMembersList(),
                 _ManageApartmentsTab(adminService: _adminService),
                 _BulkImportTab(adminService: _adminService),
@@ -323,6 +436,102 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _JoinRequestCard extends StatelessWidget {
+  final BuildingJoinRequest request;
+  final VoidCallback onApprove;
+  final VoidCallback onDecline;
+
+  const _JoinRequestCard({
+    required this.request,
+    required this.onApprove,
+    required this.onDecline,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dateFmt = DateFormat('MMM d, y');
+    final name = (request.requesterName?.trim().isNotEmpty ?? false)
+        ? request.requesterName!.trim()
+        : tr('admin.join_requests.unnamed');
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _Avatar(name: name),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 3),
+                  Text(
+                    tr(
+                      'admin.join_requests.subtitle',
+                      namedArgs: {
+                        'unit': request.apartmentIdentifier,
+                        'phone': request.requesterPhone,
+                      },
+                    ),
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    tr('admin.join_requests.requested_on', namedArgs: {
+                      'date': dateFmt.format(request.createdAt.toLocal())
+                    }),
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                  if ((request.notes?.trim().isNotEmpty ?? false)) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      request.notes!.trim(),
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            OutlinedButton.icon(
+              onPressed: onDecline,
+              icon: Icon(Icons.close_rounded, color: scheme.error, size: 18),
+              label: Text(
+                'admin.join_requests.decline'.tr(),
+                style: TextStyle(color: scheme.error),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: scheme.error),
+                minimumSize: const Size(0, 40),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+            ),
+            const SizedBox(width: 10),
+            FilledButton.icon(
+              onPressed: onApprove,
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: Text('admin.join_requests.approve'.tr()),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 40),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+            ),
+          ],
         ),
       ),
     );

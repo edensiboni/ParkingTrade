@@ -13,6 +13,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/add_availability_duration_sheet.dart';
 import '../../widgets/status_chip.dart';
+import '../../widgets/who_am_i_strip.dart';
 import '../admin/admin_dashboard_screen.dart';
 import 'manage_apartment_screen.dart';
 import 'manage_availability_screen.dart';
@@ -289,6 +290,7 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
                           spots: _spots,
                           spotPeriods: _spotPeriods,
                           displayName: _displayName,
+                          isAdmin: _isAdmin,
                           hasActivePeriod: _hasActivePeriod,
                           onQuickShare: _quickShare,
                           onStopSharing: _stopSharing,
@@ -344,7 +346,7 @@ class _PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(64);
+  Size get preferredSize => const Size.fromHeight(64 + 34);
 
   @override
   Widget build(BuildContext context) {
@@ -355,8 +357,9 @@ class _PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
         ? 'home.nav_my_spots'.tr()
         : 'home.nav_find_parking'.tr();
 
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
-      height: 64 + MediaQuery.of(context).padding.top,
+      height: 64 + 34 + topPadding,
       decoration: const BoxDecoration(
         color: AppTheme.appBackground,
         border: Border(
@@ -365,99 +368,108 @@ class _PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       child: SafeArea(
         bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            children: [
-              // Brand icon
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.brandGradient,
-                  borderRadius: BorderRadius.circular(11),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.brandIndigo.withValues(alpha: 0.25),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: const Icon(Icons.local_parking_rounded,
-                    color: Colors.white, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  transitionBuilder: (child, anim) => FadeTransition(
-                    opacity: anim,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, 0.2),
-                        end: Offset.zero,
-                      ).animate(anim),
-                      child: child,
-                    ),
-                  ),
-                  child: Text(
-                    title,
-                    key: ValueKey(selectedTab),
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: AppTheme.ink,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
-              // Action row
-              if (isAdmin)
-                _AppBarIconBtn(
-                  icon: pendingAdminCount > 0
-                      ? Badge.count(
-                          count: pendingAdminCount,
-                          backgroundColor: scheme.error,
-                          textColor: scheme.onError,
-                          child: const Icon(Icons.shield_outlined, size: 22),
-                        )
-                      : const Icon(Icons.shield_outlined, size: 22),
-                  onTap: onAdminTap,
-                ),
-              if (isApartmentAdmin)
-                _AppBarIconBtn(
-                  icon: const Icon(Icons.manage_accounts_outlined, size: 22),
-                  onTap: onManageApartmentTap,
-                ),
-              _AppBarIconBtn(
-                icon: const Icon(Icons.receipt_long_outlined, size: 22),
-                onTap: onBookingsTap,
-              ),
-              _AppBarIconBtn(
-                icon: const Icon(Icons.language_rounded, size: 22),
-                onTap: onLanguageTap,
-              ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert_rounded,
-                    size: 22, color: AppTheme.inkMuted),
-                onSelected: (v) {
-                  if (v == 'signout') onSignOutTap();
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'signout',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.logout_rounded, size: 20),
-                        const SizedBox(width: 12),
-                        Text('home.sign_out'.tr()),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  // Brand icon
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      gradient: AppTheme.brandGradient,
+                      borderRadius: BorderRadius.circular(11),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.brandIndigo.withValues(alpha: 0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
                       ],
                     ),
+                    child: const Icon(Icons.local_parking_rounded,
+                        color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      transitionBuilder: (child, anim) => FadeTransition(
+                        opacity: anim,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0, 0.2),
+                            end: Offset.zero,
+                          ).animate(anim),
+                          child: child,
+                        ),
+                      ),
+                      child: Text(
+                        title,
+                        key: ValueKey(selectedTab),
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: AppTheme.ink,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Action row
+                  if (isAdmin)
+                    _AppBarIconBtn(
+                      icon: pendingAdminCount > 0
+                          ? Badge.count(
+                              count: pendingAdminCount,
+                              backgroundColor: scheme.error,
+                              textColor: scheme.onError,
+                              child:
+                                  const Icon(Icons.shield_outlined, size: 22),
+                            )
+                          : const Icon(Icons.shield_outlined, size: 22),
+                      onTap: onAdminTap,
+                    ),
+                  if (isApartmentAdmin)
+                    _AppBarIconBtn(
+                      icon:
+                          const Icon(Icons.manage_accounts_outlined, size: 22),
+                      onTap: onManageApartmentTap,
+                    ),
+                  _AppBarIconBtn(
+                    icon: const Icon(Icons.receipt_long_outlined, size: 22),
+                    onTap: onBookingsTap,
+                  ),
+                  _AppBarIconBtn(
+                    icon: const Icon(Icons.language_rounded, size: 22),
+                    onTap: onLanguageTap,
+                  ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert_rounded,
+                        size: 22, color: AppTheme.inkMuted),
+                    onSelected: (v) {
+                      if (v == 'signout') onSignOutTap();
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'signout',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.logout_rounded, size: 20),
+                            const SizedBox(width: 12),
+                            Text('home.sign_out'.tr()),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+            const WhoAmIStrip(
+              padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 10),
+            ),
+          ],
         ),
       ),
     );
@@ -495,6 +507,7 @@ class _MySpotsTab extends StatelessWidget {
   final List<ParkingSpot> spots;
   final Map<String, List<SpotAvailabilityPeriod>> spotPeriods;
   final String? displayName;
+  final bool isAdmin;
   final bool Function(String spotId) hasActivePeriod;
   final void Function(ParkingSpot) onQuickShare;
   final void Function(ParkingSpot) onStopSharing;
@@ -504,6 +517,7 @@ class _MySpotsTab extends StatelessWidget {
     required this.spots,
     required this.spotPeriods,
     required this.displayName,
+    required this.isAdmin,
     required this.hasActivePeriod,
     required this.onQuickShare,
     required this.onStopSharing,
@@ -520,6 +534,7 @@ class _MySpotsTab extends StatelessWidget {
       children: [
         _HeroHeader(
           displayName: displayName,
+          isAdmin: isAdmin,
           activeCount: activeCount,
           totalCount: spots.length,
         ),
@@ -551,11 +566,13 @@ class _MySpotsTab extends StatelessWidget {
 
 class _HeroHeader extends StatelessWidget {
   final String? displayName;
+  final bool isAdmin;
   final int activeCount;
   final int totalCount;
 
   const _HeroHeader({
     required this.displayName,
+    required this.isAdmin,
     required this.activeCount,
     required this.totalCount,
   });
@@ -583,6 +600,12 @@ class _HeroHeader extends StatelessWidget {
     return '$base $emoji';
   }
 
+  String _whoAmIName(BuildContext context) {
+    final name = displayName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    return 'home.who_am_i_unknown'.tr();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -590,6 +613,8 @@ class _HeroHeader extends StatelessWidget {
     final textDir = isRtl ? ui.TextDirection.rtl : ui.TextDirection.ltr;
     final allActive = activeCount == totalCount && totalCount > 0;
     final noneActive = activeCount == 0;
+    final roleLabel =
+        isAdmin ? 'home.role_admin'.tr() : 'home.role_tenant'.tr();
 
     return Directionality(
       textDirection: textDir,
@@ -597,6 +622,24 @@ class _HeroHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 20),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _StatPill(
+                icon: Icons.person_outline_rounded,
+                label: 'home.who_am_i'.tr(
+                  namedArgs: {
+                    'name': _whoAmIName(context),
+                    'role': roleLabel,
+                  },
+                ),
+                color: AppTheme.inkMuted,
+                bgColor: AppTheme.subtleSurface,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           Text(
             _greeting(context),
             style: theme.textTheme.bodyLarge?.copyWith(

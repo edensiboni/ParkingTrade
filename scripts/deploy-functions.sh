@@ -16,7 +16,7 @@ fi
 
 "$SCRIPT_DIR/check-env.sh"
 
-FUNCTIONS="join-building create-building approve-booking create-booking-request places-autocomplete"
+FUNCTIONS="approve-booking admin-bulk-import create-booking-request create-building create-building-admin create-join-request handle-join-request manage-member places-autocomplete send-chat-message"
 for fn in $FUNCTIONS; do
     echo "Deploying $fn..."
     supabase functions deploy "$fn"

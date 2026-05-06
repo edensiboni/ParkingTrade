@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/authorized_apartment.dart';
+import '../models/building_join_request.dart';
 import '../models/profile.dart';
 import '../models/building.dart';
 import 'building_service.dart';
@@ -90,6 +91,44 @@ class AdminService {
         : response.data as Map<String, dynamic>;
 
     return Profile.fromJson(data['member']);
+  }
+
+  // ── Join Requests (building_join_requests table) ───────────────────────────
+
+  Future<List<BuildingJoinRequest>> getPendingJoinRequests() async {
+    final buildingId = await _resolveAdminBuildingId();
+
+    final response = await _supabase
+        .from('building_join_requests')
+        .select()
+        .eq('building_id', buildingId)
+        .eq('status', 'pending')
+        .order('created_at', ascending: true);
+
+    return (response as List)
+        .cast<Map<String, dynamic>>()
+        .map(BuildingJoinRequest.fromJson)
+        .toList();
+  }
+
+  Future<void> handleJoinRequest({
+    required String requestId,
+    required String action, // 'approve' | 'decline'
+  }) async {
+    final response = await _supabase.functions.invoke(
+      'handle-join-request',
+      body: {
+        'request_id': requestId,
+        'action': action,
+      },
+    );
+
+    if (response.status != 200) {
+      final data = response.data is String
+          ? jsonDecode(response.data as String)
+          : response.data;
+      throw Exception(data['error'] ?? 'Failed to handle join request');
+    }
   }
 
   // ── Manage Apartments (authorized_apartments table) ────────────────────────

@@ -1,4 +1,40 @@
 #!/bin/bash
+set -euo pipefail
+
+# Usage:
+#   ./run_web.sh                  # uses default env file path below
+#   ENV_FILE=/path/to/file ./run_web.sh
+#
+# Expected env vars in the env file:
+#   SUPABASE_URL
+#   SUPABASE_PUBLISHABLE_KEY   (or SUPABASE_ANON_KEY as a fallback)
+
+ENV_FILE="${ENV_FILE:-/Users/MAC/Desktop/secrets.env}"
+
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "Env file not found: $ENV_FILE" >&2
+  exit 1
+fi
+
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+
+if [[ -z "${SUPABASE_URL:-}" ]]; then
+  echo "Missing required env var: SUPABASE_URL" >&2
+  exit 1
+fi
+
+SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY:-${SUPABASE_ANON_KEY:-}}"
+if [[ -z "$SUPABASE_PUBLISHABLE_KEY" ]]; then
+  echo "Missing required env var: SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY)" >&2
+  exit 1
+fi
+
+flutter run -d chrome \
+  --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+  --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
+
+#!/bin/bash
 # Run Parking Trade on web (Flutter web server).
 #
 # Reads credentials from .env in the project root. Never hardcodes real secrets

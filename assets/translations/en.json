@@ -26,6 +26,23 @@
     "not_registered": {
       "title": "Not Registered",
       "message": "Your phone number is not registered to any apartment. Please contact your building admin to be added.",
+      "join_request_title": "Request access",
+      "address_label": "Building address",
+      "address_hint": "Start typing your building address",
+      "apartment_label": "Apartment / unit",
+      "apartment_hint": "e.g. 4B",
+      "apartment_required": "Apartment is required",
+      "phone_label": "Phone",
+      "phone_hint": "+972 5X XXX XXXX",
+      "phone_required": "Phone is required",
+      "phone_invalid": "Enter a valid phone number (with country code)",
+      "name_label": "Your name (optional)",
+      "name_hint": "e.g. Jane Doe",
+      "notes_label": "Notes (optional)",
+      "notes_hint": "Anything the admin should know",
+      "send_request": "Send request",
+      "sending": "Sending…",
+      "request_sent": "Request sent — waiting for approval.",
       "sign_out": "Sign Out",
       "admin_link": "Are you a building admin? Create a new building"
     }
@@ -107,7 +124,11 @@
     "availability_label": "Available",
     "quick_share_added": "Spot shared until {time}",
     "quick_share_stopped": "Sharing stopped",
-    "quick_share_error": "Could not update sharing: {error}"
+    "quick_share_error": "Could not update sharing: {error}",
+    "who_am_i": "Who am I · {name} · {role}",
+    "who_am_i_unknown": "Unknown",
+    "role_admin": "Admin",
+    "role_tenant": "Tenant"
   },
 
   "bookings": {
@@ -297,6 +318,8 @@
     "sign_out": "Sign out",
     "tab_pending": "Pending",
     "tab_pending_count": "Pending ({count})",
+    "tab_join_requests": "Join requests",
+    "tab_join_requests_count": "Join requests ({count})",
     "tab_members": "Members ({count})",
     "tab_apartments": "Manage Apartments",
     "tab_bulk_import": "Bulk Import",
@@ -310,6 +333,22 @@
       "pending_chip": "Pending",
       "decline": "Decline",
       "approve": "Approve"
+    },
+
+    "join_requests": {
+      "empty_title": "Inbox zero",
+      "empty_message": "No join requests waiting on you right now.",
+      "unnamed": "Unnamed resident",
+      "subtitle": "Unit {unit} · {phone}",
+      "requested_on": "Requested {date}",
+      "approve": "Approve",
+      "decline": "Decline",
+      "dialog_approve_title": "Approve join request?",
+      "dialog_decline_title": "Decline join request?",
+      "dialog_approve_body": "Approve {name} and grant access to the building?",
+      "dialog_decline_body": "Decline {name}'s request? They can retry later.",
+      "approved_success": "Approved",
+      "declined_success": "Declined"
     },
 
     "members": {

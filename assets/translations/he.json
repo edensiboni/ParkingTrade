@@ -26,6 +26,23 @@
     "not_registered": {
       "title": "לא רשום",
       "message": "מספר הטלפון שלך אינו רשום לאף דירה. אנא פנה למנהל הבניין שלך כדי שיוסיף אותך.",
+      "join_request_title": "בקשת הצטרפות",
+      "address_label": "כתובת הבניין",
+      "address_hint": "התחל להקליד את כתובת הבניין",
+      "apartment_label": "דירה / יחידה",
+      "apartment_hint": "לדוגמה: 4B",
+      "apartment_required": "יש להזין דירה",
+      "phone_label": "טלפון",
+      "phone_hint": "+972 5X XXX XXXX",
+      "phone_required": "יש להזין מספר טלפון",
+      "phone_invalid": "הזן מספר טלפון תקין (עם קידומת מדינה)",
+      "name_label": "השם שלך (אופציונלי)",
+      "name_hint": "לדוגמה: ישראל ישראלי",
+      "notes_label": "הערות (אופציונלי)",
+      "notes_hint": "כל מידע נוסף למנהל",
+      "send_request": "שלח בקשה",
+      "sending": "שולח…",
+      "request_sent": "הבקשה נשלחה — ממתין לאישור.",
       "sign_out": "התנתק",
       "admin_link": "האם אתה מנהל בניין? צור בניין חדש"
     }
@@ -107,7 +124,11 @@
     "availability_label": "פנוי",
     "quick_share_added": "החנייה משותפת עד {time}",
     "quick_share_stopped": "השיתוף הופסק",
-    "quick_share_error": "לא ניתן לעדכן שיתוף: {error}"
+    "quick_share_error": "לא ניתן לעדכן שיתוף: {error}",
+    "who_am_i": "מי אני · {name} · {role}",
+    "who_am_i_unknown": "לא ידוע",
+    "role_admin": "מנהל",
+    "role_tenant": "דייר"
   },
 
   "bookings": {
@@ -297,6 +318,8 @@
     "sign_out": "התנתק",
     "tab_pending": "ממתינים",
     "tab_pending_count": "ממתינים ({count})",
+    "tab_join_requests": "בקשות הצטרפות",
+    "tab_join_requests_count": "בקשות הצטרפות ({count})",
     "tab_members": "דיירים ({count})",
     "tab_apartments": "ניהול דירות",
     "tab_bulk_import": "ייבוא מרוכז",
@@ -310,6 +333,22 @@
       "pending_chip": "ממתין",
       "decline": "דחה",
       "approve": "אשר"
+    },
+
+    "join_requests": {
+      "empty_title": "אין בקשות ממתינות",
+      "empty_message": "אין בקשות הצטרפות שמחכות לך כרגע.",
+      "unnamed": "דייר ללא שם",
+      "subtitle": "יחידה {unit} · {phone}",
+      "requested_on": "נשלח ב-{date}",
+      "approve": "אשר",
+      "decline": "דחה",
+      "dialog_approve_title": "לאשר בקשת הצטרפות?",
+      "dialog_decline_title": "לדחות בקשת הצטרפות?",
+      "dialog_approve_body": "לאשר את {name} ולתת גישה לבניין?",
+      "dialog_decline_body": "לדחות את הבקשה של {name}? ניתן לנסות שוב מאוחר יותר.",
+      "approved_success": "אושר",
+      "declined_success": "נדחה"
     },
 
     "members": {

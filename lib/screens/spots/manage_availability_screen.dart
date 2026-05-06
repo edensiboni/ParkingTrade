@@ -10,6 +10,7 @@ import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/status_chip.dart';
+import '../../widgets/who_am_i_strip.dart';
 
 class ManageAvailabilityScreen extends StatefulWidget {
   final ParkingSpot spot;
@@ -431,6 +432,7 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('spots.availability.title'.tr(namedArgs: {'id': widget.spot.spotIdentifier})),
+        bottom: const WhoAmIStrip(),
       ),
       body: _isLoading
           ? const SkeletonList(count: 4)

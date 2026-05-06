@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../models/message.dart';
 import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/who_am_i_strip.dart';
 
 class ChatScreen extends StatefulWidget {
   final String bookingId;
@@ -142,6 +143,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('chat.title'.tr()),
+        bottom: const WhoAmIStrip(),
       ),
       body: Column(
         children: [

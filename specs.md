@@ -106,15 +106,25 @@
     - **Sign in with Google**: User taps "Continue with Google"; OAuth redirects to Google then back to the app; Supabase restores the session. On web, redirect URL must match the app origin (see §5.2 Google OAuth setup).
     - **Sign in with Phone (OTP)**: User enters phone number (E.164 format, e.g. `+1234567890`). App requests OTP via Supabase Auth (phone provider). User enters OTP and is authenticated.
   - After either method, the user has a session. An `AuthWrapper` listens to auth changes and:
-    - If no profile/building: routes to **Join or create building**.
+    - If no linked profile/apartment: routes to **Not Registered** (with a join request form).
     - If profile status is `pending`: routes to `Pending Approval`.
     - If `approved`: routes to `Home`.
 
-- **Join or create building**
-  - Single "Your building" screen with two paths:
-    - **Join existing**: (A) "I have an invite code" – enter code and optional display name, then Join. (B) "Find my building" – search by name, tap a building to join (uses that building’s invite code). If building has `approval_required`, user is routed to pending until approved.
-    - **Create new**: "First here? Create your building." – enter building name or address (with optional address autocomplete from Google Places API if `PLACES_API_KEY` is set). Submit calls `create-building` Edge Function; app shows "Building created. Share this code: **XYZ123**" with copy button, then Continue to parking spots.
-  - After join or create: if `approval_required` and status `pending`, user is routed to Pending Approval; otherwise to parking spots (Home).
+- **Not Registered → Join request**
+  - If a user signs in successfully but has no linked `profiles` row (Magic Login couldn’t match their phone), they see `NotRegisteredScreen`.
+  - The screen includes a **join request** form with:
+    - Building address (Places autocomplete)
+    - Apartment/unit identifier
+    - Phone (prefilled from auth when available)
+    - Optional name + notes
+  - Submitting calls the `create-join-request` Edge Function which creates a `building_join_requests` row.
+  - The user is then routed to `PendingApprovalScreen` while waiting for admin action.
+
+- **Admin → Review join requests**
+  - `AdminDashboardScreen` includes a **Join requests** tab showing pending `building_join_requests` for the admin’s building.
+  - Admin can **Approve** or **Decline**:
+    - Approve calls `handle-join-request`, which ensures an `apartments` row exists, creates/updates the requester’s `profiles` row (with `id = requester_user_id`) and marks the request approved.
+    - Decline marks the request declined.
 
 - **Manage Parking Spots**
   - From spots screen:
@@ -277,7 +287,10 @@
   - Run `./scripts/deploy-all.sh` to apply migrations and deploy Edge Functions (or run `./scripts/migrate.sh` then `./scripts/deploy-functions.sh`).
   - Scripts require Supabase CLI and a linked project; they change to repo root and source `.env` if present.
 - **CI**
-  - **GitHub Actions:** Workflow [.github/workflows/deploy-backend.yml](.github/workflows/deploy-backend.yml) runs on push to `main` and on manual trigger. It runs migrations then deploys the Edge Functions (join-building, create-building, approve-booking, create-booking-request, places-autocomplete). Uses concurrency so overlapping runs cancel.
+  - **GitHub Actions:** Workflow [.github/workflows/deploy-backend.yml](.github/workflows/deploy-backend.yml) runs on push to `main` and on manual trigger. It runs migrations then deploys the Edge Functions (create-building, create-building-admin, approve-booking, create-booking-request, manage-member, places-autocomplete, send-chat-message, admin-bulk-import, create-join-request, handle-join-request). Uses concurrency so overlapping runs cancel.
+  - Edge Functions that must be deployed for onboarding/admin flows:
+    - `create-join-request`
+    - `handle-join-request`
   - **GitLab (optional):** [.gitlab-ci.yml](.gitlab-ci.yml) mirrors the same steps; set CI/CD variables (masked) `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_REF`.
 
 ### 6. Dart & Flutter Conventions
