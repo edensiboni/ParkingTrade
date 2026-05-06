@@ -1,6 +1,21 @@
-# parking_trade
+# ParkingTrade
 
-A new Flutter project.
+A Flutter mobile app for building-gated parking spot swapping among high-rise residents.
+
+## 🚀 Live Demos
+
+| Platform | Link |
+|---|---|
+| 🤖 Android Simulator (Appetize.io) | [Launch in Browser](https://appetize.io/app/ad5nwawamgaoi4orajo4nlcsc4?autoplay=true) |
+| 🌐 Web Version (Firebase Hosting) | [Open Web App](https://parking-trade.web.app/) |
+
+**Android Simulator** — Runs the compiled Android APK directly in your browser via Appetize.io. No installation needed; interact with the app as if you were on a real Android device.
+
+**Web Version** — A Flutter Web build hosted on Firebase Hosting. Accessible from any browser without any app installation.
+
+Both environments are fully integrated with the CI/CD pipeline and **automatically update to the latest version via GitHub Actions** whenever new code is merged into the `main` branch.
+
+---
 
 ## Getting Started
 
