@@ -30,6 +30,6 @@ jobs:
 
       - name: Upload APK to Appetize.io
         run: |
-          curl https://${{ secrets.APPETIZE_API_TOKEN }}@api.appetize.io/v1/apps \
+          curl https://${{ secrets.APPETIZE_API_TOKEN }}@api.appetize.io/v1/apps/ad5nwawamgaoi4orajo4nlcsc4 \
             -F "file=@build/app/outputs/flutter-apk/app-release.apk" \
             -F "platform=android"
