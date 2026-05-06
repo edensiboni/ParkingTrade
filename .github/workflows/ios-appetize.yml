@@ -1,0 +1,29 @@
+name: iOS Simulator Build & Appetize.io Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build iOS Simulator
+        run: flutter build ios --simulator
+
+      - name: Compress app bundle
+        run: cd build/ios/iphonesimulator && zip -r app.zip Runner.app
+
+      - name: Upload to Appetize.io
+        run: curl https://${{ secrets.APPETIZE_API_TOKEN }}@api.appetize.io/v1/apps -F "file=@build/ios/iphonesimulator/app.zip" -F "platform=ios"
