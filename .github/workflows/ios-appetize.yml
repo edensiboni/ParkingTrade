@@ -20,11 +20,15 @@ jobs:
         run: flutter pub get
 
       - name: Generate .env file
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
         run: |
-          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" > .env
-          echo "SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" >> .env
-          echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" >> .env
-          echo "PLACES_API_KEY=${{ secrets.PLACES_API_KEY }}" >> .env
+          echo "SUPABASE_URL=$SUPABASE_URL" > .env
+          echo "SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" >> .env
+          echo "SUPABASE_ANON_KEY=$SUPABASE_PUBLISHABLE_KEY" >> .env
+          echo "PLACES_API_KEY=$PLACES_API_KEY" >> .env
 
       - name: Generate GoogleService-Info.plist
         run: |
