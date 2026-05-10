@@ -176,7 +176,7 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
         expand: false,
         builder: (context, scrollController) {
           return Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -506,7 +506,7 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+              padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 32),
               sliver: SliverList.separated(
                 itemCount: displaySpots.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -540,7 +540,7 @@ class _FindParkingHeader extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 20, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1149,7 +1149,7 @@ class _TimeFilterBar extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      margin: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 14),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: isFilterActive

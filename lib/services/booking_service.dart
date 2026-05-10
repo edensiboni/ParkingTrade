@@ -286,6 +286,38 @@ class BookingService {
     };
   }
 
+  /// Batch-fetch the display name of one resident per apartment.
+  ///
+  /// Returns a map of `apartmentId → display_name`. The query selects all
+  /// profiles whose [apartment_id] is in [apartmentIds] and returns the first
+  /// non-null [display_name] found for each apartment. Profiles without a
+  /// display_name are excluded so the caller can fall back gracefully.
+  Future<Map<String, String>> getDisplayNamesByApartment(
+      List<String> apartmentIds) async {
+    if (apartmentIds.isEmpty) return const {};
+    try {
+      final rows = await _supabase
+          .from('profiles')
+          .select('apartment_id, display_name')
+          .inFilter('apartment_id', apartmentIds)
+          .not('display_name', 'is', null);
+
+      final result = <String, String>{};
+      for (final row in (rows as List)) {
+        final aptId = row['apartment_id'] as String?;
+        final name = row['display_name'] as String?;
+        if (aptId != null && name != null && name.isNotEmpty) {
+          // Keep only the first profile found for each apartment (last-write wins
+          // in iteration order, but any name is better than none).
+          result.putIfAbsent(aptId, () => name);
+        }
+      }
+      return result;
+    } catch (_) {
+      return const {};
+    }
+  }
+
   // Cancel booking
   Future<void> cancelBooking(String bookingId) async {
     final apartmentId = await _currentApartmentId();
@@ -332,9 +364,11 @@ class BookingService {
     }
 
     // Fetch active spots in the same building, excluding the user's own apartment.
+    // Join apartments so callers can resolve the human-readable unit identifier
+    // without a second round-trip.
     final response = await _supabase
         .from('parking_spots')
-        .select()
+        .select('*, apartments(identifier)')
         .eq('building_id', buildingId)
         .eq('is_active', true)
         .neq('apartment_id', apartmentId); // Exclude own apartment's spots

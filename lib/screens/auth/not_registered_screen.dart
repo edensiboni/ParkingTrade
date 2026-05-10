@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
+import '../../theme/app_theme.dart';
 
 class NotRegisteredScreen extends StatelessWidget {
   const NotRegisteredScreen({super.key});
@@ -13,54 +14,75 @@ class NotRegisteredScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 48.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.no_accounts_outlined,
-                size: 80,
-                color: Colors.grey,
-              ),
-              const SizedBox(height: 32),
-              Text(
-                'auth.not_registered.title'.tr(),
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'auth.not_registered.message'.tr(),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Colors.black54,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 48),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => _signOut(context),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsetsDirectional.fromSTEB(32, 48, 32, 48),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // ── Icon badge ─────────────────────────────────────────────
+                  Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      color: scheme.errorContainer.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                    ),
+                    child: Icon(
+                      Icons.no_accounts_outlined,
+                      size: 44,
+                      color: scheme.onErrorContainer,
+                    ),
                   ),
-                  child: Text('auth.not_registered.sign_out'.tr()),
-                ),
+                  const SizedBox(height: 32),
+
+                  // ── Title ──────────────────────────────────────────────────
+                  Text(
+                    'auth.not_registered.title'.tr(),
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // ── Message ────────────────────────────────────────────────
+                  Text(
+                    'auth.not_registered.message'.tr(),
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 48),
+
+                  // ── Sign out ───────────────────────────────────────────────
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.tonal(
+                      onPressed: () => _signOut(context),
+                      child: Text('auth.not_registered.sign_out'.tr()),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── Admin link ─────────────────────────────────────────────
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pushNamed('/setup'),
+                    child: Text('auth.not_registered.admin_link'.tr()),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: () => Navigator.of(context).pushNamed('/setup'),
-                child: Text('auth.not_registered.admin_link'.tr()),
-              ),
-            ],
+            ),
           ),
         ),
       ),

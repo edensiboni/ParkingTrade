@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/profile.dart';
 import '../../services/auth_service.dart';
+import '../../theme/app_theme.dart';
 import 'admin_login_screen.dart';
 
 // ---------------------------------------------------------------------------
@@ -488,7 +489,7 @@ class _Hero extends StatelessWidget {
           height: 72,
           decoration: BoxDecoration(
             color: scheme.primaryContainer.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
           ),
           child: Icon(Icons.local_parking, size: 36, color: scheme.primary),
         ),
@@ -516,10 +517,13 @@ class _ButtonSpinner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
+    return SizedBox(
       height: 20,
       width: 20,
-      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        color: Theme.of(context).colorScheme.onPrimary,
+      ),
     );
   }
 }

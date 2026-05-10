@@ -21,6 +21,11 @@ class AppTheme {
   // ── Brand palette ──────────────────────────────────────────────────────────
   // A calm royal-indigo: confident, professional, and works beautifully with
   // both Hebrew and Latin script. Pairs with a warm secondary for accents.
+  // Community sage palette — used for the Available Now feed.
+  static const Color communitySage = Color(0xFF5B8F73);
+  static const Color communitySageSoft = Color(0xFFEAF3EE);
+  static const Color communitySageDeep = Color(0xFF3F6F56);
+
   static const Color brandIndigo = Color(0xFF4F46E5); // primary (indigo-600)
   static const Color brandIndigoDeep = Color(0xFF3730A3); // gradient end
   static const Color brandViolet = Color(0xFF7C3AED); // secondary accent
@@ -47,7 +52,7 @@ class AppTheme {
   static const double radiusSm = 10;
   static const double radiusMd = 14;
   static const double radiusLg = 18;
-  static const double radiusXl = 24;
+  static const double radiusXl = 28;
   static const double radiusPill = 999;
 
   // Common spacing.
