@@ -460,7 +460,9 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) { return const SkeletonList(count: 4); }
+    if (_isLoading) {
+      return const SkeletonList(count: 4);
+    }
 
     if (_errorMessage != null) {
       return _FindParkingEmpty(
@@ -675,7 +677,7 @@ class _AvailableSpotCardState extends State<_AvailableSpotCard>
 
     // Small stagger delay per card
     Future.delayed(Duration(milliseconds: widget.index * 45), () {
-      if (mounted) _entryCtrl.forward();
+      if (mounted) { _entryCtrl.forward(); }
     });
   }
 
@@ -1069,7 +1071,7 @@ class _ZzzBubbleState extends State<_ZzzBubble>
     );
 
     Future.delayed(Duration(milliseconds: widget.delay), () {
-      if (mounted) _ctrl.repeat();
+      if (mounted) { _ctrl.repeat(); }
     });
   }
 
@@ -1137,8 +1139,8 @@ class _TimeFilterBar extends StatelessWidget {
     final today = DateTime(now.year, now.month, now.day);
     final tomorrow = today.add(const Duration(days: 1));
     final d = DateTime(date.year, date.month, date.day);
-    if (d == today) return 'bookings.available.filter_today'.tr();
-    if (d == tomorrow) return 'bookings.available.filter_tomorrow'.tr();
+    if (d == today) { return 'bookings.available.filter_today'.tr(); }
+    if (d == tomorrow) { return 'bookings.available.filter_tomorrow'.tr(); }
     return DateFormat('d MMM').format(date);
   }
 

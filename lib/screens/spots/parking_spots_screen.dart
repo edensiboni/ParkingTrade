@@ -9,13 +9,11 @@ import '../../theme/app_theme.dart';
 import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
-import '../../widgets/add_availability_duration_sheet.dart';
 import '../../widgets/status_chip.dart';
 import '../admin/admin_dashboard_screen.dart';
 import 'manage_apartment_screen.dart';
 import 'manage_availability_screen.dart';
 import '../bookings/bookings_screen.dart';
-import '../bookings/available_spots_screen.dart';
 import 'available_now_feed.dart';
 
 class ParkingSpotsScreen extends StatefulWidget {
@@ -134,36 +132,6 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
     }
   }
 
-  /// Opens the duration sheet and, if a duration is selected, creates a
-  /// spot_availability_periods record. The card becomes green only after this.
-  Future<void> _quickShare(ParkingSpot spot) async {
-    final duration = await showAddAvailabilityDurationSheet(context);
-    if (duration == null || !mounted) return;
-
-    try {
-      await _spotService.addAvailabilityPeriod(
-        spotId: spot.id,
-        startTime: duration.startTime,
-        endTime: duration.endTime,
-      );
-      if (!mounted) return;
-      final timeFmt = DateFormat('HH:mm');
-      AppSnack.success(
-        context,
-        'home.quick_share_added'.tr(
-          namedArgs: {'time': timeFmt.format(duration.endTime.toLocal())},
-        ),
-      );
-      _loadSpots();
-    } catch (e) {
-      if (!mounted) return;
-      AppSnack.error(
-        context,
-        'home.quick_share_error'.tr(namedArgs: {'error': e.toString()}),
-      );
-    }
-  }
-
   /// Immediately shares [spot] until [endTime] without opening any sheet.
   /// Used by the quick-preset chips on the spot card.
   Future<void> _quickSharePreset(ParkingSpot spot, DateTime endTime) async {
@@ -254,10 +222,9 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
     );
     if (confirmed == true && mounted) {
       await _authService.signOut();
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true)
-            .pushNamedAndRemoveUntil('/auth', (r) => false);
-      }
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true)
+          .pushNamedAndRemoveUntil('/auth', (r) => false);
     }
   }
 
@@ -469,7 +436,7 @@ class _PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
                 icon: const Icon(Icons.more_vert_rounded,
                     size: 22, color: AppTheme.inkMuted),
                 onSelected: (v) {
-                  if (v == 'signout') onSignOutTap();
+                  if (v == 'signout') { onSignOutTap(); }
                 },
                 itemBuilder: (context) => [
                   PopupMenuItem(
@@ -545,10 +512,14 @@ class _HeroSpotToggle extends StatelessWidget {
     final firstName = displayName?.isNotEmpty == true
         ? displayName!.split(' ').first
         : null;
-    if (hour < 12) return 'home.hero_greeting_morning'.tr() +
-        (firstName != null ? ' ${'home.hero_greeting_name'.tr(namedArgs: {'name': firstName})}' : '');
-    if (hour < 18) return 'home.hero_greeting_afternoon'.tr() +
-        (firstName != null ? ' ${'home.hero_greeting_name'.tr(namedArgs: {'name': firstName})}' : '');
+    if (hour < 12) {
+      return 'home.hero_greeting_morning'.tr() +
+          (firstName != null ? ' ${'home.hero_greeting_name'.tr(namedArgs: {'name': firstName})}' : '');
+    }
+    if (hour < 18) {
+      return 'home.hero_greeting_afternoon'.tr() +
+          (firstName != null ? ' ${'home.hero_greeting_name'.tr(namedArgs: {'name': firstName})}' : '');
+    }
     return 'home.hero_greeting_evening'.tr() +
         (firstName != null ? ' ${'home.hero_greeting_name'.tr(namedArgs: {'name': firstName})}' : '');
   }
@@ -668,7 +639,7 @@ class _HeroToggleCardState extends State<_HeroToggleCard>
       parent: _glowController,
       curve: Curves.easeInOut,
     );
-    if (widget.isShared) _glowController.repeat(reverse: true);
+    if (widget.isShared) { _glowController.repeat(reverse: true); }
 
     // Success checkmark: scale 0→1.15→1 with bounce, then fade out
     _checkController = AnimationController(
