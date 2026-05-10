@@ -92,17 +92,44 @@ class ParkingSpotService {
         .eq('id', spotId);
   }
 
-  // Get availability periods for a spot
+  // Get availability periods for a spot.
+  // Expired one-time periods (end_time in the past) are excluded so they
+  // disappear automatically from the management view.  Recurring periods are
+  // always returned because they have future occurrences.
   Future<List<SpotAvailabilityPeriod>> getAvailabilityPeriods(String spotId) async {
-    final response = await _supabase
+    final nowUtc = DateTime.now().toUtc().toIso8601String();
+
+    // Fetch non-recurring periods that haven't ended yet.
+    final oneTimeResponse = await _supabase
         .from('spot_availability_periods')
         .select()
         .eq('spot_id', spotId)
+        .eq('is_recurring', false)
+        .gte('end_time', nowUtc)
         .order('start_time', ascending: true);
 
-    return (response as List)
-        .map((json) => SpotAvailabilityPeriod.fromJson(json))
-        .toList();
+    // Fetch all recurring periods (they may have future occurrences regardless
+    // of the anchor start/end time stored in the row).
+    final recurringResponse = await _supabase
+        .from('spot_availability_periods')
+        .select()
+        .eq('spot_id', spotId)
+        .eq('is_recurring', true)
+        .order('start_time', ascending: true);
+
+    final all = [
+      ...(oneTimeResponse as List),
+      ...(recurringResponse as List),
+    ];
+
+    // Sort combined list by start_time ascending.
+    all.sort((a, b) {
+      final aTime = DateTime.parse(a['start_time'] as String);
+      final bTime = DateTime.parse(b['start_time'] as String);
+      return aTime.compareTo(bTime);
+    });
+
+    return all.map((json) => SpotAvailabilityPeriod.fromJson(json)).toList();
   }
 
   // Add availability period for a spot

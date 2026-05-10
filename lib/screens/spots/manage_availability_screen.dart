@@ -40,7 +40,13 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     });
 
     try {
-      final periods = await _spotService.getAvailabilityPeriods(widget.spot.id);
+      final now = DateTime.now();
+      final periods = (await _spotService.getAvailabilityPeriods(widget.spot.id))
+          // Secondary guard: hide any non-recurring period whose end time has
+          // already passed (handles edge cases where the service query uses a
+          // slightly stale clock or the app was backgrounded for a long time).
+          .where((p) => p.isRecurring || p.endTime.isAfter(now))
+          .toList();
       setState(() {
         _periods = periods;
         _isLoading = false;
@@ -96,7 +102,7 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       builder: (context) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+            padding: const EdgeInsetsDirectional.fromSTEB(8, 0, 8, 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -283,12 +289,12 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
       builder: (context) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+            padding: const EdgeInsetsDirectional.fromSTEB(8, 0, 8, 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  padding: const EdgeInsetsDirectional.fromSTEB(16, 4, 16, 12),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -437,7 +443,7 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
           : RefreshIndicator(
               onRefresh: _loadPeriods,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                padding: const EdgeInsetsDirectional.fromSTEB(16, 16, 16, 96),
                 children: [
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -497,7 +503,7 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Card(
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+                            padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 6, 12),
                             child: Row(
                               children: [
                                 Container(

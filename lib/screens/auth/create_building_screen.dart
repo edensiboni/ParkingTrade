@@ -130,8 +130,6 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
         actions: [
           IconButton(
             tooltip: 'language_toggle'.tr(),
@@ -174,7 +172,7 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
                   // Lift the form into a focused "modal" card on the canvas.
                   elevation: 0,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(36, 40, 36, 36),
+                    padding: const EdgeInsetsDirectional.fromSTEB(36, 40, 36, 36),
                     child: _success
                         ? _buildSuccessView(theme, colorScheme)
                         : _buildFormView(theme, colorScheme),
@@ -349,15 +347,18 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
             width: 84,
             height: 84,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF22C55E), Color(0xFF16A34A)],
+                colors: [
+                  AppTheme.success,
+                  AppTheme.success.withValues(alpha: 0.75),
+                ],
               ),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(AppTheme.radiusXl),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF16A34A).withValues(alpha: 0.32),
+                  color: AppTheme.success.withValues(alpha: 0.32),
                   blurRadius: 28,
                   offset: const Offset(0, 12),
                 ),

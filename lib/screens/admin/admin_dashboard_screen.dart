@@ -150,7 +150,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(32, 28, 32, 32),
+        padding: const EdgeInsetsDirectional.fromSTEB(32, 28, 32, 32),
         itemCount: _pendingMembers.length,
         separatorBuilder: (_, __) => const SizedBox(height: 14),
         itemBuilder: (context, index) {
@@ -179,7 +179,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(32, 28, 32, 32),
+        padding: const EdgeInsetsDirectional.fromSTEB(32, 28, 32, 32),
         itemCount: _allMembers.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
@@ -761,7 +761,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
         // ── Add Apartment Form Card ──────────────────────────────────────────
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(32, 32, 32, 0),
+            padding: const EdgeInsetsDirectional.fromSTEB(32, 32, 32, 0),
             child: Card(
               color: scheme.surfaceContainerLow,
               child: Padding(
@@ -868,7 +868,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
         // ── Section header ───────────────────────────────────────────────────
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(32, 32, 32, 12),
+            padding: const EdgeInsetsDirectional.fromSTEB(32, 32, 32, 12),
             child: Row(
               children: [
                 Text(
@@ -947,7 +947,7 @@ class _ManageApartmentsTabState extends State<_ManageApartmentsTab> {
           )
         else
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(32, 0, 32, 32),
+            padding: const EdgeInsetsDirectional.fromSTEB(32, 0, 32, 32),
             sliver: SliverList.separated(
               itemCount: _apartments.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -1756,7 +1756,7 @@ class _BuildingSettingsTabState extends State<_BuildingSettingsTab> {
     final scheme = theme.colorScheme;
 
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SkeletonList(count: 4);
     }
 
     if (_building == null) {
@@ -2129,6 +2129,7 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final initial = (name != null && name!.trim().isNotEmpty)
         ? name!.trim()[0].toUpperCase()
         : '?';
@@ -2137,20 +2138,16 @@ class _Avatar extends StatelessWidget {
       height: 46,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFE0E7FF), Color(0xFFEDE9FE)],
-        ),
+        color: scheme.primaryContainer.withValues(alpha: 0.55),
         shape: BoxShape.circle,
         border: Border.all(
-          color: AppTheme.brandIndigo.withValues(alpha: 0.12),
+          color: scheme.primary.withValues(alpha: 0.15),
         ),
       ),
       child: Text(
         initial,
-        style: const TextStyle(
-          color: AppTheme.brandIndigoDeep,
+        style: TextStyle(
+          color: scheme.onPrimaryContainer,
           fontWeight: FontWeight.w800,
           fontSize: 16,
         ),
