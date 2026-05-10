@@ -40,7 +40,13 @@ class _ManageAvailabilityScreenState extends State<ManageAvailabilityScreen> {
     });
 
     try {
-      final periods = await _spotService.getAvailabilityPeriods(widget.spot.id);
+      final now = DateTime.now();
+      final periods = (await _spotService.getAvailabilityPeriods(widget.spot.id))
+          // Secondary guard: hide any non-recurring period whose end time has
+          // already passed (handles edge cases where the service query uses a
+          // slightly stale clock or the app was backgrounded for a long time).
+          .where((p) => p.isRecurring || p.endTime.isAfter(now))
+          .toList();
       setState(() {
         _periods = periods;
         _isLoading = false;
