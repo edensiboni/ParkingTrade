@@ -28,6 +28,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   bool _isOtpSent = false;
   bool _isLoading = false;
   String? _errorMessage;
+  // Inline error shown directly on the phone TextField (no SnackBar needed).
+  String? _phoneFieldError;
 
   @override
   void dispose() {
@@ -71,11 +73,18 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           : message;
 
       if (mounted) {
+        final scheme = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(snackMessage),
-            backgroundColor: Theme.of(context).colorScheme.error,
+            content: Text(
+              snackMessage,
+              style: TextStyle(color: scheme.onErrorContainer),
+            ),
+            backgroundColor: scheme.errorContainer,
             behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
           ),
         );
       }
@@ -118,18 +127,13 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   Future<void> _devBypassLogin(String email) async {
     // Guard: require a phone number before attempting bypass.
+    // Show inline field error instead of a harsh SnackBar.
     if (_phoneController.text.trim().isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Please enter a phone number first.'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      setState(() => _phoneFieldError = 'auth.phone_required'.tr());
       return;
     }
+    // Clear any stale inline error when the field is non-empty.
+    setState(() => _phoneFieldError = null);
 
     setState(() {
       _isLoading = true;
@@ -212,11 +216,18 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           _isLoading = false;
           _errorMessage = friendlyMessage;
         });
+        final scheme = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(friendlyMessage),
-            backgroundColor: Theme.of(context).colorScheme.error,
+            content: Text(
+              friendlyMessage,
+              style: TextStyle(color: scheme.onErrorContainer),
+            ),
+            backgroundColor: scheme.errorContainer,
             behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
           ),
         );
       }
@@ -231,11 +242,18 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           _isLoading = false;
           _errorMessage = friendlyMessage;
         });
+        final scheme = Theme.of(context).colorScheme;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(friendlyMessage),
-            backgroundColor: Theme.of(context).colorScheme.error,
+            content: Text(
+              friendlyMessage,
+              style: TextStyle(color: scheme.onErrorContainer),
+            ),
+            backgroundColor: scheme.errorContainer,
             behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
           ),
         );
       }
@@ -383,7 +401,14 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             labelText: 'auth.phone_label'.tr(),
             hintText: 'auth.phone_hint'.tr(),
             prefixIcon: const Icon(Icons.phone_outlined),
+            errorText: _phoneFieldError,
           ),
+          onChanged: (_) {
+            // Clear the inline field error as soon as the user starts typing.
+            if (_phoneFieldError != null) {
+              setState(() => _phoneFieldError = null);
+            }
+          },
           validator: (value) {
             if (value == null || value.trim().isEmpty) {
               return 'auth.phone_required'.tr();
