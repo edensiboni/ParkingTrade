@@ -435,7 +435,12 @@
       "spots_invalid": "Enter a positive whole number",
       "save": "Save",
       "cancel": "Cancel",
-      "saved_success": "Building settings saved."
+      "saved_success": "Building settings saved.",
+      "create_new_building": "Create a New Building",
+      "create_new_building_subtitle": "Create an additional building and switch to it as admin",
+      "create_new_building_confirm_title": "Create a New Building",
+      "create_new_building_confirm_body": "Your profile will switch to the new building. You can only manage one building at a time. Continue?",
+      "create_new_building_confirm": "Create & Switch"
     }
   },
 
