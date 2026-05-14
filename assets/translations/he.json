@@ -435,7 +435,12 @@
       "spots_invalid": "הזן מספר שלם חיובי",
       "save": "שמור",
       "cancel": "ביטול",
-      "saved_success": "הגדרות הבניין נשמרו."
+      "saved_success": "הגדרות הבניין נשמרו.",
+      "create_new_building": "צור בניין חדש",
+      "create_new_building_subtitle": "צור בניין נוסף ועבור אליו כמנהל",
+      "create_new_building_confirm_title": "יצירת בניין חדש",
+      "create_new_building_confirm_body": "הפרופיל שלך יעבור לבניין החדש. תוכל לנהל רק בניין אחד בכל רגע נתון. להמשיך?",
+      "create_new_building_confirm": "צור ועבור"
     }
   },
 

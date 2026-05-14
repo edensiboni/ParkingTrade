@@ -1879,9 +1879,91 @@ class _BuildingSettingsTabState extends State<_BuildingSettingsTab> {
               ),
             ),
           ),
+          const SizedBox(height: 20),
+
+          // ── Create New Building ───────────────────────────────────────────
+          Card(
+            color: scheme.errorContainer.withValues(alpha: 0.12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _confirmCreateNewBuilding(context),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: scheme.errorContainer,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.add_business_rounded,
+                        color: scheme.onErrorContainer,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'admin.settings.create_new_building'.tr(),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: scheme.onErrorContainer,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'admin.settings.create_new_building_subtitle'.tr(),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onErrorContainer
+                                  .withValues(alpha: 0.75),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 16,
+                      color: scheme.onErrorContainer.withValues(alpha: 0.6),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmCreateNewBuilding(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('admin.settings.create_new_building_confirm_title'.tr()),
+        content: Text('admin.settings.create_new_building_confirm_body'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('admin.settings.cancel'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('admin.settings.create_new_building_confirm'.tr()),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      Navigator.of(context).pushNamed('/setup');
+    }
   }
 }
 
