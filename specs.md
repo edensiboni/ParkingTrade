@@ -27,8 +27,9 @@
     - Supabase Auth (phone‑based OTP).
     - Realtime for chat and live updates.
   - Supabase Edge Functions (Deno + TypeScript) for transactional flows:
-    - `join-building`
-    - `create-building` (create building, generate invite code, set creator as first member)
+    - `join-building` (stub / legacy; magic-login flow replaced invite join)
+    - `create-building` (**deprecated** — pre–apartment-centric; do not use from the app)
+    - `create-building-admin` (**active** — creates `buildings` + `ADMIN-UNIT` apartment + admin `profiles`; sets `created_by_user_id`; omits `display_name` in upsert when `admin_display_name` is not sent so Google-provided names are preserved)
     - `create-booking-request`
     - `approve-booking`
   - Push notifications via Firebase:
@@ -43,7 +44,7 @@
 
 - **Buildings**
   - Identified by invite codes (e.g. `TEST123`). Optional `address` (full formatted address from Places API) and `created_by_user_id` (user who created the building, for future owner/admin flows).
-  - Creation: buildings are created only via the `create-building` Edge Function (no client INSERT on `buildings`). The function generates a unique 6-character invite code and sets the creator as first member.
+  - Creation: buildings for **new building admins** are created via the `create-building-admin` Edge Function (no client INSERT on `buildings`). It generates a unique 6-character invite code, sets `created_by_user_id` to the caller, creates the `ADMIN-UNIT` apartment, and upserts the caller’s `profiles` row with `role = admin`, `apartment_id`, and `status = approved`. The legacy `create-building` function remains in the repo for compatibility only.
   - Flags:
     - `approval_required`:
       - `false`: users join and are immediately active.
@@ -113,7 +114,7 @@
 - **Join or create building**
   - Single "Your building" screen with two paths:
     - **Join existing**: (A) "I have an invite code" – enter code and optional display name, then Join. (B) "Find my building" – search by name, tap a building to join (uses that building’s invite code). If building has `approval_required`, user is routed to pending until approved.
-    - **Create new**: "First here? Create your building." – enter building name or address (with optional address autocomplete from Google Places API if `PLACES_API_KEY` is set). Submit calls `create-building` Edge Function; app shows "Building created. Share this code: **XYZ123**" with copy button, then Continue to parking spots.
+    - **Create new (admin onboarding)**: From **Not registered** → "Create building" link opens `/setup` (`CreateBuildingScreen`). Enter building name and address (Places autocomplete when configured). Submit invokes `create-building-admin` with optional `admin_display_name` from Google user metadata; on success the app navigates to **Admin dashboard**. `BuildingService.createBuilding()` is removed (throws `UnimplementedError`); do not call the legacy `create-building` function from new code.
   - After join or create: if `approval_required` and status `pending`, user is routed to Pending Approval; otherwise to parking spots (Home).
 
 - **Manage Parking Spots**
@@ -220,8 +221,9 @@
 
 - **When to Use**
   - Recommended for production for:
-    - `join-building`
-    - `create-building`
+    - `join-building` (legacy stub)
+    - `create-building` (deprecated)
+    - `create-building-admin` (building admin onboarding)
     - `create-booking-request`
     - `approve-booking`
   - For simple local testing, the app can temporarily talk directly to tables without functions, but long‑term flows should go through Edge Functions.
@@ -233,6 +235,7 @@
   - Deploy:
     - `supabase functions deploy join-building`
     - `supabase functions deploy create-building`
+    - `supabase functions deploy create-building-admin`
     - `supabase functions deploy approve-booking`
     - `supabase functions deploy create-booking-request`
     - `supabase functions deploy places-autocomplete` (for address autocomplete on web; set secret `PLACES_API_KEY`)
@@ -254,7 +257,7 @@
 - **Places API (address autocomplete when creating a building)**
   - **Web:** The app calls the `places-autocomplete` Edge Function (no CORS; API key stays server-side). Set the Google API key as a Supabase secret: `supabase secrets set PLACES_API_KEY=your-google-key`, then deploy the function: `supabase functions deploy places-autocomplete`.
   - **Mobile:** Set `PLACES_API_KEY` in `.env` or `--dart-define`; the app calls Google directly. See [.env.example](.env.example).
-  - In Google Cloud Console: enable **Places API** (Place Autocomplete). Create an API key. Without the key/function, create-building still works with plain text name/address.
+  - In Google Cloud Console: enable **Places API** (Place Autocomplete). Create an API key. Without the key/function, `/setup` building creation still works with plain text name/address.
   - **Troubleshooting:** (1) Web: deploy `places-autocomplete` and set the secret. (2) Type at least 3 characters for suggestions. (3) Mobile: add PLACES_API_KEY to `.env` and run with a script that passes it.
 
 - **Firebase / Push Notifications**
@@ -277,7 +280,7 @@
   - Run `./scripts/deploy-all.sh` to apply migrations and deploy Edge Functions (or run `./scripts/migrate.sh` then `./scripts/deploy-functions.sh`).
   - Scripts require Supabase CLI and a linked project; they change to repo root and source `.env` if present.
 - **CI**
-  - **GitHub Actions:** Workflow [.github/workflows/deploy-backend.yml](.github/workflows/deploy-backend.yml) runs on push to `main` and on manual trigger. It runs migrations then deploys the Edge Functions (join-building, create-building, approve-booking, create-booking-request, places-autocomplete). Uses concurrency so overlapping runs cancel.
+  - **GitHub Actions** [.github/workflows/ci.yml](.github/workflows/ci.yml): Job 1 — `supabase db reset` on a local stack to validate migrations. Job 2 — `flutter analyze`, `flutter test --coverage` (includes `CreateBuildingScreen` / `BuildingService` tests for the admin create-building path), and `deno test supabase/functions/_shared/invite_code_test.ts` for invite-code generation shared by `create-building-admin` and legacy `create-building`. Job 3 (push to `main` only) — `deploy` runs migrations and deploys Edge Functions (including `create-building-admin`). Concurrency cancels overlapping runs. [.github/workflows/deploy-backend.yml](.github/workflows/deploy-backend.yml) is a manual emergency deploy with the same function list.
   - **GitLab (optional):** [.gitlab-ci.yml](.gitlab-ci.yml) mirrors the same steps; set CI/CD variables (masked) `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_REF`.
 
 ### 6. Dart & Flutter Conventions

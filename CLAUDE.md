@@ -26,7 +26,7 @@ lib/
 
 supabase/
 ├── config.toml       # Local Supabase config (project id: parking-trade)
-├── functions/        # Edge Functions (approve-booking, create-booking-request, create-building, join-building, manage-member, places-autocomplete, send-chat-message)
+├── functions/        # Edge Functions (approve-booking, create-booking-request, create-building, create-building-admin, join-building, manage-member, places-autocomplete, send-chat-message)
 │   └── _shared/      # Shared utilities for edge functions
 └── migrations/       # 10 SQL migrations (001–010)
 
@@ -86,6 +86,7 @@ supabase db push
 supabase functions deploy approve-booking
 supabase functions deploy create-booking-request
 supabase functions deploy create-building
+supabase functions deploy create-building-admin
 supabase functions deploy join-building
 supabase functions deploy manage-member
 supabase functions deploy places-autocomplete

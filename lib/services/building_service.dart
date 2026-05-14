@@ -26,37 +26,23 @@ class BuildingService {
     return Building.fromJson(response);
   }
 
-  // Create building via Edge Function (generates invite code, sets user as first member)
+  /// **Deprecated:** Do not use. The legacy `create-building` Edge Function
+  /// targets the pre–apartment-centric schema (`profiles.building_id`) and
+  /// does not set `apartment_id`, `role`, or `is_apartment_admin`.
+  ///
+  /// Building creation is done from the setup route (`/setup`,
+  /// `CreateBuildingScreen`) by invoking the `create-building-admin` Edge Function.
+  @Deprecated('Use setup flow / create-building-admin Edge Function')
   Future<Map<String, dynamic>> createBuilding({
     required String name,
     String? address,
     bool approvalRequired = false,
   }) async {
-    final response = await _supabase.functions.invoke(
-      'create-building',
-      body: {
-        'name': name,
-        if (address != null && address.isNotEmpty) 'address': address,
-        'approval_required': approvalRequired,
-      },
+    throw UnimplementedError(
+      'createBuilding is removed: use CreateBuildingScreen or invoke '
+      'create-building-admin with building_name, optional address/lat/lng, '
+      'and optional admin_display_name.',
     );
-
-    if (response.status != 200) {
-      final msg = response.data is Map ? response.data['error'] : null;
-      throw Exception(msg ?? 'Failed to create building');
-    }
-
-    final data = response.data as Map<String, dynamic>;
-    return {
-      'success': true,
-      'building': {
-        'id': data['building_id'],
-        'name': data['name'],
-      },
-      'invite_code': data['invite_code'],
-      'status': data['status'],
-      'requires_approval': data['requires_approval'] as bool? ?? false,
-    };
   }
 
   // Search buildings by name (client-side filter of getAllBuildings)
