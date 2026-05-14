@@ -4,7 +4,8 @@
 #                               `supabase db reset`. Any SQL syntax error or non-idempotent
 #                               policy (e.g. missing DROP POLICY IF EXISTS) fails here.
 #
-# Job 2 (flutter-analyze-test): Runs `flutter analyze` (hard-fail on errors) and `flutter test`.
+# Job 2 (flutter-analyze-test): Runs `flutter analyze`, `flutter test --coverage`, and
+#                               `deno test` on shared Edge Function utilities (invite codes).
 #
 # Job 3 (deploy):               Runs only when BOTH jobs above succeed AND the event is a push
 #                               to main.  Pushes migrations to production and deploys all Edge
@@ -105,6 +106,14 @@ jobs:
       - name: Flutter test
         run: flutter test --coverage
 
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Deno test (invite codes for building Edge Functions)
+        run: deno test supabase/functions/_shared/invite_code_test.ts
+
       # Upload coverage report as an artifact so it can be inspected or fed to
       # a coverage service (e.g. Codecov) later without re-running tests.
       - name: Upload coverage report
@@ -156,6 +165,7 @@ jobs:
             approve-booking \
             create-booking-request \
             create-building \
+            create-building-admin \
             join-building \
             manage-member \
             places-autocomplete \

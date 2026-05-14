@@ -1,23 +1,16 @@
+// DEPRECATED: Legacy pre–apartment-centric flow (`profiles.building_id` only).
+// The app and admin onboarding use `create-building-admin` instead.
+// Kept only if an old client still deploys this function; do not extend.
 // Pinned npm: specifier + Deno.serve keep us off esm.sh / deno.land/std,
 // both of which have flaked during deploys (esm.sh 522, deno.land outages).
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
+import { generateInviteCode } from '../_shared/invite_code.ts'
 
 const serve = Deno.serve
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-const INVITE_CODE_LENGTH = 6
-const INVITE_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no ambiguous 0/O, 1/I
-
-function generateInviteCode(): string {
-  let code = ''
-  for (let i = 0; i < INVITE_CODE_LENGTH; i++) {
-    code += INVITE_CODE_CHARS[Math.floor(Math.random() * INVITE_CODE_CHARS.length)]
-  }
-  return code
 }
 
 serve(async (req) => {

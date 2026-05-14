@@ -52,6 +52,7 @@ jobs:
             approve-booking \
             create-booking-request \
             create-building \
+            create-building-admin \
             join-building \
             manage-member \
             places-autocomplete \
