@@ -1,0 +1,35 @@
+name: Android APK Build & Appetize.io Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload APK to Appetize.io
+        run: |
+          curl https://${{ secrets.APPETIZE_API_TOKEN }}@api.appetize.io/v1/apps/ad5nwawamgaoi4orajo4nlcsc4 \
+            -F "file=@build/app/outputs/flutter-apk/app-release.apk" \
+            -F "platform=android"

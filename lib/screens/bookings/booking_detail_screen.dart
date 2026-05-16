@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../services/booking_service.dart';
 import '../../services/auth_service.dart';
 import '../../models/booking_request.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/app_snack.dart';
+import '../../widgets/skeleton.dart';
 import '../../widgets/status_chip.dart';
 import '../../widgets/who_am_i_strip.dart';
 import '../chat/chat_screen.dart';
@@ -156,7 +158,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
           title: Text('bookings.detail.title'.tr()),
           bottom: const WhoAmIStrip(),
         ),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const SkeletonList(count: 3),
       );
     }
 
@@ -198,7 +200,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
         children: [
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsetsDirectional.fromSTEB(16, 16, 16, 16),
               children: [
                 _HeaderCard(
                   spotLabel: spotLabel,
@@ -283,7 +285,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
           SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 16, 16),
               child: FilledButton.tonalIcon(
                 style: FilledButton.styleFrom(
                   minimumSize: const Size(double.infinity, 48),
@@ -337,7 +339,7 @@ class _HeaderCard extends StatelessWidget {
                   height: 44,
                   decoration: BoxDecoration(
                     color: scheme.primaryContainer.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   ),
                   alignment: Alignment.center,
                   child: Icon(Icons.local_parking_rounded,

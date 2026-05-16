@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/booking_service.dart';
 import '../../models/booking_request.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
@@ -196,7 +197,7 @@ class _BookingsScreenState extends State<BookingsScreen>
 
     return Card(
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         onTap: () async {
           final result = await Navigator.of(context).push(
             MaterialPageRoute(
@@ -206,7 +207,7 @@ class _BookingsScreenState extends State<BookingsScreen>
           if (result == true) _loadBookings();
         },
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 16, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -217,7 +218,7 @@ class _BookingsScreenState extends State<BookingsScreen>
                     height: 40,
                     decoration: BoxDecoration(
                       color: scheme.primaryContainer.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                     ),
                     alignment: Alignment.center,
                     child: Icon(Icons.local_parking_rounded,
@@ -337,7 +338,7 @@ class _BookingsScreenState extends State<BookingsScreen>
     return RefreshIndicator(
       onRefresh: _loadBookings,
       child: ListView.separated(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 16, 16, 16),
         itemCount: _myBookings.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, i) =>
@@ -358,7 +359,7 @@ class _BookingsScreenState extends State<BookingsScreen>
     return RefreshIndicator(
       onRefresh: _loadBookings,
       child: ListView.separated(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 16, 16, 16),
         itemCount: _pendingRequests.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, i) => _buildBookingCard(_pendingRequests[i]),

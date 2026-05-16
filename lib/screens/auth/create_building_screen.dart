@@ -36,7 +36,6 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
   double? _longitude;
 
   bool _isLoading = false;
-  final bool _success = false;
   String? _errorMessage;
 
   @override
@@ -78,6 +77,13 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
         if (_longitude != null) 'longitude': _longitude,
       };
 
+      final user = supabase.auth.currentUser;
+      final displayName = (user?.userMetadata?['full_name'] as String?)?.trim() ??
+          (user?.userMetadata?['name'] as String?)?.trim();
+      if (displayName != null && displayName.isNotEmpty) {
+        body['admin_display_name'] = displayName;
+      }
+
       // Explicitly pass the Authorization header so the edge function always
       // receives a valid JWT even if the Supabase client hasn't auto-injected it
       // (e.g. when the session was just restored from localStorage on web).
@@ -94,6 +100,7 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
       }
 
       if (!mounted) return;
+      setState(() => _isLoading = false);
       // Navigate directly to the admin dashboard — no intermediate success view.
       widget.onCreated();
     } catch (e) {
@@ -130,8 +137,6 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
         actions: [
           IconButton(
             tooltip: 'language_toggle'.tr(),
@@ -174,10 +179,8 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
                   // Lift the form into a focused "modal" card on the canvas.
                   elevation: 0,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(36, 40, 36, 36),
-                    child: _success
-                        ? _buildSuccessView(theme, colorScheme)
-                        : _buildFormView(theme, colorScheme),
+                    padding: const EdgeInsetsDirectional.fromSTEB(36, 40, 36, 36),
+                    child: _buildFormView(theme, colorScheme),
                   ),
                 ),
               ),
@@ -335,60 +338,6 @@ class _CreateBuildingScreenState extends State<CreateBuildingScreen> {
               ),
             ],
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSuccessView(ThemeData theme, ColorScheme colorScheme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Center(
-          child: Container(
-            width: 84,
-            height: 84,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF22C55E), Color(0xFF16A34A)],
-              ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF16A34A).withValues(alpha: 0.32),
-                  blurRadius: 28,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.check_rounded,
-              size: 44,
-              color: Colors.white,
-            ),
-          ),
-        ),
-        const SizedBox(height: 28),
-        Text(
-          'setup.success_title'.tr(),
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'setup.success_message'.tr(),
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: colorScheme.onSurfaceVariant),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 36),
-        FilledButton(
-          onPressed: widget.onCreated,
-          child: Text('setup.go_to_dashboard'.tr()),
         ),
       ],
     );

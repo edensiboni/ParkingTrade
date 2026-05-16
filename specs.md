@@ -126,6 +126,10 @@
     - Approve calls `handle-join-request`, which ensures an `apartments` row exists, creates/updates the requester’s `profiles` row (with `id = requester_user_id`) and marks the request approved.
     - Decline marks the request declined.
 
+- **Join or create building (admin onboarding)**
+  - From **Not registered** → "Create building" link opens `/setup` (`CreateBuildingScreen`). Enter building name and address (Places autocomplete when configured). Submit invokes `create-building-admin`; on success the app navigates to **Admin dashboard**.
+  - An already-authenticated admin can create an additional building from **Admin Dashboard → Building Settings → "Create New Building"**, which navigates to `/setup` and switches their active building on success.
+
 - **Manage Parking Spots**
   - From spots screen:
     - Add spot: provide human‑readable `spot_identifier` (e.g. `A‑101`).

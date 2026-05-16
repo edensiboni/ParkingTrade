@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../models/message.dart';
 import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/skeleton.dart';
 import '../../widgets/who_am_i_strip.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -149,7 +150,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const SkeletonList(count: 6)
                 : _messages.isEmpty
                     ? EmptyState(
                         icon: Icons.forum_outlined,
@@ -174,7 +175,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final items = _buildItems();
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      padding: const EdgeInsetsDirectional.fromSTEB(12, 12, 12, 12),
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
@@ -332,7 +333,7 @@ class _Composer extends StatelessWidget {
             top: BorderSide(color: scheme.outlineVariant),
           ),
         ),
-        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 8, 8),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [

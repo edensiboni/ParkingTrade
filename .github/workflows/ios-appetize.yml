@@ -1,0 +1,45 @@
+name: iOS Simulator Build & Appetize.io Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate .env file
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
+        run: |
+          echo "SUPABASE_URL=$SUPABASE_URL" > .env
+          echo "SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY" >> .env
+          echo "SUPABASE_ANON_KEY=$SUPABASE_PUBLISHABLE_KEY" >> .env
+          echo "PLACES_API_KEY=$PLACES_API_KEY" >> .env
+
+      - name: Generate GoogleService-Info.plist
+        run: |
+          mkdir -p ios/Runner
+          echo "${{ secrets.IOS_GOOGLE_SERVICE_INFO }}" > ios/Runner/GoogleService-Info.plist
+
+      - name: Build iOS Simulator
+        run: flutter build ios --simulator
+
+      - name: Compress app bundle
+        run: cd build/ios/iphonesimulator && zip -r app.zip Runner.app
+
+      - name: Upload to Appetize.io
+        run: curl https://${{ secrets.APPETIZE_API_TOKEN }}@api.appetize.io/v1/apps -F "file=@build/ios/iphonesimulator/app.zip" -F "platform=ios"

@@ -112,6 +112,8 @@
     "spots_toggle_hint": "Turn off sharing at any time to stop receiving requests.",
     "nav_my_spots": "My Spots",
     "nav_find_parking": "Find Parking",
+    "nav_available": "Available now",
+    "nav_my_spot": "My spot",
     "no_spots_title": "No spots assigned",
     "no_spots_message": "Your parking spot will appear here once it has been assigned to your apartment.",
     "spot_active": "Active",
@@ -129,7 +131,21 @@
     "who_am_i": "Who am I · {name} · {role}",
     "who_am_i_unknown": "Unknown",
     "role_admin": "Admin",
-    "role_tenant": "Tenant"
+    "role_tenant": "Tenant",
+    "quick_share_morning": "Until tomorrow 07:00 🌅",
+    "quick_share_2h": "Next 2 hours ⏳",
+    "quick_share_custom": "Custom time... ⚙️",
+    "hero_available_until": "Free until {time}",
+    "hero_occupied": "Occupied",
+    "hero_release": "Release spot",
+    "hero_mark_occupied": "Mark as occupied",
+    "hero_change_time": "Change time",
+    "hero_manage": "Manage availability",
+    "hero_spot_label": "Spot {id}",
+    "hero_greeting_morning": "Good morning,",
+    "hero_greeting_afternoon": "Good afternoon,",
+    "hero_greeting_evening": "Good evening,",
+    "hero_greeting_name": "{name}"
   },
 
   "bookings": {
@@ -459,9 +475,32 @@
       "spots_invalid": "Enter a positive whole number",
       "save": "Save",
       "cancel": "Cancel",
-      "saved_success": "Building settings saved."
+      "saved_success": "Building settings saved.",
+      "create_new_building": "Create a New Building",
+      "create_new_building_subtitle": "Create an additional building and switch to it as admin",
+      "create_new_building_confirm_title": "Create a New Building",
+      "create_new_building_confirm_body": "Your profile will switch to the new building. You can only manage one building at a time. Continue?",
+      "create_new_building_confirm": "Create & Switch"
     }
   },
 
-  "language_toggle": "עברית"
+  "language_toggle": "עברית",
+
+  "feed": {
+    "title": "Spots available in the building",
+    "live_count": "{n} live now",
+    "total_count": "{n} total",
+    "spot_label": "Spot {id}",
+    "person_line": "{name} (Apt {apt})",
+    "neighbor_fallback": "A neighbor",
+    "window_live_until": "Free until {until}",
+    "window_upcoming": "{when} {from}–{until}",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "request_cta": "Request",
+    "empty_title": "No spots free right now",
+    "empty_message": "When a neighbor releases their spot it'll show up here",
+    "error_title": "Couldn't load",
+    "retry": "Try again"
+  }
 }

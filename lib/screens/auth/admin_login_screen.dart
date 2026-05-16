@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
+import '../../theme/app_theme.dart';
 
 /// Authentication screen for building admins.
 ///
@@ -114,7 +115,7 @@ class _AdminHero extends StatelessWidget {
           height: 72,
           decoration: BoxDecoration(
             color: scheme.secondaryContainer.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
           ),
           child: Icon(Icons.admin_panel_settings_outlined,
               size: 36, color: scheme.secondary),

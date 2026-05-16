@@ -131,7 +131,7 @@ class _ManageApartmentScreenState extends State<ManageApartmentScreen> {
                     message: 'spots.manage_apartment.no_residents_message'.tr(),
                   )
                 : ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                    padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 32),
                     children: [
                       _SectionHeader(
                         title: 'spots.manage_apartment.residents_section'.tr(),
@@ -282,7 +282,7 @@ class _ResidentCard extends StatelessWidget {
                   ),
                 if (profile.isApartmentAdmin)
                   Padding(
-                    padding: const EdgeInsets.only(left: 8),
+                    padding: const EdgeInsetsDirectional.only(start: 8),
                     child: Tooltip(
                       message: 'spots.manage_apartment.apartment_admin_tooltip'.tr(),
                       child: Icon(

@@ -176,7 +176,7 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
         expand: false,
         builder: (context, scrollController) {
           return Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -460,7 +460,9 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) { return const SkeletonList(count: 4); }
+    if (_isLoading) {
+      return const SkeletonList(count: 4);
+    }
 
     if (_errorMessage != null) {
       return _FindParkingEmpty(
@@ -506,7 +508,7 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+              padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 32),
               sliver: SliverList.separated(
                 itemCount: displaySpots.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -540,7 +542,7 @@ class _FindParkingHeader extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 20, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -675,7 +677,7 @@ class _AvailableSpotCardState extends State<_AvailableSpotCard>
 
     // Small stagger delay per card
     Future.delayed(Duration(milliseconds: widget.index * 45), () {
-      if (mounted) _entryCtrl.forward();
+      if (mounted) { _entryCtrl.forward(); }
     });
   }
 
@@ -1069,7 +1071,7 @@ class _ZzzBubbleState extends State<_ZzzBubble>
     );
 
     Future.delayed(Duration(milliseconds: widget.delay), () {
-      if (mounted) _ctrl.repeat();
+      if (mounted) { _ctrl.repeat(); }
     });
   }
 
@@ -1137,8 +1139,8 @@ class _TimeFilterBar extends StatelessWidget {
     final today = DateTime(now.year, now.month, now.day);
     final tomorrow = today.add(const Duration(days: 1));
     final d = DateTime(date.year, date.month, date.day);
-    if (d == today) return 'bookings.available.filter_today'.tr();
-    if (d == tomorrow) return 'bookings.available.filter_tomorrow'.tr();
+    if (d == today) { return 'bookings.available.filter_today'.tr(); }
+    if (d == tomorrow) { return 'bookings.available.filter_tomorrow'.tr(); }
     return DateFormat('d MMM').format(date);
   }
 
@@ -1149,7 +1151,7 @@ class _TimeFilterBar extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      margin: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 14),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: isFilterActive

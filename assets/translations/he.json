@@ -112,6 +112,8 @@
     "spots_toggle_hint": "ניתן לכבות את השיתוף בכל עת כדי להפסיק לקבל בקשות.",
     "nav_my_spots": "החניות שלי",
     "nav_find_parking": "חפש חניה",
+    "nav_available": "פנויות עכשיו",
+    "nav_my_spot": "החניה שלי",
     "no_spots_title": "לא הוקצו חניות",
     "no_spots_message": "החנייה שלך תופיע כאן לאחר שתוקצה לדירתך.",
     "spot_active": "פעיל",
@@ -129,7 +131,21 @@
     "who_am_i": "מי אני · {name} · {role}",
     "who_am_i_unknown": "לא ידוע",
     "role_admin": "מנהל",
-    "role_tenant": "דייר"
+    "role_tenant": "דייר",
+    "quick_share_morning": "עד מחר ב-07:00 🌅",
+    "quick_share_2h": "לשעתיים הקרובות ⏳",
+    "quick_share_custom": "שעה אחרת... ⚙️",
+    "hero_available_until": "פנויה עד {time}",
+    "hero_occupied": "תפוסה",
+    "hero_release": "שחרר חניה",
+    "hero_mark_occupied": "סמן כתפוסה",
+    "hero_change_time": "שנה שעה",
+    "hero_manage": "נהל זמינות",
+    "hero_spot_label": "חניה {id}",
+    "hero_greeting_morning": "בוקר טוב,",
+    "hero_greeting_afternoon": "צהריים טובים,",
+    "hero_greeting_evening": "ערב טוב,",
+    "hero_greeting_name": "{name}"
   },
 
   "bookings": {
@@ -459,9 +475,32 @@
       "spots_invalid": "הזן מספר שלם חיובי",
       "save": "שמור",
       "cancel": "ביטול",
-      "saved_success": "הגדרות הבניין נשמרו."
+      "saved_success": "הגדרות הבניין נשמרו.",
+      "create_new_building": "צור בניין חדש",
+      "create_new_building_subtitle": "צור בניין נוסף ועבור אליו כמנהל",
+      "create_new_building_confirm_title": "יצירת בניין חדש",
+      "create_new_building_confirm_body": "הפרופיל שלך יעבור לבניין החדש. תוכל לנהל רק בניין אחד בכל רגע נתון. להמשיך?",
+      "create_new_building_confirm": "צור ועבור"
     }
   },
 
-  "language_toggle": "English"
+  "language_toggle": "English",
+
+  "feed": {
+    "title": "חניות פנויות בבניין",
+    "live_count": "{n} פנויות עכשיו",
+    "total_count": "{n} בסך הכל",
+    "spot_label": "חניה {id}",
+    "person_line": "{name} (דירה {apt})",
+    "neighbor_fallback": "שכן/ה",
+    "window_live_until": "פנויה עד {until}",
+    "window_upcoming": "{when} {from}–{until}",
+    "today": "היום",
+    "tomorrow": "מחר",
+    "request_cta": "בקש",
+    "empty_title": "אין חניות פנויות כרגע",
+    "empty_message": "כשמישהו מהשכנים ישחרר חניה — היא תופיע כאן",
+    "error_title": "אופס, נכשל הטעינה",
+    "retry": "נסה שוב"
+  }
 }

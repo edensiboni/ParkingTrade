@@ -71,10 +71,9 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
               TextButton(
                 onPressed: () async {
                   await _authService.signOut();
-                  if (mounted) {
-                    Navigator.of(context)
-                        .pushNamedAndRemoveUntil('/auth', (route) => false);
-                  }
+                  if (!mounted) return;
+                  Navigator.of(context)
+                      .pushNamedAndRemoveUntil('/auth', (route) => false);
                 },
                 child: Text('building.pending_approval.sign_out'.tr()),
               ),

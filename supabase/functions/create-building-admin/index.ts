@@ -14,23 +14,13 @@
 // Security: valid Supabase JWT + hidden URL.
 
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
+import { generateInviteCode } from '../_shared/invite_code.ts'
 
 const serve = Deno.serve
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-const INVITE_CODE_LENGTH = 6
-const INVITE_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no ambiguous 0/O, 1/I
-
-function generateInviteCode(): string {
-  let code = ''
-  for (let i = 0; i < INVITE_CODE_LENGTH; i++) {
-    code += INVITE_CODE_CHARS[Math.floor(Math.random() * INVITE_CODE_CHARS.length)]
-  }
-  return code
 }
 
 serve(async (req) => {
@@ -132,6 +122,7 @@ serve(async (req) => {
         name: buildingName,
         invite_code: inviteCode,
         approval_required: false, // admins approve members later; the admin themselves is auto-approved
+        created_by_user_id: authUserId,
         ...(address !== undefined ? { address } : {}),
         ...(latitude !== undefined ? { latitude } : {}),
         ...(longitude !== undefined ? { longitude } : {}),
@@ -172,21 +163,20 @@ serve(async (req) => {
     //      auto-created a bare profile row on first sign-in).
     // This replaces the old INSERT + 409 guard pattern that always failed for
     // Google OAuth users.
+    const profilePayload: Record<string, unknown> = {
+      id: authUserId, // PK — real auth.users.id
+      apartment_id: apartment.id,
+      role: 'admin',
+      status: 'approved', // admin needs no approval
+      is_apartment_admin: true,
+      receives_push_notifications: true,
+      receives_chat_notifications: true,
+      ...(adminDisplayName ? { display_name: adminDisplayName } : {}),
+    }
+
     const { error: profileError } = await supabase
       .from('profiles')
-      .upsert(
-        {
-          id: authUserId,                   // PK — real auth.users.id
-          apartment_id: apartment.id,
-          display_name: adminDisplayName || null,
-          role: 'admin',
-          status: 'approved',               // admin needs no approval
-          is_apartment_admin: true,
-          receives_push_notifications: true,
-          receives_chat_notifications: true,
-        },
-        { onConflict: 'id' },             // UPDATE the existing row if id already exists
-      )
+      .upsert(profilePayload, { onConflict: 'id' }) // UPDATE the existing row if id already exists
 
     if (profileError) {
       // Roll back building + apartment
