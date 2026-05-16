@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../models/profile.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/who_am_i_strip.dart';
 
 class PendingApprovalScreen extends StatefulWidget {
   const PendingApprovalScreen({super.key});
@@ -42,6 +43,7 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
       appBar: AppBar(
         title: Text('building.pending_approval.title'.tr()),
         automaticallyImplyLeading: false,
+        bottom: const WhoAmIStrip(),
       ),
       body: SafeArea(
         child: EmptyState(

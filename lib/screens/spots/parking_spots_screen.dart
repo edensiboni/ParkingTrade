@@ -10,6 +10,7 @@ import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/status_chip.dart';
+import '../../widgets/who_am_i_strip.dart';
 import '../admin/admin_dashboard_screen.dart';
 import 'manage_apartment_screen.dart';
 import 'manage_availability_screen.dart';
@@ -339,7 +340,7 @@ class _PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(64);
+  Size get preferredSize => const Size.fromHeight(64 + 34);
 
   @override
   Widget build(BuildContext context) {
@@ -350,8 +351,9 @@ class _PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
         ? 'home.nav_available'.tr()
         : 'home.nav_my_spot'.tr();
 
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
-      height: 64 + MediaQuery.of(context).padding.top,
+      height: 64 + 34 + topPadding,
       decoration: const BoxDecoration(
         color: AppTheme.appBackground,
         border: Border(
@@ -360,10 +362,12 @@ class _PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       child: SafeArea(
         bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            children: [
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
               // Brand icon
               Container(
                 width: 38,
@@ -452,7 +456,12 @@ class _PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
                 ],
               ),
             ],
-          ),
+              ),
+            ),
+            const WhoAmIStrip(
+              padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 10),
+            ),
+          ],
         ),
       ),
     );

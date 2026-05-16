@@ -8,6 +8,7 @@ import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/status_chip.dart';
+import '../../widgets/who_am_i_strip.dart';
 import 'booking_detail_screen.dart';
 import 'available_spots_screen.dart';
 
@@ -291,13 +292,22 @@ class _BookingsScreenState extends State<BookingsScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text('bookings.title'.tr()),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: [
-            Tab(text: 'bookings.tab_available'.tr()),
-            Tab(text: 'bookings.tab_my_bookings'.tr()),
-            Tab(text: pendingLabel),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(34 + 48),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const WhoAmIStrip(),
+              TabBar(
+                controller: _tabController,
+                tabs: [
+                  Tab(text: 'bookings.tab_available'.tr()),
+                  Tab(text: 'bookings.tab_my_bookings'.tr()),
+                  Tab(text: pendingLabel),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
       body: TabBarView(

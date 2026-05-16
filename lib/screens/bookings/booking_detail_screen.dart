@@ -7,6 +7,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/app_snack.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/status_chip.dart';
+import '../../widgets/who_am_i_strip.dart';
 import '../chat/chat_screen.dart';
 
 class BookingDetailScreen extends StatefulWidget {
@@ -153,14 +154,20 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: Text('bookings.detail.title'.tr())),
+        appBar: AppBar(
+          title: Text('bookings.detail.title'.tr()),
+          bottom: const WhoAmIStrip(),
+        ),
         body: const SkeletonList(count: 3),
       );
     }
 
     if (_details == null) {
       return Scaffold(
-        appBar: AppBar(title: Text('bookings.detail.title'.tr())),
+        appBar: AppBar(
+          title: Text('bookings.detail.title'.tr()),
+          bottom: const WhoAmIStrip(),
+        ),
         body: Center(child: Text('bookings.detail.not_found'.tr())),
       );
     }
@@ -185,7 +192,10 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
         : 'bookings.detail.lender_label'.tr();
 
     return Scaffold(
-      appBar: AppBar(title: Text('bookings.detail.title'.tr())),
+      appBar: AppBar(
+        title: Text('bookings.detail.title'.tr()),
+        bottom: const WhoAmIStrip(),
+      ),
       body: Column(
         children: [
           Expanded(

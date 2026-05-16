@@ -330,6 +330,72 @@ class AuthService {
     }
   }
 
+  /// Resolves the best display name for [profile].
+  ///
+  /// Order: existing [Profile.displayName] → Google metadata → name from
+  /// `authorized_apartments.residents` matched by phone (persisted to profile).
+  Future<String?> resolveDisplayName(Profile profile) async {
+    final existing = profile.displayName?.trim();
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    if (isGoogleUser) {
+      await syncGoogleDisplayName();
+      try {
+        final response = await _supabase
+            .from('profiles')
+            .select('display_name')
+            .eq('id', profile.id)
+            .maybeSingle();
+        final synced = (response?['display_name'] as String?)?.trim();
+        if (synced != null && synced.isNotEmpty) return synced;
+      } catch (e) {
+        debugPrint('resolveDisplayName: google sync re-read failed: $e');
+      }
+    }
+
+    final user = currentUser;
+    if (user == null) return null;
+    final phone = profile.phone ?? _resolveUserPhone(user);
+    if (phone == null || phone.isEmpty) return null;
+
+    final fromResidents = await _lookupNameFromAuthorizedResidents(phone);
+    if (fromResidents == null || fromResidents.isEmpty) return null;
+
+    try {
+      await updateProfile(displayName: fromResidents);
+    } catch (e) {
+      debugPrint('resolveDisplayName: failed to persist name: $e');
+    }
+    return fromResidents;
+  }
+
+  /// Looks up a resident name in `authorized_apartments.residents` by phone.
+  Future<String?> _lookupNameFromAuthorizedResidents(String phone) async {
+    final targetVariations = phoneVariations(phone).toSet();
+    if (targetVariations.isEmpty) return null;
+
+    try {
+      final rows = await _supabase.from('authorized_apartments').select('residents');
+
+      for (final row in rows as List<dynamic>) {
+        final residents = row['residents'];
+        if (residents is! List) continue;
+        for (final raw in residents) {
+          if (raw is! Map) continue;
+          final rPhone = (raw['phone'] as String?) ?? '';
+          final matches = phoneVariations(rPhone)
+              .any(targetVariations.contains);
+          if (!matches) continue;
+          final name = (raw['name'] as String?)?.trim();
+          if (name != null && name.isNotEmpty) return name;
+        }
+      }
+    } catch (e) {
+      debugPrint('_lookupNameFromAuthorizedResidents: $e');
+    }
+    return null;
+  }
+
   /// Returns the best phone number we can derive for [user]:
   ///
   ///   - For OTP-authenticated users, [user.phone] is populated by Supabase

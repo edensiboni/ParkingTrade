@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/who_am_i_strip.dart';
 
 class RejectedScreen extends StatelessWidget {
   const RejectedScreen({super.key});
@@ -15,6 +16,7 @@ class RejectedScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text('building.rejected.title'.tr()),
         automaticallyImplyLeading: false,
+        bottom: const WhoAmIStrip(),
       ),
       body: SafeArea(
         child: Padding(

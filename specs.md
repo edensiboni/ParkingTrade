@@ -27,9 +27,8 @@
     - Supabase Auth (phone‑based OTP).
     - Realtime for chat and live updates.
   - Supabase Edge Functions (Deno + TypeScript) for transactional flows:
-    - `join-building` (stub / legacy; magic-login flow replaced invite join)
-    - `create-building` (**deprecated** — pre–apartment-centric; do not use from the app)
-    - `create-building-admin` (**active** — creates `buildings` + `ADMIN-UNIT` apartment + admin `profiles`; sets `created_by_user_id`; omits `display_name` in upsert when `admin_display_name` is not sent so Google-provided names are preserved)
+    - `join-building`
+    - `create-building` (create building, generate invite code, set creator as first member)
     - `create-booking-request`
     - `approve-booking`
   - Push notifications via Firebase:
@@ -44,7 +43,7 @@
 
 - **Buildings**
   - Identified by invite codes (e.g. `TEST123`). Optional `address` (full formatted address from Places API) and `created_by_user_id` (user who created the building, for future owner/admin flows).
-  - Creation: buildings for **new building admins** are created via the `create-building-admin` Edge Function (no client INSERT on `buildings`). It generates a unique 6-character invite code, sets `created_by_user_id` to the caller, creates the `ADMIN-UNIT` apartment, and upserts the caller’s `profiles` row with `role = admin`, `apartment_id`, and `status = approved`. The legacy `create-building` function remains in the repo for compatibility only.
+  - Creation: buildings are created only via the `create-building` Edge Function (no client INSERT on `buildings`). The function generates a unique 6-character invite code and sets the creator as first member.
   - Flags:
     - `approval_required`:
       - `false`: users join and are immediately active.
@@ -107,16 +106,29 @@
     - **Sign in with Google**: User taps "Continue with Google"; OAuth redirects to Google then back to the app; Supabase restores the session. On web, redirect URL must match the app origin (see §5.2 Google OAuth setup).
     - **Sign in with Phone (OTP)**: User enters phone number (E.164 format, e.g. `+1234567890`). App requests OTP via Supabase Auth (phone provider). User enters OTP and is authenticated.
   - After either method, the user has a session. An `AuthWrapper` listens to auth changes and:
-    - If no profile/building: routes to **Join or create building**.
+    - If no linked profile/apartment: routes to **Not Registered** (with a join request form).
     - If profile status is `pending`: routes to `Pending Approval`.
     - If `approved`: routes to `Home`.
 
-- **Join or create building**
-  - Single "Your building" screen with two paths:
-    - **Join existing**: (A) "I have an invite code" – enter code and optional display name, then Join. (B) "Find my building" – search by name, tap a building to join (uses that building’s invite code). If building has `approval_required`, user is routed to pending until approved.
-    - **Create new (admin onboarding)**: From **Not registered** → "Create building" link opens `/setup` (`CreateBuildingScreen`). Enter building name and address (Places autocomplete when configured). Submit invokes `create-building-admin` with optional `admin_display_name` from Google user metadata; on success the app navigates to **Admin dashboard**. `BuildingService.createBuilding()` is removed (throws `UnimplementedError`); do not call the legacy `create-building` function from new code.
-    - **Create additional building (existing admin)**: An already-authenticated admin can create a new building from **Admin Dashboard → Building Settings tab → "Create New Building"** button. After a confirmation dialog, they are navigated to `/setup` (`CreateBuildingScreen`). On success the `create-building-admin` edge function upserts the admin's `profiles` row to point to the new building's `ADMIN-UNIT` apartment, effectively switching their active building. The app then navigates to the **Admin Dashboard** (stack replaced), which reloads with the new building's data.
-  - After join or create: if `approval_required` and status `pending`, user is routed to Pending Approval; otherwise to parking spots (Home).
+- **Not Registered → Join request**
+  - If a user signs in successfully but has no linked `profiles` row (Magic Login couldn’t match their phone), they see `NotRegisteredScreen`.
+  - The screen includes a **join request** form with:
+    - Building address (Places autocomplete)
+    - Apartment/unit identifier
+    - Phone (prefilled from auth when available)
+    - Optional name + notes
+  - Submitting calls the `create-join-request` Edge Function which creates a `building_join_requests` row.
+  - The user is then routed to `PendingApprovalScreen` while waiting for admin action.
+
+- **Admin → Review join requests**
+  - `AdminDashboardScreen` includes a **Join requests** tab showing pending `building_join_requests` for the admin’s building.
+  - Admin can **Approve** or **Decline**:
+    - Approve calls `handle-join-request`, which ensures an `apartments` row exists, creates/updates the requester’s `profiles` row (with `id = requester_user_id`) and marks the request approved.
+    - Decline marks the request declined.
+
+- **Join or create building (admin onboarding)**
+  - From **Not registered** → "Create building" link opens `/setup` (`CreateBuildingScreen`). Enter building name and address (Places autocomplete when configured). Submit invokes `create-building-admin`; on success the app navigates to **Admin dashboard**.
+  - An already-authenticated admin can create an additional building from **Admin Dashboard → Building Settings → "Create New Building"**, which navigates to `/setup` and switches their active building on success.
 
 - **Manage Parking Spots**
   - From spots screen:
@@ -222,9 +234,8 @@
 
 - **When to Use**
   - Recommended for production for:
-    - `join-building` (legacy stub)
-    - `create-building` (deprecated)
-    - `create-building-admin` (building admin onboarding)
+    - `join-building`
+    - `create-building`
     - `create-booking-request`
     - `approve-booking`
   - For simple local testing, the app can temporarily talk directly to tables without functions, but long‑term flows should go through Edge Functions.
@@ -236,7 +247,6 @@
   - Deploy:
     - `supabase functions deploy join-building`
     - `supabase functions deploy create-building`
-    - `supabase functions deploy create-building-admin`
     - `supabase functions deploy approve-booking`
     - `supabase functions deploy create-booking-request`
     - `supabase functions deploy places-autocomplete` (for address autocomplete on web; set secret `PLACES_API_KEY`)
@@ -258,7 +268,7 @@
 - **Places API (address autocomplete when creating a building)**
   - **Web:** The app calls the `places-autocomplete` Edge Function (no CORS; API key stays server-side). Set the Google API key as a Supabase secret: `supabase secrets set PLACES_API_KEY=your-google-key`, then deploy the function: `supabase functions deploy places-autocomplete`.
   - **Mobile:** Set `PLACES_API_KEY` in `.env` or `--dart-define`; the app calls Google directly. See [.env.example](.env.example).
-  - In Google Cloud Console: enable **Places API** (Place Autocomplete). Create an API key. Without the key/function, `/setup` building creation still works with plain text name/address.
+  - In Google Cloud Console: enable **Places API** (Place Autocomplete). Create an API key. Without the key/function, create-building still works with plain text name/address.
   - **Troubleshooting:** (1) Web: deploy `places-autocomplete` and set the secret. (2) Type at least 3 characters for suggestions. (3) Mobile: add PLACES_API_KEY to `.env` and run with a script that passes it.
 
 - **Firebase / Push Notifications**
@@ -281,7 +291,10 @@
   - Run `./scripts/deploy-all.sh` to apply migrations and deploy Edge Functions (or run `./scripts/migrate.sh` then `./scripts/deploy-functions.sh`).
   - Scripts require Supabase CLI and a linked project; they change to repo root and source `.env` if present.
 - **CI**
-  - **GitHub Actions** [.github/workflows/ci.yml](.github/workflows/ci.yml): Job 1 — `supabase db reset` on a local stack to validate migrations. Job 2 — `flutter analyze`, `flutter test --coverage` (includes `CreateBuildingScreen` / `BuildingService` tests for the admin create-building path), and `deno test supabase/functions/_shared/invite_code_test.ts` for invite-code generation shared by `create-building-admin` and legacy `create-building`. Job 3 (push to `main` only) — `deploy` runs migrations and deploys Edge Functions (including `create-building-admin`). Concurrency cancels overlapping runs. [.github/workflows/deploy-backend.yml](.github/workflows/deploy-backend.yml) is a manual emergency deploy with the same function list.
+  - **GitHub Actions:** Workflow [.github/workflows/deploy-backend.yml](.github/workflows/deploy-backend.yml) runs on push to `main` and on manual trigger. It runs migrations then deploys the Edge Functions (create-building, create-building-admin, approve-booking, create-booking-request, manage-member, places-autocomplete, send-chat-message, admin-bulk-import, create-join-request, handle-join-request). Uses concurrency so overlapping runs cancel.
+  - Edge Functions that must be deployed for onboarding/admin flows:
+    - `create-join-request`
+    - `handle-join-request`
   - **GitLab (optional):** [.gitlab-ci.yml](.gitlab-ci.yml) mirrors the same steps; set CI/CD variables (masked) `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_REF`.
 
 ### 6. Dart & Flutter Conventions

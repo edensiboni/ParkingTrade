@@ -4,6 +4,7 @@ import '../../services/apartment_service.dart';
 import '../../widgets/app_snack.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
+import '../../widgets/who_am_i_strip.dart';
 
 class ManageApartmentScreen extends StatefulWidget {
   const ManageApartmentScreen({super.key});
@@ -117,6 +118,7 @@ class _ManageApartmentScreenState extends State<ManageApartmentScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('spots.manage_apartment.title'.tr()),
+        bottom: const WhoAmIStrip(),
       ),
       body: RefreshIndicator(
         onRefresh: _loadProfiles,
