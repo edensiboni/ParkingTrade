@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import '../models/profile.dart';
 import '../services/auth_service.dart';
 
-/// A compact strip (designed for app bars) that shows:
-/// "Who am I · <name> · <role>"
+/// A compact strip (designed for app bars) that shows a greeting:
+/// "Hello &lt;name&gt;, &lt;role&gt;" (localized).
+///
+/// The name comes from [Profile.displayName], or is resolved by matching the
+/// signed-in user's phone against `authorized_apartments.residents`.
 ///
 /// It is safe to use on any screen — if the user isn't signed in or a profile
 /// cannot be resolved, it renders nothing.
@@ -21,24 +24,33 @@ class WhoAmIStrip extends StatelessWidget implements PreferredSizeWidget {
   @override
   Size get preferredSize => Size.fromHeight(height);
 
-  String _name(Profile? profile) {
-    final n = profile?.displayName?.trim();
+  Future<({Profile profile, String? name})?> _load() async {
+    final auth = AuthService();
+    final profile = await auth.getCurrentProfile();
+    if (profile == null) return null;
+    final name = await auth.resolveDisplayName(profile);
+    return (profile: profile, name: name);
+  }
+
+  String _name(String? resolvedName) {
+    final n = resolvedName?.trim();
     if (n != null && n.isNotEmpty) return n;
     return 'home.who_am_i_unknown'.tr();
   }
 
-  String _role(Profile? profile) {
-    if (profile?.isAdmin == true) return 'home.role_admin'.tr();
+  String _role(Profile profile) {
+    if (profile.isAdmin) return 'home.role_admin'.tr();
     return 'home.role_tenant'.tr();
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Profile?>(
-      future: AuthService().getCurrentProfile(),
+    return FutureBuilder<({Profile profile, String? name})?>(
+      future: _load(),
       builder: (context, snap) {
-        final profile = snap.data;
-        if (profile == null) return const SizedBox.shrink();
+        final data = snap.data;
+        if (data == null) return const SizedBox.shrink();
+        final profile = data.profile;
 
         final theme = Theme.of(context);
         final scheme = theme.colorScheme;
@@ -68,7 +80,7 @@ class WhoAmIStrip extends StatelessWidget implements PreferredSizeWidget {
                   Flexible(
                     child: Text(
                       'home.who_am_i'.tr(namedArgs: {
-                        'name': _name(profile),
+                        'name': _name(data.name),
                         'role': _role(profile),
                       }),
                       maxLines: 1,

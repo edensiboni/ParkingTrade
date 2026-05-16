@@ -128,7 +128,7 @@
     "quick_share_added": "החנייה משותפת עד {time}",
     "quick_share_stopped": "השיתוף הופסק",
     "quick_share_error": "לא ניתן לעדכן שיתוף: {error}",
-    "who_am_i": "מי אני · {name} · {role}",
+    "who_am_i": "שלום {name}, {role}",
     "who_am_i_unknown": "לא ידוע",
     "role_admin": "מנהל",
     "role_tenant": "דייר",

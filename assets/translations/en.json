@@ -128,7 +128,7 @@
     "quick_share_added": "Spot shared until {time}",
     "quick_share_stopped": "Sharing stopped",
     "quick_share_error": "Could not update sharing: {error}",
-    "who_am_i": "Who am I · {name} · {role}",
+    "who_am_i": "Hello {name}, {role}",
     "who_am_i_unknown": "Unknown",
     "role_admin": "Admin",
     "role_tenant": "Tenant",
