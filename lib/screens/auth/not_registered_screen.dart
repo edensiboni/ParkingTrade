@@ -99,6 +99,7 @@ class _NotRegisteredScreenState extends State<NotRegisteredScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final hasChosenSuggestion = _latitude != null && _longitude != null;
     return Scaffold(
       appBar: AppBar(
         title: Text('auth.not_registered.title'.tr()),
@@ -162,6 +163,10 @@ class _NotRegisteredScreenState extends State<NotRegisteredScreen> {
                               hintText:
                                   'auth.not_registered.address_hint'.tr(),
                               initialValue: _address.isEmpty ? null : _address,
+                              validator: (_) => hasChosenSuggestion
+                                  ? null
+                                  : 'auth.not_registered.address_pick_required'
+                                      .tr(),
                               onAddressSelected: _onAddressSelected,
                               onChanged: (value) {
                                 if (value != _address) {
@@ -245,7 +250,9 @@ class _NotRegisteredScreenState extends State<NotRegisteredScreen> {
                             ),
                             const SizedBox(height: 16),
                             FilledButton.icon(
-                              onPressed: _submitting ? null : _submitJoinRequest,
+                              onPressed: (_submitting || !hasChosenSuggestion)
+                                  ? null
+                                  : _submitJoinRequest,
                               icon: _submitting
                                   ? const SizedBox(
                                       width: 16,

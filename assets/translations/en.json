@@ -29,6 +29,7 @@
       "join_request_title": "Request access",
       "address_label": "Building address",
       "address_hint": "Start typing your building address",
+      "address_pick_required": "Please choose an address from the suggestions",
       "apartment_label": "Apartment / unit",
       "apartment_hint": "e.g. 4B",
       "apartment_required": "Apartment is required",

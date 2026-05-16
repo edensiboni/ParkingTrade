@@ -29,6 +29,7 @@
       "join_request_title": "בקשת הצטרפות",
       "address_label": "כתובת הבניין",
       "address_hint": "התחל להקליד את כתובת הבניין",
+      "address_pick_required": "אנא בחר כתובת מתוך ההצעות",
       "apartment_label": "דירה / יחידה",
       "apartment_hint": "לדוגמה: 4B",
       "apartment_required": "יש להזין דירה",
