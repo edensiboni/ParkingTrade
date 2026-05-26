@@ -77,6 +77,39 @@ class AppTheme {
     colors: [Color(0xFFFCFCFE), Color(0xFFF4F6FB)],
   );
 
+  /// Branded variant used when a salon/building deep link is active.
+  static ThemeData branded({required Color primaryColor}) {
+    final base = light();
+    final brandedScheme = base.colorScheme.copyWith(
+      primary: primaryColor,
+      onPrimary: Colors.white,
+      primaryContainer: Color.alphaBlend(
+        primaryColor.withValues(alpha: 0.14),
+        Colors.white,
+      ),
+      onPrimaryContainer: _darken(primaryColor, 0.18),
+      surfaceTint: primaryColor,
+    );
+    return base.copyWith(
+      colorScheme: brandedScheme,
+      progressIndicatorTheme: base.progressIndicatorTheme.copyWith(
+        color: primaryColor,
+      ),
+      tabBarTheme: base.tabBarTheme.copyWith(
+        labelColor: primaryColor,
+        indicator: UnderlineTabIndicator(
+          borderSide: BorderSide(color: primaryColor, width: 2.4),
+          insets: const EdgeInsets.symmetric(horizontal: 4),
+        ),
+      ),
+    );
+  }
+
+  static Color _darken(Color color, double amount) {
+    final hsl = HSLColor.fromColor(color);
+    return hsl.withLightness((hsl.lightness - amount).clamp(0.0, 1.0)).toColor();
+  }
+
   static ThemeData light() {
     const scheme = ColorScheme(
       brightness: Brightness.light,

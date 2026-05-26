@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/auth_service.dart';
 
 class RejectedScreen extends StatelessWidget {
@@ -57,8 +58,7 @@ class RejectedScreen extends StatelessWidget {
                 onPressed: () async {
                   await authService.signOut();
                   if (context.mounted) {
-                    Navigator.of(context)
-                        .pushNamedAndRemoveUntil('/auth', (route) => false);
+                    context.go('/auth');
                   }
                 },
                 icon: const Icon(Icons.logout_rounded),

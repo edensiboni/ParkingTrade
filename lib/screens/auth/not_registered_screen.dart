@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -7,9 +8,8 @@ class NotRegisteredScreen extends StatelessWidget {
   const NotRegisteredScreen({super.key});
 
   Future<void> _signOut(BuildContext context) async {
-    final navigator = Navigator.of(context);
     await AuthService().signOut();
-    navigator.pushNamedAndRemoveUntil('/auth', (route) => false);
+    if (context.mounted) context.go('/auth');
   }
 
   @override
@@ -77,7 +77,7 @@ class NotRegisteredScreen extends StatelessWidget {
 
                   // ── Admin link ─────────────────────────────────────────────
                   TextButton(
-                    onPressed: () => Navigator.of(context).pushNamed('/setup'),
+                    onPressed: () => context.go('/setup'),
                     child: Text('auth.not_registered.admin_link'.tr()),
                   ),
                 ],

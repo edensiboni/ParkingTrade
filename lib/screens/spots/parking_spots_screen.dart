@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../models/spot_availability_period.dart';
 import '../../services/admin_service.dart';
 import '../../services/parking_spot_service.dart';
@@ -223,8 +224,7 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
     if (confirmed == true && mounted) {
       await _authService.signOut();
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true)
-          .pushNamedAndRemoveUntil('/auth', (r) => false);
+      context.go('/auth');
     }
   }
 

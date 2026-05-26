@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/profile.dart';
 import '../../services/auth_service.dart';
@@ -292,7 +293,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         route = '/home';
       }
 
-      Navigator.of(context).pushNamedAndRemoveUntil(route, (route) => false);
+      context.go(route);
     } catch (e) {
       if (mounted) {
         setState(() {
