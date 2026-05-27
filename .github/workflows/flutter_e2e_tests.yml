@@ -1,0 +1,177 @@
+# flutter_e2e_tests.yml — Runs Flutter Integration / E2E tests on every push and PR.
+#
+# Architecture overview
+# ─────────────────────
+#   • macOS runner  — hardware-accelerated KVM is available natively on GitHub's
+#                     macOS machines, so the Android Emulator runs without any
+#                     nested-virtualisation workarounds.
+#   • API 34        — matches the modern target used in local development.
+#   • Fake / mock   — the test suite (integration_test/app_e2e_test.dart) falls
+#                     back to fake responses when SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY
+#                     are absent, so no real secrets are required for CI to pass.
+#
+# Caches
+# ──────
+#   1. Flutter pub packages   (~/.pub-cache)
+#   2. Gradle wrapper         (~/.gradle/wrapper)
+#   3. Gradle caches          (~/.gradle/caches)
+#   4. Android AVD snapshot   — provided by reactivecircus/android-emulator-runner
+#
+# Required secrets  (none — tests run fully mocked without secrets)
+# Optional secrets  (pass these to hit a real Supabase backend):
+#   SUPABASE_URL              — Supabase project URL
+#   SUPABASE_PUBLISHABLE_KEY  — Supabase anon/publishable key
+
+name: Flutter E2E Tests
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+
+# Cancel any in-flight run for the same branch / PR when a new commit arrives.
+concurrency:
+  group: e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Integration / E2E test job
+  # ─────────────────────────────────────────────────────────────────────────────
+  flutter-e2e:
+    name: "Flutter E2E · Android Emulator (API 34)"
+
+    # macOS gives us hardware-accelerated KVM for free — essential for fast
+    # emulator boot.  macos-14 uses Apple Silicon (M1); macos-13 is Intel x86_64.
+    # x86_64 AVDs are more stable on the hosted runners, so we pin macos-13.
+    runs-on: macos-13
+
+    timeout-minutes: 60
+
+    steps:
+      # ── 1. Source ────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Java (Gradle / Android SDK tooling) ───────────────────────────────
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # ── 3. Flutter ───────────────────────────────────────────────────────────
+      - name: Set up Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true          # caches the Flutter SDK itself between runs
+
+      # ── 4. Pub-cache ─────────────────────────────────────────────────────────
+      # Cache key includes pubspec.lock so a lock-file change invalidates the cache.
+      - name: Cache Flutter pub packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-cache-${{ runner.os }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            pub-cache-${{ runner.os }}-
+
+      # ── 5. Gradle ────────────────────────────────────────────────────────────
+      - name: Cache Gradle wrapper
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/wrapper
+          key: gradle-wrapper-${{ runner.os }}-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-wrapper-${{ runner.os }}-
+
+      - name: Cache Gradle caches
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches
+          key: gradle-caches-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-caches-${{ runner.os }}-
+
+      # ── 6. Flutter dependencies ──────────────────────────────────────────────
+      - name: Install Flutter pub dependencies
+        run: flutter pub get
+
+      # ── 7. Pre-flight checks ─────────────────────────────────────────────────
+      # Light static analysis pass — catches obvious issues before spending ~10 min
+      # booting the emulator.
+      - name: Flutter analyze (fast pre-flight)
+        run: flutter analyze --no-fatal-infos
+
+      # ── 8. Android Emulator + Integration Tests ──────────────────────────────
+      # reactivecircus/android-emulator-runner:
+      #   • Boots AVD with a cached snapshot on first run, restores it on later runs.
+      #   • Waits for the device to be fully online before executing `script`.
+      #   • api-level 34  — Android 14 (matches modern target SDK)
+      #   • target: google_apis — required for Google Play Services used by FCM
+      #   • arch: x86_64 — fastest option on Intel macOS runners
+      #   • cores: 2 — leave one core for the runner's OS overhead
+      #   • ram-size / heap-size — tuned to stay within the ~14 GB RAM of macos-13
+      - name: Run integration tests on Android Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: Nexus 6
+          cores: 2
+          ram-size: 4096M
+          heap-size: 512M
+          # Persist the AVD snapshot so subsequent runs skip the cold-boot phase.
+          avd-name: parking_trade_ci
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            # ── Verify the device is reachable ──────────────────────────────────
+            echo "Connected ADB devices:"
+            adb devices
+
+            # ── Run the integration test suite ──────────────────────────────────
+            # No real secrets needed: the test suite detects missing env vars and
+            # falls back to fake/stub responses automatically.
+            #
+            # To run against a live Supabase backend, add these GitHub secrets and
+            # uncomment the --dart-define lines below:
+            #   SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY
+            flutter test integration_test/app_e2e_test.dart \
+              --verbose \
+              --reporter expanded
+            # --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            # --dart-define=SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+
+      # ── 9. Upload test artifacts on failure ──────────────────────────────────
+      - name: Upload failure screenshots / logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-artifacts-${{ github.run_number }}
+          # integration_test framework dumps screenshots here on failure (if configured).
+          path: |
+            build/test-results/
+            build/reports/
+          retention-days: 7
+
+      # ── 10. Job summary ───────────────────────────────────────────────────────
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## Flutter E2E Test Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Setting | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Runner | macos-13 (Intel x86_64) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Android API | 34 (Google APIs) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Flutter channel | stable |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Test file | \`integration_test/app_e2e_test.dart\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Supabase backend | mocked (no secrets required) |" >> "$GITHUB_STEP_SUMMARY"

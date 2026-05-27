@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/auth_service.dart';
 import '../../models/profile.dart';
 import '../../widgets/empty_state.dart';
@@ -28,7 +29,7 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
       final profile = await _authService.getCurrentProfile();
       if (!mounted) return;
       if (profile?.status == ProfileStatus.approved) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        context.go('/home');
         return;
       }
     } finally {
@@ -70,8 +71,7 @@ class _PendingApprovalScreenState extends State<PendingApprovalScreen> {
                 onPressed: () async {
                   await _authService.signOut();
                   if (!mounted) return;
-                  Navigator.of(context)
-                      .pushNamedAndRemoveUntil('/auth', (route) => false);
+                  context.go('/auth');
                 },
                 child: Text('building.pending_approval.sign_out'.tr()),
               ),

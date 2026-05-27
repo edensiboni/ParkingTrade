@@ -16,8 +16,9 @@
   - Flutter (Dart 3.x), Material 3, Provider for state.
   - Platforms: iOS, Android, and Web (Flutter Web). Web uses entry point `lib/main_web.dart`; run/build with `-t lib/main_web.dart` and Supabase `--dart-define` flags. See **§14 Web support** for details and optional web push.
   - Structure (under `lib/`):
-    - `config/` – runtime config (e.g. `supabase_config.dart`).
+    - `config/` – runtime config (e.g. `supabase_config.dart`, `app_router.dart`, `deep_link_config.dart`).
     - `models/` – plain data models with `fromJson` / `toJson`.
+    - `providers/` – Riverpod notifiers (e.g. salon/building branded theme).
     - `services/` – business logic, Supabase and Edge Function access.
     - `screens/` – feature‑grouped UI: `auth/`, `building/`, `spots/`, `bookings/`, `chat/`.
     - `widgets/` – reusable UI components.
@@ -317,7 +318,11 @@
     - Loading states (`_isLoading` flags that reset on both success and failure).
     - Error messages (e.g. snackbars, dialogs, error labels).
   - Navigation:
-    - Use `pushNamedAndRemoveUntil` / `pushReplacementNamed` to avoid stacking obsolete screens, particularly around auth and building join flows.
+    - Mobile entry point `lib/main.dart` uses **GoRouter** (`lib/config/app_router.dart`) with `context.go()` for top-level routes.
+    - **Deep links**: custom URL scheme `stylecast://salon?id={building_uuid}` opens the app, loads building branding via `salonThemeProvider`, then continues through the normal auth/profile routing (`AuthWrapper`).
+    - Native handlers: Android `intent-filter` (`stylecast` / `salon`) in `AndroidManifest.xml`; iOS `CFBundleURLSchemes` in `Info.plist`.
+    - Admins copy the link from **Building Settings** in the admin dashboard (`stylecast://salon?id=…`).
+    - Invalid or unknown UUIDs fall back to the neutral `AppTheme.light()` palette.
 
 - **Notifications**
   - Centralize Firebase / FCM init in `main.dart` and `NotificationService`.

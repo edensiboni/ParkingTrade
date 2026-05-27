@@ -440,7 +440,11 @@
       "create_new_building_subtitle": "צור בניין נוסף ועבור אליו כמנהל",
       "create_new_building_confirm_title": "יצירת בניין חדש",
       "create_new_building_confirm_body": "הפרופיל שלך יעבור לבניין החדש. תוכל לנהל רק בניין אחד בכל רגע נתון. להמשיך?",
-      "create_new_building_confirm": "צור ועבור"
+      "create_new_building_confirm": "צור ועבור",
+      "qr_link_section": "קישור לאפליקציה ממותגת",
+      "qr_link_description": "שתף קישור זה או הפוך אותו לקוד QR כדי שדיירים יפתחו את האפליקציה עם חוויית המיתוג של הבניין.",
+      "qr_link_copy": "העתק קישור",
+      "qr_link_copied": "הקישור הועתק"
     }
   },
 

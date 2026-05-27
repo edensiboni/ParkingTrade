@@ -440,7 +440,11 @@
       "create_new_building_subtitle": "Create an additional building and switch to it as admin",
       "create_new_building_confirm_title": "Create a New Building",
       "create_new_building_confirm_body": "Your profile will switch to the new building. You can only manage one building at a time. Continue?",
-      "create_new_building_confirm": "Create & Switch"
+      "create_new_building_confirm": "Create & Switch",
+      "qr_link_section": "Branded App Link",
+      "qr_link_description": "Share this link or encode it as a QR code so residents open the app with your building's branded experience.",
+      "qr_link_copy": "Copy Link",
+      "qr_link_copied": "Link copied"
     }
   },
 

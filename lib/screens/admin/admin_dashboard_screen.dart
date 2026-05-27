@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/admin_service.dart';
 import '../../services/building_service.dart';
 import '../../services/auth_service.dart';
@@ -11,6 +12,7 @@ import '../../models/authorized_apartment.dart';
 import '../../models/building.dart';
 import '../../models/profile.dart';
 import '../../widgets/address_autocomplete_field.dart';
+import '../../config/deep_link_config.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/gradient_app_bar.dart';
 import '../../widgets/app_snack.dart';
@@ -246,8 +248,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             onPressed: () async {
               await AuthService().signOut();
               if (context.mounted) {
-                Navigator.of(context)
-                    .pushNamedAndRemoveUntil('/auth', (route) => false);
+                context.go('/auth');
               }
             },
           ),
@@ -1881,6 +1882,10 @@ class _BuildingSettingsTabState extends State<_BuildingSettingsTab> {
           ),
           const SizedBox(height: 20),
 
+          _SalonDeepLinkCard(salonId: b.id),
+
+          const SizedBox(height: 20),
+
           // ── Create New Building ───────────────────────────────────────────
           Card(
             color: scheme.errorContainer.withValues(alpha: 0.12),
@@ -1962,7 +1967,7 @@ class _BuildingSettingsTabState extends State<_BuildingSettingsTab> {
     );
 
     if (confirmed == true && context.mounted) {
-      Navigator.of(context).pushNamed('/setup');
+      context.go('/setup');
     }
   }
 }
@@ -2148,6 +2153,85 @@ class _EditBuildingDialogState extends State<_EditBuildingDialog> {
               : Text('admin.settings.save'.tr()),
         ),
       ],
+    );
+  }
+}
+
+// ─── Salon / building deep link (QR) ─────────────────────────────────────────
+
+class _SalonDeepLinkCard extends StatelessWidget {
+  final String salonId;
+
+  const _SalonDeepLinkCard({required this.salonId});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final link = DeepLinkConfig.linkForSalon(salonId);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.qr_code_2_rounded, color: scheme.primary, size: 22),
+                const SizedBox(width: 10),
+                Text(
+                  'admin.settings.qr_link_section'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'admin.settings.qr_link_description'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                border: Border.all(color: AppTheme.hairline),
+              ),
+              child: SelectableText(
+                link,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: FilledButton.tonalIcon(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: link));
+                  if (context.mounted) {
+                    AppSnack.success(
+                      context,
+                      'admin.settings.qr_link_copied'.tr(),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.copy_rounded, size: 18),
+                label: Text('admin.settings.qr_link_copy'.tr()),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
