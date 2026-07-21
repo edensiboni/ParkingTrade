@@ -26,9 +26,11 @@ lib/
 
 supabase/
 ├── config.toml       # Local Supabase config (project id: parking-trade)
-├── functions/        # Edge Functions (approve-booking, create-booking-request, create-building, create-building-admin, join-building, manage-member, places-autocomplete, send-chat-message)
-│   └── _shared/      # Shared utilities for edge functions
-└── migrations/       # 10 SQL migrations (001–010)
+├── functions/        # Edge Functions (admin-bulk-import, approve-booking, create-booking-request,
+│                     #  create-building, create-building-admin, join-building, manage-member,
+│                     #  notify-waitlist-match, places-autocomplete, send-chat-message)
+│   └── _shared/      # Shared utilities (push.ts = FCM v1 send + dead-token pruning)
+└── migrations/       # SQL migrations, applied in filename order (001–033)
 
 android/              # Android platform (applicationId: com.example.parking_trade)
 ios/                  # iOS platform
@@ -70,6 +72,19 @@ flutter build appbundle --release
 flutter build ios --release
 ```
 
+### Backend E2E suite (e2e/)
+
+API-level automation that exercises Auth, RLS and all Edge Functions: admin onboarding, every membership join path, bulk import, spot provisioning, booking lifecycle, swaps, security isolation, concurrency races, the spot waitlist, chat coordination + unread counts, and waitlist match notifications. See `e2e/README.md`.
+
+Scenarios live in `e2e/src/scenarios/` and must be **registered in `e2e/src/main.ts`** to run.
+
+```bash
+cd e2e && npm install && cp .env.example .env
+npm test                 # all scenarios (local stack or prod, per .env)
+npm run seed             # generate a realistic demo building
+npm run cleanup          # purge all tagged E2E/seed data
+```
+
 ### Supabase
 
 ```bash
@@ -82,18 +97,17 @@ supabase link --project-ref njlbcrcoogpblscvjfah
 # Push all migrations to production
 supabase db push
 
-# Deploy ALL edge functions
-supabase functions deploy approve-booking
-supabase functions deploy create-booking-request
-supabase functions deploy create-building
-supabase functions deploy create-building-admin
-supabase functions deploy join-building
-supabase functions deploy manage-member
-supabase functions deploy places-autocomplete
-supabase functions deploy send-chat-message
+# Deploy a single edge function
+supabase functions deploy <name>
 
-# Deploy all functions at once
-supabase functions deploy
+# Deploy several at once
+supabase functions deploy admin-bulk-import approve-booking create-booking-request \
+  create-building create-building-admin join-building manage-member \
+  notify-waitlist-match places-autocomplete send-chat-message
+
+# Note: editing supabase/functions/_shared/push.ts affects every function that
+# sends push (approve-booking, create-booking-request, send-chat-message,
+# notify-waitlist-match) — redeploy all of them, not just the one you touched.
 
 # Set edge function secrets (e.g. for Twilio SMS)
 supabase secrets set TWILIO_ACCOUNT_SID=xxx TWILIO_AUTH_TOKEN=xxx TWILIO_PHONE_NUMBER=xxx
@@ -153,9 +167,25 @@ supabase stop
 
 GitHub Actions workflows in `.github/workflows/`:
 
-- **`ci.yml`** — runs `flutter analyze` + `flutter test` on pushes to `main` and `feature/**`, and on PRs.
-- **`deploy-backend.yml`** — on push to `main`, pushes Supabase migrations and deploys Edge Functions.
+- **`ci.yml`** — the real pipeline, and the **only automatic deploy path**. Three jobs:
+  1. `supabase-db-verify` — boots a local Supabase stack and runs `supabase db reset`, applying **every** migration in order. Catches SQL syntax errors, non-idempotent policies (a missing `DROP POLICY IF EXISTS`), and migrations that silently depend on ordering.
+  2. `flutter-analyze-test` — `flutter analyze --no-fatal-infos`, `flutter test --coverage`, and `deno test` on shared Edge Function utilities.
+  3. `deploy` — runs **only** on push to `main`, and **only** if jobs 1 and 2 both pass. Runs `supabase db push --include-all --yes`, then deploys the Edge Functions.
+
+  Triggers: pushes to `main` and `feature/**`, plus PRs targeting `main`. Note that a branch named e.g. `fix/...` does **not** trigger CI on push — open a PR against `main` to get it validated before merging.
+
+- **`deploy-backend.yml`** — ⚠️ **manual / emergency only** (`workflow_dispatch`). It does **not** run on push to `main`. Use it to hotfix a migration or redeploy functions without waiting for the full pipeline.
+
 - **`deploy-web.yml`** — builds Flutter web (entry point `lib/main_web.dart`) and deploys to Firebase Hosting. On push to `main` it waits for CI to pass, then deploys to the live channel. On PRs it deploys a 7-day preview channel.
+
+### ⚠️ Adding an Edge Function — update TWO hardcoded lists
+
+Edge Functions are deployed from an explicit `for fn in ...` list, **not** by globbing `supabase/functions/*`. A function missing from the list fails *silently*: its migration lands in production but the function itself is never deployed. When adding a function, update both:
+
+- `.github/workflows/ci.yml` → job `deploy` → step "Deploy Edge Functions"
+- `.github/workflows/deploy-backend.yml` → step "Deploy Edge Functions"
+
+(`admin-bulk-import` is currently absent from both lists — deploy it by hand if you change it.)
 
 ### Required GitHub secrets (repo settings → Secrets → Actions)
 
@@ -183,6 +213,24 @@ flutter build web --release -t lib/main_web.dart \
 firebase deploy --only hosting
 ```
 
+## Scheduled jobs (pg_cron)
+
+Several features depend on periodic SQL functions. **No migration schedules these for you** — enable them once in the Supabase SQL editor:
+
+```sql
+-- Mark approved bookings completed once end_time has passed (migration 008)
+SELECT cron.schedule('complete-bookings', '*/15 * * * *', 'SELECT complete_expired_bookings()');
+
+-- Expire waitlist entries whose desired window has passed (migration 031)
+SELECT cron.schedule('expire-waitlist', '*/15 * * * *', 'SELECT expire_waitlist_entries()');
+```
+
+The waitlist **match-notification outbox** (migration 033) also needs draining: the
+`notify-waitlist-match` Edge Function must be invoked periodically with the service-role
+key, either by pg_cron + `net.http_post` or by a Supabase Database Webhook on insert into
+`waitlist_match_notifications`. Both approaches are spelled out in that migration's header.
+Until one is wired up, matched-waitlist pushes accumulate in the outbox and are never sent.
+
 ## Common Issues
 
 - **RLS recursion:** Migration `003_fix_rls_recursion.sql` fixes recursive RLS policies — make sure it's applied.
@@ -198,3 +246,7 @@ firebase deploy --only hosting
 - Spot availability is managed via time-period windows (migration 004).
 - Building membership is gated by invite codes processed in the `join-building` edge function.
 - Admin audit trail is captured via migration 009.
+- Bookings and chat are scoped to **apartments**, not individual profiles (migration 013). Message RLS and the `send-chat-message` participant check therefore key off apartment membership and are deliberately **status-agnostic** — residents can chat on a `pending` booking to coordinate before approval (Roadmap 1.2).
+- Chat unread badges are driven by `message_read_receipts` + the `mark_booking_read` / `get_unread_message_counts` RPCs (migration 032).
+- Residents can queue for a busy spot via `spot_waitlist` (migration 031); DB triggers flip entries to `matched` when availability opens or an approved booking is cancelled. Matching is informational — booking still races through the normal overlap constraint.
+- A waitlist match enqueues a row in the `waitlist_match_notifications` outbox (migration 033) rather than calling out over HTTP from the trigger. This keeps the service-role key out of the database, prevents a slow push from stalling the matching transaction, and makes delivery retryable and testable. The `notify-waitlist-match` function drains it.

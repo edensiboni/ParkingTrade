@@ -61,6 +61,8 @@ class _ChatScreenState extends State<ChatScreen> {
         _isLoading = false;
       });
       _scrollToBottom();
+      // Opening the thread counts as reading it — clear the unread badge.
+      _chatService.markBookingRead(widget.bookingId);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -73,6 +75,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       setState(() => _messages = msgs);
       _scrollToBottom();
+      // Messages arriving while the thread is open are read immediately.
+      _chatService.markBookingRead(widget.bookingId);
     });
   }
 

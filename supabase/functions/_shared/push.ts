@@ -111,6 +111,10 @@ export async function sendPushToUser(
 
   const fcmUrl = `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`
 
+  // Tokens FCM tells us are dead — pruned in one query after the send loop so
+  // we stop paying for them (and stop logging noise) on every future send.
+  const staleTokens: string[] = []
+
   for (const { token } of tokens) {
     try {
       const res = await fetch(fcmUrl, {
@@ -131,9 +135,29 @@ export async function sendPushToUser(
       if (!res.ok) {
         const errBody = await res.text()
         console.error(`FCM v1 send failed for token ${token.substring(0, 10)}...: ${res.status} ${errBody}`)
+        // 404/UNREGISTERED → the app was uninstalled or the token rotated.
+        // 400/INVALID_ARGUMENT → the token is malformed and never will work.
+        if (
+          res.status === 404 ||
+          /UNREGISTERED|INVALID_ARGUMENT/.test(errBody)
+        ) {
+          staleTokens.push(token)
+        }
       }
     } catch (e) {
       console.error(`FCM v1 send error: ${e.message}`)
+    }
+  }
+
+  if (staleTokens.length > 0) {
+    const { error: pruneError } = await supabaseClient
+      .from('user_fcm_tokens')
+      .delete()
+      .in('token', staleTokens)
+    if (pruneError) {
+      console.error(`Failed to prune ${staleTokens.length} stale FCM token(s): ${pruneError.message}`)
+    } else {
+      console.log(`Pruned ${staleTokens.length} stale FCM token(s) for user ${userId}`)
     }
   }
 }
