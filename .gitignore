@@ -60,3 +60,9 @@ supabase/.temp/
 
 # Firebase Hosting local cache
 .firebase/
+
+# Local artifacts & generated files (macOS/Windows hygiene)
+# (.DS_Store and *.log are already ignored above; listed explicitly for clarity.)
+ios/Flutter/flutter_export_environment.sh
+pglite-debug.log
+supabase_pass

@@ -1,6 +1,6 @@
 // Roadmap 1.3 — push notifications for tenants in the queue.
 //
-// Drains the waitlist_match_notifications outbox (migration 033): for each
+// Drains the waitlist_match_notifications outbox (migration 034): for each
 // pending row, pushes an FCM notification to every opted-in approved profile
 // of the requester apartment, deep-linking to the spot's booking screen with
 // the matched window pre-filled.

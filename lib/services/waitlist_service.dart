@@ -4,7 +4,7 @@ import '../models/spot_waitlist_entry.dart';
 /// Waitlist for parking spots (Roadmap 1.1).
 ///
 /// Residents join a waitlist for a spot + desired time range when no
-/// availability covers it. DB triggers (migration 031) flip entries to
+/// availability covers it. DB triggers (migration 032) flip entries to
 /// `matched` when an overlapping availability window opens or an approved
 /// booking is cancelled. Matching is informational — booking still goes
 /// through the normal create-booking-request flow.

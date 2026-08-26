@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 032: Message read receipts + unread counts (Roadmap 1.2)
+-- Migration 033: Message read receipts + unread counts (Roadmap 1.2)
 --
 -- Chat between the two apartments on a booking is ALREADY permitted on
 -- any booking status: the messages RLS (migration 013) and the

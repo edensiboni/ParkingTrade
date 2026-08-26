@@ -30,7 +30,7 @@ supabase/
 │                     #  create-building, create-building-admin, join-building, manage-member,
 │                     #  notify-waitlist-match, places-autocomplete, send-chat-message)
 │   └── _shared/      # Shared utilities (push.ts = FCM v1 send + dead-token pruning)
-└── migrations/       # SQL migrations, applied in filename order (001–033)
+└── migrations/       # SQL migrations, applied in filename order (001–034)
 
 android/              # Android platform (applicationId: com.example.parking_trade)
 ios/                  # iOS platform
@@ -221,11 +221,11 @@ Several features depend on periodic SQL functions. **No migration schedules thes
 -- Mark approved bookings completed once end_time has passed (migration 008)
 SELECT cron.schedule('complete-bookings', '*/15 * * * *', 'SELECT complete_expired_bookings()');
 
--- Expire waitlist entries whose desired window has passed (migration 031)
+-- Expire waitlist entries whose desired window has passed (migration 032)
 SELECT cron.schedule('expire-waitlist', '*/15 * * * *', 'SELECT expire_waitlist_entries()');
 ```
 
-The waitlist **match-notification outbox** (migration 033) also needs draining: the
+The waitlist **match-notification outbox** (migration 034) also needs draining: the
 `notify-waitlist-match` Edge Function must be invoked periodically with the service-role
 key, either by pg_cron + `net.http_post` or by a Supabase Database Webhook on insert into
 `waitlist_match_notifications`. Both approaches are spelled out in that migration's header.
@@ -247,6 +247,6 @@ Until one is wired up, matched-waitlist pushes accumulate in the outbox and are 
 - Building membership is gated by invite codes processed in the `join-building` edge function.
 - Admin audit trail is captured via migration 009.
 - Bookings and chat are scoped to **apartments**, not individual profiles (migration 013). Message RLS and the `send-chat-message` participant check therefore key off apartment membership and are deliberately **status-agnostic** — residents can chat on a `pending` booking to coordinate before approval (Roadmap 1.2).
-- Chat unread badges are driven by `message_read_receipts` + the `mark_booking_read` / `get_unread_message_counts` RPCs (migration 032).
-- Residents can queue for a busy spot via `spot_waitlist` (migration 031); DB triggers flip entries to `matched` when availability opens or an approved booking is cancelled. Matching is informational — booking still races through the normal overlap constraint.
-- A waitlist match enqueues a row in the `waitlist_match_notifications` outbox (migration 033) rather than calling out over HTTP from the trigger. This keeps the service-role key out of the database, prevents a slow push from stalling the matching transaction, and makes delivery retryable and testable. The `notify-waitlist-match` function drains it.
+- Chat unread badges are driven by `message_read_receipts` + the `mark_booking_read` / `get_unread_message_counts` RPCs (migration 033).
+- Residents can queue for a busy spot via `spot_waitlist` (migration 032); DB triggers flip entries to `matched` when availability opens or an approved booking is cancelled. Matching is informational — booking still races through the normal overlap constraint.
+- A waitlist match enqueues a row in the `waitlist_match_notifications` outbox (migration 034) rather than calling out over HTTP from the trigger. This keeps the service-role key out of the database, prevents a slow push from stalling the matching transaction, and makes delivery retryable and testable. The `notify-waitlist-match` function drains it.

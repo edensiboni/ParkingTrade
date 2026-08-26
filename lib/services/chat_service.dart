@@ -59,7 +59,7 @@ class ChatService {
   // Mark every message in [bookingId] as read for the current user.
   //
   // Upserts the caller's read receipt to now() via the mark_booking_read
-  // RPC (migration 032). Best-effort: a failed read-marker must never
+  // RPC (migration 033). Best-effort: a failed read-marker must never
   // block the chat UI, so errors are swallowed.
   Future<void> markBookingRead(String bookingId) async {
     try {
@@ -74,7 +74,7 @@ class ChatService {
 
   // Unread message counts for the current user, keyed by booking id.
   //
-  // Backed by the get_unread_message_counts RPC (migration 032). Only
+  // Backed by the get_unread_message_counts RPC (migration 033). Only
   // bookings with at least one unread message from the other party are
   // present in the map.
   Future<Map<String, int>> getUnreadCounts() async {

@@ -1,7 +1,7 @@
 -- ============================================================
--- Migration 033: Waitlist match notifications (Roadmap 1.3)
+-- Migration 034: Waitlist match notifications (Roadmap 1.3)
 --
--- Migration 031 flips spot_waitlist entries to `matched` from two
+-- Migration 032 flips spot_waitlist entries to `matched` from two
 -- triggers (availability published / approved booking cancelled).
 -- This migration turns that state change into a push notification.
 --
@@ -73,7 +73,7 @@ BEGIN
 END;
 $$;
 
--- Fires for both match paths in migration 031 (availability publish and
+-- Fires for both match paths in migration 032 (availability publish and
 -- approved-booking cancellation), since both funnel through an UPDATE of
 -- spot_waitlist.status inside match_waitlist_entries().
 CREATE TRIGGER waitlist_enqueue_match_notification

@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 031: Spot waitlist (Roadmap 1.1)
+-- Migration 032: Spot waitlist (Roadmap 1.1)
 --
 -- Residents can join a waitlist for a spot + desired time range
 -- when no availability covers it. Entries are automatically
