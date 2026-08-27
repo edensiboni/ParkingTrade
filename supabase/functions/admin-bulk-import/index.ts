@@ -208,10 +208,11 @@ serve(async (req) => {
             .upsert(
               {
                 apartment_id: apartmentId,
+                building_id: adminBuildingId,
                 spot_identifier: spotId.trim(),
                 is_active: true,
               },
-              { onConflict: 'spot_identifier,apartment_id', ignoreDuplicates: true }
+              { onConflict: 'building_id,spot_identifier', ignoreDuplicates: true }
             )
 
           if (spotError) {

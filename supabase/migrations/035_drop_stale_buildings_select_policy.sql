@@ -1,0 +1,46 @@
+-- ============================================================
+-- Migration 035: Drop the stale "view all buildings" SELECT policy
+--
+-- Symptom this fixes (security):
+--   Anonymous / unauthenticated clients could SELECT * FROM buildings and
+--   read every row in the table — including invite_code, address, and
+--   lat/lng — for every building in the system. Confirmed via e2e:
+--     "anonymous SELECT on buildings must return nothing" — expected 0, got 5
+--
+-- Why it happened:
+--   Migration 001 created:
+--     CREATE POLICY "Users can view all buildings for joining" ON buildings
+--         FOR SELECT USING (true);
+--   Migration 015 intended to replace this with the narrower
+--   "Residents can view their building" policy (id = get_user_building_id)
+--   and tried to drop the old one first — but its DROP list names
+--   "Anyone can view buildings", a policy that was never created under that
+--   exact name. The real stale policy's name never matched, so the DROP was
+--   a silent no-op and the permissive `USING (true)` policy survived every
+--   migration since. RLS policies are OR'ed together per command, so as long
+--   as ANY role held a table-level SELECT grant, this permissive policy alone
+--   was enough to expose every row — which is exactly what happened once
+--   migration 030 (grants) gave anon/authenticated/service_role their
+--   standard Supabase privileges.
+--
+-- Who still needs to read buildings, and how they're unaffected:
+--   • Residents/admins reading their OWN building — still allowed via
+--     "Residents can view their building" (015), unchanged by this migration.
+--   • The create-building-admin / join-building / admin-bulk-import Edge
+--     Functions — run as service_role, which bypasses RLS entirely and is
+--     unaffected by this migration.
+--   • Anonymous browsing of the full buildings list ("get all buildings to
+--     join") was never actually wired up client-side (BuildingService.
+--     getAllBuildings() has no callers) — nothing user-facing depends on it.
+--   • SalonThemeService's legacy buildings-fallback (for QR links minted
+--     before the `salons` table existed) does an anonymous by-ID lookup;
+--     with this fix it will find no row for a building lacking a `salons`
+--     entry and fall back to the app's neutral theme rather than showing
+--     building-specific branding. This is a deliberate trade-off: closing an
+--     invite-code leak takes priority over a cosmetic branding fallback for
+--     old links. Building a `salons` row (migration 031) for any building
+--     that still needs branded QR links resolves this without reopening the
+--     table.
+-- ============================================================
+
+DROP POLICY IF EXISTS "Users can view all buildings for joining" ON buildings;
