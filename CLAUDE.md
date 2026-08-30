@@ -30,7 +30,7 @@ supabase/
 │                     #  create-building, create-building-admin, join-building, manage-member,
 │                     #  notify-spot-available, notify-waitlist-match, places-autocomplete, send-chat-message)
 │   └── _shared/      # Shared utilities (push.ts = FCM v1 send + dead-token pruning)
-└── migrations/       # SQL migrations, applied in filename order (001–039)
+└── migrations/       # SQL migrations, applied in filename order (001–040)
 
 android/              # Android platform (applicationId: com.example.parking_trade)
 ios/                  # iOS platform
@@ -225,38 +225,54 @@ SELECT cron.schedule('complete-bookings', '*/15 * * * *', 'SELECT complete_expir
 SELECT cron.schedule('expire-waitlist', '*/15 * * * *', 'SELECT expire_waitlist_entries()');
 ```
 
-The waitlist **match-notification outbox** (migration 034) also needs draining: the
-`notify-waitlist-match` Edge Function must be invoked periodically with the service-role
-key, either by pg_cron + `net.http_post` or by a Supabase Database Webhook on insert into
-`waitlist_match_notifications`. Both approaches are spelled out in that migration's header.
-Until one is wired up, matched-waitlist pushes accumulate in the outbox and are never sent.
+Both notification outboxes need draining, and both now support the same two delivery
+mechanisms — periodic pg_cron polling (the durable fallback), or a real-time `pg_net`
+webhook (the fast path). Neither wires itself up automatically; each is a one-time,
+per-environment setup step.
 
-The **spot-availability broadcast outbox** (migration 038, Roadmap 2) needs draining the
-same way: invoke `notify-spot-available` periodically with the service-role key, either by
-pg_cron + `net.http_post` or by a Supabase Database Webhook on insert into
-`spot_availability_notifications`. Both approaches are spelled out in that migration's
-header. Until one is wired up, new-availability broadcasts accumulate in the outbox and
-are never sent.
-
-**Real-time delivery for the spot-availability outbox** (migration 039) is built in as a
-`pg_net`-backed trigger, but is **opt-in per environment** — it does nothing until you
-store two Supabase Vault secrets (never commit these values to a file):
+**pg_cron polling** — invoke the Edge Function periodically with the service-role key:
 
 ```sql
+-- Waitlist match-notification outbox (migration 034)
+SELECT cron.schedule('drain-waitlist-notifications', '* * * * *',
+  $$ SELECT net.http_post(url := '<functions-url>/notify-waitlist-match',
+       headers := jsonb_build_object('Content-Type','application/json',
+                                      'Authorization','Bearer <service-role-key>')) $$);
+
+-- Spot-availability broadcast outbox (migration 038, Roadmap 2)
+SELECT cron.schedule('drain-spot-availability-notifications', '* * * * *',
+  $$ SELECT net.http_post(url := '<functions-url>/notify-spot-available',
+       headers := jsonb_build_object('Content-Type','application/json',
+                                      'Authorization','Bearer <service-role-key>')) $$);
+```
+
+**Real-time delivery** — built in as `pg_net`-backed triggers (migration 039 for
+spot-availability, migration 040 for waitlist-match), **opt-in per environment**: each does
+nothing until you store its two Supabase Vault secrets (never commit these values to a
+file):
+
+```sql
+-- Waitlist match-notification outbox (migration 040)
+SELECT vault.create_secret('https://<project-ref>.supabase.co', 'waitlist_notify_functions_base_url'); -- or the local value below
+SELECT vault.create_secret('<the real service_role secret from Project Settings → API>', 'waitlist_notify_service_role_key');
+
+-- Spot-availability broadcast outbox (migration 039)
 SELECT vault.create_secret('https://<project-ref>.supabase.co', 'spot_notify_functions_base_url'); -- or the local value below
 SELECT vault.create_secret('<the real service_role secret from Project Settings → API>', 'spot_notify_service_role_key');
 ```
 
-For local dev, the URL is `http://api.supabase.internal:8000` (this project's local Docker
-network alias for the functions gateway — confirmed via `docker inspect`, not
-`127.0.0.1`) and the key is the same published, non-secret local demo key already in
-`e2e/.env.example`. Vault, not a custom GUC, is used deliberately: `ALTER DATABASE ... SET`
-for a custom parameter requires superuser, and the `postgres` role Supabase exposes isn't
-one (verified — it raises "permission denied to set parameter", identically on hosted and
-local). See migration 039's header for the full rationale, including why the values are
-read from Vault at runtime rather than baked into the trigger the way Supabase's Dashboard
-"Database Webhooks" UI would. Keep the pg_cron drain running too — real-time is the fast
-path, pg_cron is the durability backstop for a dropped call.
+The two pipelines use separate, feature-scoped secrets on purpose (not a shared
+`functions_base_url`) so either one's real-time delivery can be activated, rotated, or
+disabled independently. For local dev, the URL for both is `http://api.supabase.internal:8000`
+(this project's local Docker network alias for the functions gateway — confirmed via
+`docker inspect`, not `127.0.0.1`) and the key is the same published, non-secret local demo
+key already in `e2e/.env.example`. Vault, not a custom GUC, is used deliberately:
+`ALTER DATABASE ... SET` for a custom parameter requires superuser, and the `postgres` role
+Supabase exposes isn't one (verified — it raises "permission denied to set parameter",
+identically on hosted and local). See migration 039's header for the full rationale,
+including why the values are read from Vault at runtime rather than baked into the trigger
+the way Supabase's Dashboard "Database Webhooks" UI would. Keep the pg_cron drain running
+too even once real-time is on — it's the durability backstop for a dropped webhook call.
 
 ## Common Issues
 
@@ -276,6 +292,6 @@ path, pg_cron is the durability backstop for a dropped call.
 - Bookings and chat are scoped to **apartments**, not individual profiles (migration 013). Message RLS and the `send-chat-message` participant check therefore key off apartment membership and are deliberately **status-agnostic** — residents can chat on a `pending` booking to coordinate before approval (Roadmap 1.2).
 - Chat unread badges are driven by `message_read_receipts` + the `mark_booking_read` / `get_unread_message_counts` RPCs (migration 033).
 - Residents can queue for a busy spot via `spot_waitlist` (migration 032); DB triggers flip entries to `matched` when availability opens or an approved booking is cancelled. Matching is informational — booking still races through the normal overlap constraint.
-- A waitlist match enqueues a row in the `waitlist_match_notifications` outbox (migration 034) rather than calling out over HTTP from the trigger. This keeps the service-role key out of the database, prevents a slow push from stalling the matching transaction, and makes delivery retryable and testable. The `notify-waitlist-match` function drains it.
+- A waitlist match enqueues a row in the `waitlist_match_notifications` outbox (migration 034) rather than calling out over HTTP from the trigger. This keeps the service-role key out of the database, prevents a slow push from stalling the matching transaction, and makes delivery retryable and testable. The `notify-waitlist-match` function drains it, either via pg_cron or in real time via a `pg_net` trigger (migration 040, opt-in per environment — see "Real-time delivery" under Scheduled jobs).
 - Publishing a new `spot_availability_periods` row (Roadmap 2) also enqueues a row in the `spot_availability_notifications` outbox (migration 038), drained by `notify-spot-available`, which broadcasts to every approved, opted-in profile in the same building — excluding the publishing apartment and any apartment already covered by an active `waitlist_match_notifications` push for that exact spot + window (residents don't get pinged twice for one event). This is a discovery-oriented broadcast, distinct from and complementary to the targeted waitlist-match notification.
-- That outbox can be drained in real time by a `pg_net` trigger (migration 039) instead of waiting on a pg_cron poll — see "Real-time delivery" under Scheduled jobs. It is opt-in per environment (two GUCs) and never blocks the client's insert; pg_cron remains the durability backstop.
+- That outbox can be drained in real time by a `pg_net` trigger (migration 039) instead of waiting on a pg_cron poll — see "Real-time delivery" under Scheduled jobs. It is opt-in per environment (two Vault secrets) and never blocks the client's insert; pg_cron remains the durability backstop.
