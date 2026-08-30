@@ -1,6 +1,7 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../services/booking_service.dart';
+import '../../services/waitlist_service.dart';
 import '../../models/parking_spot.dart';
 
 class RequestSpotScreen extends StatefulWidget {
@@ -17,12 +18,16 @@ class RequestSpotScreen extends StatefulWidget {
 
 class _RequestSpotScreenState extends State<RequestSpotScreen> {
   final _bookingService = BookingService();
+  final _waitlistService = WaitlistService();
   List<ParkingSpot> _availableSpots = [];
+  List<ParkingSpot> _waitlistSpots = [];
   ParkingSpot? _selectedSpot;
+  ParkingSpot? _selectedWaitlistSpot;
   DateTime? _startTime;
   DateTime? _endTime;
   bool _isLoading = false;
   bool _isSubmitting = false;
+  bool _isJoiningWaitlist = false;
   String? _errorMessage;
 
   @override
@@ -42,8 +47,21 @@ class _RequestSpotScreenState extends State<RequestSpotScreen> {
         startTime: _startTime,
         endTime: _endTime,
       );
+
+      // If nothing is free for the requested window, load all spots so the
+      // user can join a waitlist for one of them (Roadmap 1.1).
+      List<ParkingSpot> waitlistSpots = [];
+      if (spots.isEmpty && _startTime != null && _endTime != null) {
+        waitlistSpots = await _bookingService.getAvailableSpots();
+      }
+
       setState(() {
         _availableSpots = spots;
+        _waitlistSpots = waitlistSpots;
+        if (_selectedWaitlistSpot != null &&
+            !waitlistSpots.any((s) => s.id == _selectedWaitlistSpot!.id)) {
+          _selectedWaitlistSpot = null;
+        }
         _isLoading = false;
       });
     } catch (e) {
@@ -147,6 +165,44 @@ class _RequestSpotScreenState extends State<RequestSpotScreen> {
     }
   }
 
+  Future<void> _joinWaitlist() async {
+    if (_selectedWaitlistSpot == null || _startTime == null || _endTime == null) {
+      return;
+    }
+
+    setState(() {
+      _isJoiningWaitlist = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await _waitlistService.joinWaitlist(
+        spotId: _selectedWaitlistSpot!.id,
+        desiredStart: _startTime!,
+        desiredEnd: _endTime!,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('bookings.waitlist.joined'.tr())),
+        );
+        setState(() {
+          _selectedWaitlistSpot = null;
+          _isJoiningWaitlist = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'bookings.waitlist.could_not_join'.tr(namedArgs: {
+            'error': e.toString().replaceAll('Exception: ', ''),
+          });
+          _isJoiningWaitlist = false;
+        });
+      }
+    }
+  }
+
   Future<void> _submitRequest() async {
     if (_selectedSpot == null || _startTime == null || _endTime == null) {
       setState(() {
@@ -200,10 +256,72 @@ class _RequestSpotScreenState extends State<RequestSpotScreen> {
           const SizedBox(height: 24),
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
-          else if (_availableSpots.isEmpty)
+          else if (_availableSpots.isEmpty) ...[
             const Center(
               child: Text('No available spots in your building'),
-            )
+            ),
+            if (_startTime != null && _endTime != null &&
+                _waitlistSpots.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'bookings.waitlist.join_prompt'.tr(),
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<ParkingSpot>(
+                        initialValue: _selectedWaitlistSpot,
+                        decoration: InputDecoration(
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.local_parking),
+                          labelText: 'bookings.waitlist.pick_spot'.tr(),
+                        ),
+                        items: _waitlistSpots.map((spot) {
+                          return DropdownMenuItem(
+                            value: spot,
+                            child: Text(spot.spotIdentifier),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedWaitlistSpot = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed:
+                            _selectedWaitlistSpot == null || _isJoiningWaitlist
+                                ? null
+                                : _joinWaitlist,
+                        icon: _isJoiningWaitlist
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.notifications_active_outlined),
+                        label: Text('bookings.waitlist.join_button'.tr()),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                _errorMessage!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ]
           else ...[
             const Text(
               'Select Spot',

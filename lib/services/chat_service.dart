@@ -55,4 +55,36 @@ class ChatService {
         .order('created_at', ascending: true)
         .map((data) => data.map((json) => Message.fromJson(json)).toList());
   }
+
+  // Mark every message in [bookingId] as read for the current user.
+  //
+  // Upserts the caller's read receipt to now() via the mark_booking_read
+  // RPC (migration 033). Best-effort: a failed read-marker must never
+  // block the chat UI, so errors are swallowed.
+  Future<void> markBookingRead(String bookingId) async {
+    try {
+      await _supabase.rpc(
+        'mark_booking_read',
+        params: {'p_booking_id': bookingId},
+      );
+    } catch (_) {
+      // Non-fatal — the badge simply clears on the next successful call.
+    }
+  }
+
+  // Unread message counts for the current user, keyed by booking id.
+  //
+  // Backed by the get_unread_message_counts RPC (migration 033). Only
+  // bookings with at least one unread message from the other party are
+  // present in the map.
+  Future<Map<String, int>> getUnreadCounts() async {
+    final rows = await _supabase.rpc('get_unread_message_counts');
+    final counts = <String, int>{};
+    for (final row in (rows as List)) {
+      final id = row['booking_id'] as String?;
+      final count = (row['unread_count'] as num?)?.toInt() ?? 0;
+      if (id != null && count > 0) counts[id] = count;
+    }
+    return counts;
+  }
 }

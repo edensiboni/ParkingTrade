@@ -1,5 +1,10 @@
 // Pinned npm: specifier + Deno.serve keep us off esm.sh / deno.land/std,
 // both of which have flaked during deploys (esm.sh 522, deno.land outages).
+//
+// NOTE: this function bundles ../_shared/push.ts. The CLI's change detection
+// does not always notice edits to _shared, reporting "No change found in
+// Function" and skipping the deploy — so after changing push.ts, verify this
+// function actually redeployed rather than assuming it did.
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
 import { sendPushToUser } from '../_shared/push.ts'
 

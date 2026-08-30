@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../services/booking_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/chat_service.dart';
 import '../../models/booking_request.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_snack.dart';
@@ -21,8 +22,10 @@ class BookingDetailScreen extends StatefulWidget {
 class _BookingDetailScreenState extends State<BookingDetailScreen> {
   final _bookingService = BookingService();
   final _authService = AuthService();
+  final _chatService = ChatService();
   BookingDetails? _details;
   String? _currentApartmentId;
+  int _unread = 0;
   bool _isLoading = true;
   bool _isProcessing = false;
 
@@ -46,6 +49,13 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
             (results[1] as dynamic)?.apartmentId as String?;
         _isLoading = false;
       });
+      // Unread badge on the chat button — best-effort, never blocks the screen.
+      try {
+        final counts = await _chatService.getUnreadCounts();
+        if (mounted) {
+          setState(() => _unread = counts[widget.bookingId] ?? 0);
+        }
+      } catch (_) {}
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -280,14 +290,20 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                 style: FilledButton.styleFrom(
                   minimumSize: const Size(double.infinity, 48),
                 ),
-                onPressed: () {
-                  Navigator.of(context).push(
+                onPressed: () async {
+                  await Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => ChatScreen(bookingId: b.id),
                     ),
                   );
+                  // Opening the thread marks it read — clear the badge.
+                  if (mounted) setState(() => _unread = 0);
                 },
-                icon: const Icon(Icons.chat_bubble_outline_rounded),
+                icon: Badge.count(
+                  count: _unread,
+                  isLabelVisible: _unread > 0,
+                  child: const Icon(Icons.chat_bubble_outline_rounded),
+                ),
                 label: Text('bookings.detail.open_chat'.tr()),
               ),
             ),

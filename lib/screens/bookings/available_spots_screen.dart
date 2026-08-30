@@ -10,7 +10,16 @@ import '../../widgets/skeleton.dart';
 class AvailableSpotsScreen extends StatefulWidget {
   final VoidCallback? onBookingCreated;
 
-  const AvailableSpotsScreen({super.key, this.onBookingCreated});
+  /// Pre-fills the date/time filter. Used by the waitlist-match deep link
+  /// (Roadmap 1.3) so a resident tapping "a spot you wanted is free" lands
+  /// on exactly the window that opened up.
+  final DateTime? initialFilterStart;
+
+  const AvailableSpotsScreen({
+    super.key,
+    this.onBookingCreated,
+    this.initialFilterStart,
+  });
 
   @override
   State<AvailableSpotsScreen> createState() => _AvailableSpotsScreenState();
@@ -58,6 +67,11 @@ class _AvailableSpotsScreenState extends State<AvailableSpotsScreen> {
   @override
   void initState() {
     super.initState();
+    final prefill = widget.initialFilterStart?.toLocal();
+    if (prefill != null) {
+      _filterDate = DateTime(prefill.year, prefill.month, prefill.day);
+      _filterTime = TimeOfDay(hour: prefill.hour, minute: prefill.minute);
+    }
     _loadSpots();
   }
 

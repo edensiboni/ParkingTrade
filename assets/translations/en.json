@@ -157,6 +157,21 @@
     "status_cancelled": "Cancelled",
     "status_completed": "Completed",
 
+    "waitlist": {
+      "section_title": "Waitlist",
+      "join_prompt": "No spot free for this time? Join the waitlist and we'll match you when a window opens.",
+      "pick_spot": "Pick a spot to wait for",
+      "join_button": "Join waitlist",
+      "joined": "Added to waitlist — we'll let you know when it opens",
+      "status_waiting": "Waiting",
+      "status_matched": "Spot opened — book now!",
+      "leave": "Leave waitlist",
+      "left": "Removed from waitlist",
+      "entry_title": "Spot {id}",
+      "could_not_join": "Could not join waitlist: {error}",
+      "could_not_leave": "Could not leave waitlist: {error}"
+    },
+
     "detail": {
       "title": "Booking",
       "not_found": "Booking not found",

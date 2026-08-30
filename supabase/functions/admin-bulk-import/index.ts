@@ -15,6 +15,37 @@ interface ImportItem {
   parking_spots?: string[]
 }
 
+// Supabase Auth stores phones without the leading '+' (e.g. "+972501234567"
+// is stored as "972501234567"), so comparing against auth.users.phone without
+// stripping it first never matches — silently, since it just looks like "no
+// user found" rather than an error. Mirrors e2e/src/lib/registry.ts's
+// normalizeForAuth(), which documents the same fact.
+function normalizeForAuth(phone: string): string {
+  return phone.replace(/^\+/, '')
+}
+
+// Finds an existing auth user by phone. listUsers() only returns one page
+// (1000 users) per call, so a single-page lookup silently misses any phone
+// belonging to a user created earlier than the most recent page — exactly
+// the failure mode that broke re-running a bulk import once enough users
+// existed. Mirrors e2e/src/lib/registry.ts's listAllUsers().
+async function findAuthUserByPhone(
+  supabaseClient: ReturnType<typeof createClient>,
+  phone: string,
+): Promise<string | null> {
+  const wanted = normalizeForAuth(phone)
+  const perPage = 1000
+  const maxPages = 1000 // generous backstop against a pathological runaway loop
+  for (let page = 1; page <= maxPages; page++) {
+    const { data, error } = await supabaseClient.auth.admin.listUsers({ page, perPage })
+    if (error || !data?.users?.length) break
+    const match = data.users.find((u) => u.phone && normalizeForAuth(u.phone) === wanted)
+    if (match) return match.id
+    if (data.users.length < perPage) break // reached the last page
+  }
+  return null
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -141,39 +172,37 @@ serve(async (req) => {
         const phones = item.phones ?? []
         for (const phone of phones) {
           if (!phone || typeof phone !== 'string') continue
+          const trimmedPhone = phone.trim()
 
-          // We create a placeholder auth user so we have a UUID to link to profiles.
-          // Using createUser with phone so Supabase Auth tracks the identity.
-          // If the phone already has an auth user, we skip gracefully.
-          const { data: authUser, error: createAuthError } =
-            await supabaseClient.auth.admin.createUser({
-              phone: phone.trim(),
-              phone_confirm: true,
-            })
+          // Look up an existing auth user by phone FIRST. Bulk imports are
+          // expected to be re-run (e.g. to add residents incrementally), so
+          // this must be idempotent: find-then-create rather than
+          // always-create-then-parse-the-error-string.
+          let profileUserId: string | null = await findAuthUserByPhone(supabaseClient, trimmedPhone)
 
-          let profileUserId: string | null = null
-
-          if (createAuthError) {
-            // User might already exist — try to find by phone
-            const { data: existingUsers } = await supabaseClient.auth.admin.listUsers()
-            const existing = existingUsers?.users?.find(
-              (u) => u.phone === phone.trim()
-            )
-            if (existing) {
-              profileUserId = existing.id
-            } else {
-              // Cannot resolve user — skip this phone
-              errors.push({
-                apartment_identifier: item.apartment_identifier,
-                error: `Could not create/find auth user for phone ${phone}: ${createAuthError.message}`,
+          if (!profileUserId) {
+            const { data: authUser, error: createAuthError } =
+              await supabaseClient.auth.admin.createUser({
+                phone: trimmedPhone,
+                phone_confirm: true,
               })
-              continue
-            }
-          } else {
-            profileUserId = authUser.user?.id ?? null
-          }
 
-          if (!profileUserId) continue
+            if (createAuthError || !authUser?.user) {
+              // A concurrent import may have created the user between our
+              // lookup and this createUser call — check once more before
+              // giving up.
+              profileUserId = await findAuthUserByPhone(supabaseClient, trimmedPhone)
+              if (!profileUserId) {
+                errors.push({
+                  apartment_identifier: item.apartment_identifier,
+                  error: `Could not create/find auth user for phone ${phone}: ${createAuthError?.message ?? 'unknown error'}`,
+                })
+                continue
+              }
+            } else {
+              profileUserId = authUser.user.id
+            }
+          }
 
           // Upsert profile linked to the apartment
           const { error: profileError } = await supabaseClient
@@ -208,10 +237,11 @@ serve(async (req) => {
             .upsert(
               {
                 apartment_id: apartmentId,
+                building_id: adminBuildingId,
                 spot_identifier: spotId.trim(),
                 is_active: true,
               },
-              { onConflict: 'spot_identifier,apartment_id', ignoreDuplicates: true }
+              { onConflict: 'building_id,spot_identifier', ignoreDuplicates: true }
             )
 
           if (spotError) {
