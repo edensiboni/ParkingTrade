@@ -24,6 +24,7 @@ import members from './scenarios/10-member-management.js'
 import waitlist from './scenarios/11-waitlist.js'
 import chat from './scenarios/12-chat-coordination.js'
 import waitlistNotify from './scenarios/13-waitlist-notifications.js'
+import spotNotify from './scenarios/14-spot-availability-notifications.js'
 
 async function main() {
   const cfg = loadConfig()
@@ -57,6 +58,7 @@ async function main() {
     waitlist(f),
     chat(f),
     waitlistNotify(f),
+    spotNotify(f),
   ]
 
   let results

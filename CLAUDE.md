@@ -28,9 +28,9 @@ supabase/
 ├── config.toml       # Local Supabase config (project id: parking-trade)
 ├── functions/        # Edge Functions (admin-bulk-import, approve-booking, create-booking-request,
 │                     #  create-building, create-building-admin, join-building, manage-member,
-│                     #  notify-waitlist-match, places-autocomplete, send-chat-message)
+│                     #  notify-spot-available, notify-waitlist-match, places-autocomplete, send-chat-message)
 │   └── _shared/      # Shared utilities (push.ts = FCM v1 send + dead-token pruning)
-└── migrations/       # SQL migrations, applied in filename order (001–034)
+└── migrations/       # SQL migrations, applied in filename order (001–038)
 
 android/              # Android platform (applicationId: com.example.parking_trade)
 ios/                  # iOS platform
@@ -231,6 +231,13 @@ key, either by pg_cron + `net.http_post` or by a Supabase Database Webhook on in
 `waitlist_match_notifications`. Both approaches are spelled out in that migration's header.
 Until one is wired up, matched-waitlist pushes accumulate in the outbox and are never sent.
 
+The **spot-availability broadcast outbox** (migration 038, Roadmap 2) needs draining the
+same way: invoke `notify-spot-available` periodically with the service-role key, either by
+pg_cron + `net.http_post` or by a Supabase Database Webhook on insert into
+`spot_availability_notifications`. Both approaches are spelled out in that migration's
+header. Until one is wired up, new-availability broadcasts accumulate in the outbox and
+are never sent.
+
 ## Common Issues
 
 - **RLS recursion:** Migration `003_fix_rls_recursion.sql` fixes recursive RLS policies — make sure it's applied.
@@ -250,3 +257,4 @@ Until one is wired up, matched-waitlist pushes accumulate in the outbox and are 
 - Chat unread badges are driven by `message_read_receipts` + the `mark_booking_read` / `get_unread_message_counts` RPCs (migration 033).
 - Residents can queue for a busy spot via `spot_waitlist` (migration 032); DB triggers flip entries to `matched` when availability opens or an approved booking is cancelled. Matching is informational — booking still races through the normal overlap constraint.
 - A waitlist match enqueues a row in the `waitlist_match_notifications` outbox (migration 034) rather than calling out over HTTP from the trigger. This keeps the service-role key out of the database, prevents a slow push from stalling the matching transaction, and makes delivery retryable and testable. The `notify-waitlist-match` function drains it.
+- Publishing a new `spot_availability_periods` row (Roadmap 2) also enqueues a row in the `spot_availability_notifications` outbox (migration 038), drained by `notify-spot-available`, which broadcasts to every approved, opted-in profile in the same building — excluding the publishing apartment and any apartment already covered by an active `waitlist_match_notifications` push for that exact spot + window (residents don't get pinged twice for one event). This is a discovery-oriented broadcast, distinct from and complementary to the targeted waitlist-match notification.

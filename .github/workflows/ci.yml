@@ -168,6 +168,7 @@ jobs:
             create-building-admin \
             join-building \
             manage-member \
+            notify-spot-available \
             notify-waitlist-match \
             places-autocomplete \
             send-chat-message \
