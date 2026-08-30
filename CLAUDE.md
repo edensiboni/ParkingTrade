@@ -30,7 +30,7 @@ supabase/
 │                     #  create-building, create-building-admin, join-building, manage-member,
 │                     #  notify-spot-available, notify-waitlist-match, places-autocomplete, send-chat-message)
 │   └── _shared/      # Shared utilities (push.ts = FCM v1 send + dead-token pruning)
-└── migrations/       # SQL migrations, applied in filename order (001–038)
+└── migrations/       # SQL migrations, applied in filename order (001–039)
 
 android/              # Android platform (applicationId: com.example.parking_trade)
 ios/                  # iOS platform
@@ -238,6 +238,26 @@ pg_cron + `net.http_post` or by a Supabase Database Webhook on insert into
 header. Until one is wired up, new-availability broadcasts accumulate in the outbox and
 are never sent.
 
+**Real-time delivery for the spot-availability outbox** (migration 039) is built in as a
+`pg_net`-backed trigger, but is **opt-in per environment** — it does nothing until you
+store two Supabase Vault secrets (never commit these values to a file):
+
+```sql
+SELECT vault.create_secret('https://<project-ref>.supabase.co', 'spot_notify_functions_base_url'); -- or the local value below
+SELECT vault.create_secret('<the real service_role secret from Project Settings → API>', 'spot_notify_service_role_key');
+```
+
+For local dev, the URL is `http://api.supabase.internal:8000` (this project's local Docker
+network alias for the functions gateway — confirmed via `docker inspect`, not
+`127.0.0.1`) and the key is the same published, non-secret local demo key already in
+`e2e/.env.example`. Vault, not a custom GUC, is used deliberately: `ALTER DATABASE ... SET`
+for a custom parameter requires superuser, and the `postgres` role Supabase exposes isn't
+one (verified — it raises "permission denied to set parameter", identically on hosted and
+local). See migration 039's header for the full rationale, including why the values are
+read from Vault at runtime rather than baked into the trigger the way Supabase's Dashboard
+"Database Webhooks" UI would. Keep the pg_cron drain running too — real-time is the fast
+path, pg_cron is the durability backstop for a dropped call.
+
 ## Common Issues
 
 - **RLS recursion:** Migration `003_fix_rls_recursion.sql` fixes recursive RLS policies — make sure it's applied.
@@ -258,3 +278,4 @@ are never sent.
 - Residents can queue for a busy spot via `spot_waitlist` (migration 032); DB triggers flip entries to `matched` when availability opens or an approved booking is cancelled. Matching is informational — booking still races through the normal overlap constraint.
 - A waitlist match enqueues a row in the `waitlist_match_notifications` outbox (migration 034) rather than calling out over HTTP from the trigger. This keeps the service-role key out of the database, prevents a slow push from stalling the matching transaction, and makes delivery retryable and testable. The `notify-waitlist-match` function drains it.
 - Publishing a new `spot_availability_periods` row (Roadmap 2) also enqueues a row in the `spot_availability_notifications` outbox (migration 038), drained by `notify-spot-available`, which broadcasts to every approved, opted-in profile in the same building — excluding the publishing apartment and any apartment already covered by an active `waitlist_match_notifications` push for that exact spot + window (residents don't get pinged twice for one event). This is a discovery-oriented broadcast, distinct from and complementary to the targeted waitlist-match notification.
+- That outbox can be drained in real time by a `pg_net` trigger (migration 039) instead of waiting on a pg_cron poll — see "Real-time delivery" under Scheduled jobs. It is opt-in per environment (two GUCs) and never blocks the client's insert; pg_cron remains the durability backstop.
