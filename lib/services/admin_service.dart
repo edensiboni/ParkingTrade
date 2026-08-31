@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/authorized_apartment.dart';
+import '../models/building_join_request.dart';
 import '../models/profile.dart';
 import '../models/building.dart';
 import 'building_service.dart';
@@ -90,6 +91,54 @@ class AdminService {
         : response.data as Map<String, dynamic>;
 
     return Profile.fromJson(data['member']);
+  }
+
+  // ── Building join requests (building_join_requests table) ──────────────────
+
+  /// Pending self-service join requests for the current admin's building.
+  /// RLS scopes this to the admin's building; the filter is belt-and-braces.
+  Future<List<BuildingJoinRequest>> getJoinRequests() async {
+    final buildingId = await _resolveAdminBuildingId();
+
+    final response = await _supabase
+        .from('building_join_requests')
+        .select('*')
+        .eq('building_id', buildingId)
+        .eq('status', 'pending')
+        .order('created_at', ascending: true);
+
+    return (response as List)
+        .map((json) =>
+            BuildingJoinRequest.fromJson(json as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Approve or reject a join request via the `review-join-request` edge
+  /// function (which forwards this admin's JWT to the `review_join_request`
+  /// RPC and pushes the outcome to the applicant).
+  Future<BuildingJoinRequest> reviewJoinRequest({
+    required String requestId,
+    required String action, // 'approve' | 'reject'
+    String? reason,
+  }) async {
+    final response = await _supabase.functions.invoke(
+      'review-join-request',
+      body: {
+        'request_id': requestId,
+        'action': action,
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
+
+    final data = response.data is String
+        ? jsonDecode(response.data as String) as Map<String, dynamic>
+        : (response.data as Map<String, dynamic>? ?? const {});
+
+    if (response.status != 200) {
+      throw Exception(data['error'] ?? 'Failed to review join request');
+    }
+
+    return BuildingJoinRequest.fromJson(data['request'] as Map<String, dynamic>);
   }
 
   // ── Manage Apartments (authorized_apartments table) ────────────────────────

@@ -5,6 +5,12 @@ import '../models/profile.dart';
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
+  /// Last profile resolved by [getCurrentProfile], kept so synchronous callers
+  /// (notably the `/admin-dashboard` route guard) don't have to re-fetch on
+  /// every navigation. Cleared on [signOut]. May be stale — treat as a hint.
+  static Profile? _cachedProfile;
+  static Profile? get cachedProfile => _cachedProfile;
+
   User? get currentUser => _supabase.auth.currentUser;
 
   /// Returns the current session, or null if no valid session exists.
@@ -308,7 +314,11 @@ class AuthService {
           .eq('id', user.id)
           .maybeSingle();
 
-      if (response != null) return Profile.fromJson(response);
+      if (response != null) {
+        final profile = Profile.fromJson(response);
+        _cachedProfile = profile;
+        return profile;
+      }
 
       // No profile found by id — try to link via phone using all known
       // format variations (raw, local 052…, international +97252…).
@@ -321,8 +331,13 @@ class AuthService {
           .eq('id', user.id)
           .maybeSingle();
 
-      if (retried == null) return null;
-      return Profile.fromJson(retried);
+      if (retried == null) {
+        _cachedProfile = null;
+        return null;
+      }
+      final profile = Profile.fromJson(retried);
+      _cachedProfile = profile;
+      return profile;
     } catch (e) {
       // If profile doesn't exist or there's an error, return null
       // Return null so the app routes to the not-registered screen
@@ -421,6 +436,7 @@ class AuthService {
 
   // Sign out
   Future<void> signOut() async {
+    _cachedProfile = null;
     await _supabase.auth.signOut();
   }
 

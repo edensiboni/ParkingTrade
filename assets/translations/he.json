@@ -26,8 +26,44 @@
     "not_registered": {
       "title": "לא רשום",
       "message": "מספר הטלפון שלך אינו רשום לאף דירה. אנא פנה למנהל הבניין שלך כדי שיוסיף אותך.",
+      "request_join": "בקשה להצטרף לבניין",
       "sign_out": "התנתק",
       "admin_link": "האם אתה מנהל בניין? צור בניין חדש"
+    },
+
+    "join_request": {
+      "title": "הצטרפות לבניין",
+      "heading": "בקשה להצטרף לבניין שלך",
+      "subtitle": "הזן את קוד ההזמנה שמנהל הבניין שיתף איתך. הבקשה שלך תיבדק על ידו.",
+      "invite_code_label": "קוד הזמנה",
+      "invite_code_hint": "לדוגמה AB3K9Z",
+      "invite_code_required": "הזן את קוד ההזמנה",
+      "unit_label": "הדירה שלך",
+      "unit_hint": "לדוגמה 12B",
+      "unit_required": "הזן את מזהה הדירה שלך",
+      "name_label": "השם שלך (לא חובה)",
+      "name_hint": "כך השכנים יראו אותך",
+      "submit": "שלח בקשה",
+      "submitting": "שולח…",
+      "back": "חזרה",
+      "linked": "הכול מוכן — ברוך הבא!"
+    },
+
+    "join_request_pending": {
+      "title": "הבקשה נשלחה",
+      "waiting_title": "ממתין למנהל",
+      "waiting_message": "בקשתך להצטרף ל{building} (דירה {unit}) נמצאת אצל מנהל הבניין. תקבל גישה ברגע שהיא תאושר.",
+      "your_building": "הבניין שלך",
+      "check_again": "בדוק שוב",
+      "cancel": "בטל בקשה",
+      "cancel_title": "לבטל את הבקשה?",
+      "cancel_body": "תוכל לשלוח בקשה חדשה מאוחר יותר באמצעות קוד ההזמנה.",
+      "cancel_confirm": "בטל בקשה",
+      "sign_out": "התנתק",
+      "rejected_title": "הבקשה נדחתה",
+      "rejected_message": "מנהל הבניין דחה את בקשתך. פנה אליו אם לדעתך מדובר בטעות.",
+      "rejected_reason": "מנהל הבניין דחה את בקשתך: {reason}",
+      "try_again": "שלח בקשה חדשה"
     }
   },
 
@@ -328,10 +364,33 @@
     "sign_out": "התנתק",
     "tab_pending": "ממתינים",
     "tab_pending_count": "ממתינים ({count})",
+    "tab_join_requests": "בקשות הצטרפות",
+    "tab_join_requests_count": "בקשות הצטרפות ({count})",
     "tab_members": "דיירים ({count})",
     "tab_apartments": "ניהול דירות",
     "tab_bulk_import": "ייבוא מרוכז",
     "tab_settings": "הגדרות הבניין",
+
+    "join_requests": {
+      "empty_title": "אין בקשות",
+      "empty_message": "כשמישהו ישתמש בקוד ההזמנה כדי לבקש להצטרף, הבקשה תופיע כאן.",
+      "unnamed": "ללא שם",
+      "unit": "דירה {unit}",
+      "requested_on": "הוגש {date}",
+      "pending_chip": "ממתין",
+      "decline": "דחה",
+      "approve": "אשר",
+      "approve_title": "לאשר את הבקשה?",
+      "approve_body": "להוסיף את {name} לדירה {unit} ולתת גישה לבניין?",
+      "confirm_approve": "אשר",
+      "reject_title": "לדחות את הבקשה?",
+      "reject_body": "לדחות את בקשת ההצטרפות של {name}? תישלח אליו הודעה.",
+      "confirm_reject": "דחה",
+      "reason_label": "סיבה (לא חובה)",
+      "reason_hint": "תוצג למבקש",
+      "approved_success": "הבקשה אושרה",
+      "rejected_success": "הבקשה נדחתה"
+    },
 
     "pending": {
       "empty_title": "אין בקשות ממתינות",
