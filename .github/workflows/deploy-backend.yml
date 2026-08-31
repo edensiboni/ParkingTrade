@@ -58,7 +58,9 @@ jobs:
             notify-spot-available \
             notify-waitlist-match \
             places-autocomplete \
+            review-join-request \
             send-chat-message \
+            submit-join-request \
           ; do
             echo "▶ Deploying $fn..."
             supabase functions deploy "$fn"

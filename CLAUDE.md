@@ -28,7 +28,8 @@ supabase/
 ├── config.toml       # Local Supabase config (project id: parking-trade)
 ├── functions/        # Edge Functions (admin-bulk-import, approve-booking, create-booking-request,
 │                     #  create-building, create-building-admin, join-building, manage-member,
-│                     #  notify-spot-available, notify-waitlist-match, places-autocomplete, send-chat-message)
+│                     #  notify-spot-available, notify-waitlist-match, places-autocomplete,
+│                     #  review-join-request, send-chat-message, submit-join-request)
 │   └── _shared/      # Shared utilities (push.ts = FCM v1 send + dead-token pruning)
 └── migrations/       # SQL migrations, applied in filename order (001–040)
 
@@ -103,11 +104,13 @@ supabase functions deploy <name>
 # Deploy several at once
 supabase functions deploy admin-bulk-import approve-booking create-booking-request \
   create-building create-building-admin join-building manage-member \
-  notify-waitlist-match places-autocomplete send-chat-message
+  notify-waitlist-match places-autocomplete review-join-request send-chat-message \
+  submit-join-request
 
 # Note: editing supabase/functions/_shared/push.ts affects every function that
 # sends push (approve-booking, create-booking-request, send-chat-message,
-# notify-waitlist-match) — redeploy all of them, not just the one you touched.
+# notify-waitlist-match, submit-join-request, review-join-request) — redeploy all
+# of them, not just the one you touched.
 
 # Set edge function secrets (e.g. for Twilio SMS)
 supabase secrets set TWILIO_ACCOUNT_SID=xxx TWILIO_AUTH_TOKEN=xxx TWILIO_PHONE_NUMBER=xxx
@@ -288,7 +291,8 @@ too even once real-time is on — it's the durability backstop for a dropped web
 - Real-time chat uses Supabase Realtime subscriptions.
 - Spot availability is managed via time-period windows (migration 004).
 - Building membership is gated by invite codes processed in the `join-building` edge function.
-- Admin audit trail is captured via migration 009.
+- Self-service onboarding (Roadmap 3.1): a user not pre-authorised for any building can request access with the building's invite code. `submit-join-request` inserts a `building_join_requests` row (migration 041 — the table was adopted from production schema drift) and pushes every opted-in building admin. The admin approves/rejects from the dashboard via `review-join-request`, which forwards the admin JWT to the `review_join_request()` SECURITY DEFINER RPC — that RPC atomically finds/creates the apartment, creates the applicant's `approved` profile (replicating migration 014's "first resident ⇒ apartment admin" promotion), keeps `authorized_apartments` in sync, and writes the audit row. The applicant is pushed the outcome. `INSERT` on `building_join_requests` is service-role only (no RLS INSERT policy) so a request always fans out the admin notification.
+- Admin audit trail is captured via migration 009. Migration 041 made `admin_audit_log.admin_id` and `target_id` nullable (both were `NOT NULL` **and** `ON DELETE SET NULL` — a contradiction that made any admin with audit history undeletable), added `join_request_id` (a rejected join request never produces a profile), and rebuilt the stale SELECT policy that still keyed off the retired `profiles.building_id`.
 - Bookings and chat are scoped to **apartments**, not individual profiles (migration 013). Message RLS and the `send-chat-message` participant check therefore key off apartment membership and are deliberately **status-agnostic** — residents can chat on a `pending` booking to coordinate before approval (Roadmap 1.2).
 - Chat unread badges are driven by `message_read_receipts` + the `mark_booking_read` / `get_unread_message_counts` RPCs (migration 033).
 - Residents can queue for a busy spot via `spot_waitlist` (migration 032); DB triggers flip entries to `matched` when availability opens or an approved booking is cancelled. Matching is informational — booking still races through the normal overlap constraint.
