@@ -1,0 +1,7 @@
+{
+  "packageName": "com.example.parking_trade",
+  "defaultReleaseTrack": "internal",
+  "serviceAccountJsonPath": "secrets/play-service-account.json",
+  "secretPaths": { "keystore": "secrets/upload-keystore.jks" },
+  "environment": {}
+}
