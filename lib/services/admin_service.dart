@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/admin_parking_spot.dart';
 import '../models/authorized_apartment.dart';
 import '../models/building_join_request.dart';
 import '../models/profile.dart';
@@ -289,6 +290,30 @@ class AdminService {
     await _resolveAdminBuildingId();
 
     await _supabase.from('authorized_apartments').delete().eq('id', id);
+  }
+
+  // ── Spot management (parking_spots table) ─────────────────────────────────
+
+  /// Every parking spot in the current admin's building, orphans included,
+  /// via the `admin_list_building_spots()` RPC (migration 042). The RPC is
+  /// SECURITY DEFINER + self-securing, so it runs under this admin's JWT.
+  Future<List<AdminParkingSpot>> getBuildingSpots() async {
+    final response = await _supabase.rpc('admin_list_building_spots');
+    return (response as List)
+        .cast<Map<String, dynamic>>()
+        .map(AdminParkingSpot.fromJson)
+        .toList();
+  }
+
+  /// Force-deletes a parking spot via `admin_delete_building_spot()`
+  /// (migration 042). Cascades bookings / availability / waitlist through
+  /// existing FKs and strips the identifier from the owning apartment's
+  /// snapshot. The RPC re-checks admin status server-side.
+  Future<void> deleteBuildingSpot(String spotId) async {
+    await _supabase.rpc(
+      'admin_delete_building_spot',
+      params: {'p_spot_id': spotId},
+    );
   }
 
   /// Sends a list of apartment/phone/spot objects to the admin-bulk-import

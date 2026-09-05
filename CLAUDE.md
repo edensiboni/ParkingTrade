@@ -188,7 +188,7 @@ Edge Functions are deployed from an explicit `for fn in ...` list, **not** by gl
 - `.github/workflows/ci.yml` → job `deploy` → step "Deploy Edge Functions"
 - `.github/workflows/deploy-backend.yml` → step "Deploy Edge Functions"
 
-(`admin-bulk-import` is currently absent from both lists — deploy it by hand if you change it.)
+(All Edge Functions — including `admin-bulk-import` — are now in both lists.)
 
 ### Required GitHub secrets (repo settings → Secrets → Actions)
 

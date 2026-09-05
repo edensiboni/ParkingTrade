@@ -368,6 +368,7 @@
     "tab_join_requests_count": "בקשות הצטרפות ({count})",
     "tab_members": "דיירים ({count})",
     "tab_apartments": "ניהול דירות",
+    "tab_spots": "ניהול חניות",
     "tab_bulk_import": "ייבוא מרוכז",
     "tab_settings": "הגדרות הבניין",
 
@@ -474,6 +475,33 @@
       "remove_dialog_title": "להסיר הרשאה?",
       "remove_dialog_body": "להסיר יחידה \"{unit}\"? הדייר יאבד גישה בכניסה הבאה שלו.",
       "remove_button": "הסר"
+    },
+
+    "spots": {
+      "empty_title": "אין חניות",
+      "empty_message": "חניות יופיעו כאן לאחר שדירות הוגדרו עם מספרי חנייה או לאחר הרצת ייבוא מרוכז.",
+      "summary_banner": "{total} חניות · {active} פעילות · {orphaned} יתומות",
+      "reimport_button": "ייבוא מרוכז",
+      "reimport_hint": "כדי להקצות מחדש חניות מרשימת דירות מלאה, השתמש בלשונית הייבוא המרוכז.",
+      "orphan_section_title": "חניות יתומות ({count})",
+      "orphan_section_desc": "חניות אלו קיימות בטבלה התפעולית אך אינן מופיעות ברשימת החניות המוגדרת של אף דירה — בדרך כלל נותרו לאחר הסרת הרשאת דירה או לאחר שייבוא מרוכז הוסיף אותן ישירות. בדוק ומחק.",
+      "assigned_section_title": "חניות מוקצות",
+      "inactive_chip": "לא פעילה",
+      "unit_line": "דירה {unit}",
+      "unassigned_line": "לא משויכת לאף דירה",
+      "not_in_snapshot": "לא ברשימת החניות המוגדרת של דירה זו",
+      "counts_line": "{periods} חלונות זמינות · {bookings} הזמנות פעילות",
+      "delete_tooltip": "מחק חנייה",
+      "delete_dialog_title": "למחוק את החנייה הזו?",
+      "delete_dialog_body": "למחוק לצמיתות את החנייה \"{spot}\"? לא ניתן לבטל פעולה זו.",
+      "delete_dialog_body_with_bookings": "לחנייה \"{spot}\" יש {count} הזמנות פעילות. מחיקתה תבטל ותסיר גם את ההזמנות האלו, את היסטוריית הצ'אט שלהן וכל חלונות הזמינות. לא ניתן לבטל פעולה זו. להמשיך?",
+      "delete_button": "מחק",
+      "deleted_success": "החנייה נמחקה.",
+      "delete_all_orphans_button": "מחק הכל",
+      "delete_all_orphans_confirm_title": "למחוק את כל החניות היתומות?",
+      "delete_all_orphans_confirm_body": "למחוק לצמיתות {count} חניות יתומות וכל ההזמנות, הצ'אטים וחלונות הזמינות המשויכים אליהן? לא ניתן לבטל פעולה זו.",
+      "deleted_many_success": "נמחקו {count} חניות.",
+      "deleted_many_partial": "נמחקו {count} חניות. {errors} לא ניתן היה למחוק."
     },
 
     "bulk_import": {

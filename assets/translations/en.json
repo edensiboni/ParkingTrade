@@ -368,6 +368,7 @@
     "tab_join_requests_count": "Join Requests ({count})",
     "tab_members": "Members ({count})",
     "tab_apartments": "Manage Apartments",
+    "tab_spots": "Spot Management",
     "tab_bulk_import": "Bulk Import",
     "tab_settings": "Building Settings",
 
@@ -474,6 +475,33 @@
       "remove_dialog_title": "Remove authorization?",
       "remove_dialog_body": "Remove unit \"{unit}\"? The resident will lose access on their next login.",
       "remove_button": "Remove"
+    },
+
+    "spots": {
+      "empty_title": "No parking spots",
+      "empty_message": "Spots appear here once apartments have been configured with parking spot numbers or a bulk import has run.",
+      "summary_banner": "{total} spots · {active} active · {orphaned} orphaned",
+      "reimport_button": "Bulk Import",
+      "reimport_hint": "To re-provision spots from a full apartment list, use the Bulk Import tab.",
+      "orphan_section_title": "Orphaned spots ({count})",
+      "orphan_section_desc": "These spots exist in the operational table but are not listed in any apartment's configured spots — usually left behind when an apartment authorization was removed or a bulk import added them directly. Review and delete.",
+      "assigned_section_title": "Assigned spots",
+      "inactive_chip": "Inactive",
+      "unit_line": "Unit {unit}",
+      "unassigned_line": "Not assigned to any apartment",
+      "not_in_snapshot": "Not in this unit's configured spot list",
+      "counts_line": "{periods} availability period(s) · {bookings} active booking(s)",
+      "delete_tooltip": "Delete spot",
+      "delete_dialog_title": "Delete this parking spot?",
+      "delete_dialog_body": "Permanently delete spot \"{spot}\"? This cannot be undone.",
+      "delete_dialog_body_with_bookings": "Spot \"{spot}\" has {count} active booking(s). Deleting it will also cancel and remove those bookings, their chat history, and any availability windows. This cannot be undone. Continue?",
+      "delete_button": "Delete",
+      "deleted_success": "Parking spot deleted.",
+      "delete_all_orphans_button": "Delete all",
+      "delete_all_orphans_confirm_title": "Delete all orphaned spots?",
+      "delete_all_orphans_confirm_body": "Permanently delete {count} orphaned spot(s) and any bookings, chats and availability windows attached to them? This cannot be undone.",
+      "deleted_many_success": "Deleted {count} spot(s).",
+      "deleted_many_partial": "Deleted {count} spot(s). {errors} could not be deleted."
     },
 
     "bulk_import": {

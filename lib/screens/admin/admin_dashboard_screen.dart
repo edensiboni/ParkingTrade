@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/admin_service.dart';
 import '../../services/building_service.dart';
 import '../../services/auth_service.dart';
+import '../../models/admin_parking_spot.dart';
 import '../../models/authorized_apartment.dart';
 import '../../models/building.dart';
 import '../../models/building_join_request.dart';
@@ -40,7 +41,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _loadData();
   }
 
@@ -417,6 +418,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                               namedArgs: {'count': '${_allMembers.length}'}),
                         ),
                         Tab(text: 'admin.tab_apartments'.tr()),
+                        Tab(text: 'admin.tab_spots'.tr()),
                         Tab(text: 'admin.tab_bulk_import'.tr()),
                         Tab(text: 'admin.tab_settings'.tr()),
                       ],
@@ -452,6 +454,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 _buildJoinRequestsList(),
                 _buildAllMembersList(),
                 _ManageApartmentsTab(adminService: _adminService),
+                _SpotManagementTab(
+                  adminService: _adminService,
+                  onOpenBulkImport: () => _tabController.animateTo(5),
+                ),
                 _BulkImportTab(adminService: _adminService),
                 _BuildingSettingsTab(adminService: _adminService),
               ],
@@ -1733,6 +1739,411 @@ class _EditApartmentDialogState extends State<_EditApartmentDialog> {
           child: Text('admin.apartments.save_button'.tr()),
         ),
       ],
+    );
+  }
+}
+
+// ─── Spot Management Tab ─────────────────────────────────────────────────────
+//
+// Admin view of the operational `parking_spots` table (via the
+// admin_list_building_spots RPC). Surfaces orphaned rows — spots with no
+// apartment, or whose identifier has fallen out of the apartment's
+// authorized_apartments snapshot — and lets the admin force-delete any spot.
+// Re-importing is delegated to the existing Bulk Import tab.
+
+class _SpotManagementTab extends StatefulWidget {
+  final AdminService adminService;
+  final VoidCallback onOpenBulkImport;
+
+  const _SpotManagementTab({
+    required this.adminService,
+    required this.onOpenBulkImport,
+  });
+
+  @override
+  State<_SpotManagementTab> createState() => _SpotManagementTabState();
+}
+
+class _SpotManagementTabState extends State<_SpotManagementTab> {
+  List<AdminParkingSpot> _spots = [];
+  bool _isLoading = true;
+  final Set<String> _deleting = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSpots();
+  }
+
+  Future<void> _loadSpots() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await widget.adminService.getBuildingSpots();
+      if (!mounted) return;
+      setState(() {
+        _spots = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  Future<bool> _confirmDelete({
+    required String title,
+    required String body,
+    required String confirmLabel,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('admin.dialog.cancel'.tr()),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _deleteSpot(AdminParkingSpot spot) async {
+    final body = spot.hasActiveBookings
+        ? tr('admin.spots.delete_dialog_body_with_bookings', namedArgs: {
+            'spot': spot.spotIdentifier,
+            'count': '${spot.activeBookingsCount}',
+          })
+        : tr('admin.spots.delete_dialog_body',
+            namedArgs: {'spot': spot.spotIdentifier});
+
+    if (!await _confirmDelete(
+      title: 'admin.spots.delete_dialog_title'.tr(),
+      body: body,
+      confirmLabel: 'admin.spots.delete_button'.tr(),
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
+    setState(() => _deleting.add(spot.id));
+    try {
+      await widget.adminService.deleteBuildingSpot(spot.id);
+      if (!mounted) return;
+      AppSnack.success(context, 'admin.spots.deleted_success'.tr());
+      await _loadSpots();
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _deleting.remove(spot.id));
+    }
+  }
+
+  Future<void> _deleteAllOrphans(List<AdminParkingSpot> orphans) async {
+    if (!await _confirmDelete(
+      title: 'admin.spots.delete_all_orphans_confirm_title'.tr(),
+      body: tr('admin.spots.delete_all_orphans_confirm_body',
+          namedArgs: {'count': '${orphans.length}'}),
+      confirmLabel: 'admin.spots.delete_all_orphans_button'.tr(),
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
+    setState(() => _deleting.addAll(orphans.map((s) => s.id)));
+    var failures = 0;
+    for (final spot in orphans) {
+      try {
+        await widget.adminService.deleteBuildingSpot(spot.id);
+      } catch (_) {
+        failures++;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _deleting.clear());
+    if (failures == 0) {
+      AppSnack.success(
+        context,
+        tr('admin.spots.deleted_many_success',
+            namedArgs: {'count': '${orphans.length}'}),
+      );
+    } else {
+      AppSnack.error(
+        context,
+        tr('admin.spots.deleted_many_partial',
+            namedArgs: {'count': '${orphans.length - failures}', 'errors': '$failures'}),
+      );
+    }
+    await _loadSpots();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    if (_isLoading) return const SkeletonList(count: 5);
+
+    if (_spots.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _loadSpots,
+        child: ListView(
+          children: [
+            SizedBox(height: MediaQuery.of(context).size.height * 0.12),
+            EmptyState(
+              icon: Icons.local_parking_outlined,
+              title: 'admin.spots.empty_title'.tr(),
+              message: 'admin.spots.empty_message'.tr(),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final orphans = _spots.where((s) => s.isOrphan).toList();
+    final assigned = _spots.where((s) => !s.isOrphan).toList();
+    final activeCount = _spots.where((s) => s.isActive).length;
+
+    return RefreshIndicator(
+      onRefresh: _loadSpots,
+      child: ListView(
+        padding: const EdgeInsetsDirectional.fromSTEB(32, 28, 32, 32),
+        children: [
+          // ── Summary banner ─────────────────────────────────────────────
+          Card(
+            color: scheme.surfaceContainerLow,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.local_parking_rounded,
+                      size: 20, color: scheme.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      tr('admin.spots.summary_banner', namedArgs: {
+                        'total': '${_spots.length}',
+                        'active': '$activeCount',
+                        'orphaned': '${orphans.length}',
+                      }),
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: widget.onOpenBulkImport,
+                    icon: const Icon(Icons.upload_file_rounded, size: 18),
+                    label: Text('admin.spots.reimport_button'.tr()),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'admin.spots.reimport_hint'.tr(),
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+
+          // ── Orphaned section ───────────────────────────────────────────
+          if (orphans.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Icon(Icons.warning_amber_rounded,
+                    size: 18, color: scheme.error),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    tr('admin.spots.orphan_section_title',
+                        namedArgs: {'count': '${orphans.length}'}),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: scheme.error,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _deleting.isNotEmpty
+                      ? null
+                      : () => _deleteAllOrphans(orphans),
+                  style: TextButton.styleFrom(foregroundColor: scheme.error),
+                  child: Text('admin.spots.delete_all_orphans_button'.tr()),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'admin.spots.orphan_section_desc'.tr(),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            for (final spot in orphans)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _SpotCard(
+                  spot: spot,
+                  isDeleting: _deleting.contains(spot.id),
+                  onDelete: () => _deleteSpot(spot),
+                ),
+              ),
+          ],
+
+          // ── Assigned spots section ─────────────────────────────────────
+          if (assigned.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text(
+              'admin.spots.assigned_section_title'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                letterSpacing: 0.4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (final spot in assigned)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _SpotCard(
+                  spot: spot,
+                  isDeleting: _deleting.contains(spot.id),
+                  onDelete: () => _deleteSpot(spot),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SpotCard extends StatelessWidget {
+  final AdminParkingSpot spot;
+  final bool isDeleting;
+  final VoidCallback onDelete;
+
+  const _SpotCard({
+    required this.spot,
+    required this.isDeleting,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: spot.isOrphan
+                    ? scheme.errorContainer.withValues(alpha: 0.5)
+                    : scheme.tertiaryContainer.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.local_parking_rounded,
+                size: 20,
+                color: spot.isOrphan
+                    ? scheme.onErrorContainer
+                    : scheme.onTertiaryContainer,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          spot.spotIdentifier,
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (!spot.isActive)
+                        StatusChip(
+                          label: 'admin.spots.inactive_chip'.tr(),
+                          tone: StatusTone.warning,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    spot.apartmentIdentifier != null
+                        ? tr('admin.spots.unit_line',
+                            namedArgs: {'unit': spot.apartmentIdentifier!})
+                        : 'admin.spots.unassigned_line'.tr(),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: spot.isOrphan
+                          ? scheme.error
+                          : scheme.onSurfaceVariant,
+                      fontWeight:
+                          spot.isOrphan ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                  if (spot.isOrphan && spot.apartmentIdentifier != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'admin.spots.not_in_snapshot'.tr(),
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: scheme.error),
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Text(
+                    tr('admin.spots.counts_line', namedArgs: {
+                      'periods': '${spot.availabilityPeriodsCount}',
+                      'bookings': '${spot.activeBookingsCount}',
+                    }),
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (isDeleting)
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else
+              IconButton(
+                tooltip: 'admin.spots.delete_tooltip'.tr(),
+                icon: Icon(Icons.delete_outline_rounded, color: scheme.error),
+                onPressed: onDelete,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

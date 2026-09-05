@@ -26,6 +26,7 @@ import chat from './scenarios/12-chat-coordination.js'
 import waitlistNotify from './scenarios/13-waitlist-notifications.js'
 import spotNotify from './scenarios/14-spot-availability-notifications.js'
 import joinRequests from './scenarios/15-join-requests.js'
+import spotManagement from './scenarios/16-spot-management.js'
 
 async function main() {
   const cfg = loadConfig()
@@ -61,6 +62,7 @@ async function main() {
     waitlistNotify(f),
     spotNotify(f),
     joinRequests(f),
+    spotManagement(f),
   ]
 
   let results
