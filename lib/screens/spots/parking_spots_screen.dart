@@ -12,6 +12,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/skeleton.dart';
 import '../../widgets/status_chip.dart';
 import '../admin/admin_dashboard_screen.dart';
+import '../announcements/announcements_screen.dart';
 import 'manage_apartment_screen.dart';
 import 'manage_availability_screen.dart';
 import '../bookings/bookings_screen.dart';
@@ -259,6 +260,9 @@ class _ParkingSpotsScreenState extends State<ParkingSpotsScreen>
         onBookingsTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const BookingsScreen()),
         ),
+        onAnnouncementsTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
+        ),
         onLanguageTap: _toggleLanguage,
         onSignOutTap: _confirmSignOut,
       ),
@@ -323,6 +327,7 @@ class _PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onAdminTap;
   final VoidCallback onManageApartmentTap;
   final VoidCallback onBookingsTap;
+  final VoidCallback onAnnouncementsTap;
   final VoidCallback onLanguageTap;
   final VoidCallback onSignOutTap;
 
@@ -334,6 +339,7 @@ class _PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onAdminTap,
     required this.onManageApartmentTap,
     required this.onBookingsTap,
+    required this.onAnnouncementsTap,
     required this.onLanguageTap,
     required this.onSignOutTap,
   });
@@ -424,6 +430,10 @@ class _PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
                   icon: const Icon(Icons.manage_accounts_outlined, size: 22),
                   onTap: onManageApartmentTap,
                 ),
+              _AppBarIconBtn(
+                icon: const Icon(Icons.campaign_outlined, size: 22),
+                onTap: onAnnouncementsTap,
+              ),
               _AppBarIconBtn(
                 icon: const Icon(Icons.receipt_long_outlined, size: 22),
                 onTap: onBookingsTap,
