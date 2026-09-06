@@ -10,8 +10,8 @@ import 'config/app_router.dart';
 import 'config/supabase_config.dart';
 import 'config/places_config.dart';
 import 'firebase_initializer_stub.dart' if (dart.library.io) 'firebase_initializer.dart' as firebase_init;
-import 'providers/salon_theme_provider.dart';
 import 'services/notification_service_stub.dart' if (dart.library.io) 'services/notification_service.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -89,12 +89,11 @@ class ParkingTradeApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isRtl = context.locale.languageCode == 'he';
-    final salonTheme = ref.watch(salonThemeProvider);
     final router = ref.watch(goRouterProvider);
 
     return MaterialApp.router(
       title: 'Parking Trade',
-      theme: salonTheme.themeData,
+      theme: AppTheme.light(),
       debugShowCheckedModeBanner: false,
       localizationsDelegates: context.localizationDelegates,
       supportedLocales: context.supportedLocales,
