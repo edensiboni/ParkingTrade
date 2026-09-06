@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../screens/announcements/announcements_screen.dart';
 import '../screens/bookings/available_spots_screen.dart';
 import '../screens/bookings/booking_detail_screen.dart';
 import '../screens/chat/chat_screen.dart';
@@ -16,17 +17,27 @@ final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 ///
 /// Payload contract (set by the edge functions in `supabase/functions`):
 /// - `type` — one of `booking_request`, `booking_approved`, `booking_rejected`,
-///   `chat_message`, `waitlist_match`, `spot_available`
+///   `chat_message`, `waitlist_match`, `spot_available`, `building_announcement`
 /// - `booking_id` — the booking the notification refers to (all types except
-///   `waitlist_match` and `spot_available`)
+///   `waitlist_match`, `spot_available` and `building_announcement`)
 /// - `spot_id` + `start_time`/`end_time` — sent instead of `booking_id` for
 ///   `waitlist_match` (a spot + window a resident was waiting for) and
 ///   `spot_available` (a spot + window a neighbor just published — Roadmap 2)
+/// - `announcement_id` + `building_id` — sent for `building_announcement`
+///   (an admin broadcast — Roadmap Phase 4)
 void handleNotificationTap(Map<String, dynamic> data) {
   final navigator = rootNavigatorKey.currentState;
   if (navigator == null) return;
 
   final type = data['type']?.toString();
+
+  // Building announcements (Roadmap Phase 4) — open the history list.
+  if (type == 'building_announcement') {
+    navigator.push(
+      MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
+    );
+    return;
+  }
 
   // Waitlist matches (Roadmap 1.3) and new-availability broadcasts
   // (Roadmap 2) both refer to a spot + time window rather than a booking,

@@ -371,6 +371,7 @@
     "tab_spots": "Spot Management",
     "tab_bulk_import": "Bulk Import",
     "tab_settings": "Building Settings",
+    "tab_announcements": "Announcements",
 
     "join_requests": {
       "empty_title": "No requests",
@@ -547,10 +548,35 @@
       "qr_link_description": "Share this link or encode it as a QR code so residents open the app with your building's branded experience.",
       "qr_link_copy": "Copy Link",
       "qr_link_copied": "Link copied"
+    },
+
+    "announcements": {
+      "compose_title": "New announcement",
+      "title_label": "Title",
+      "title_hint": "e.g. Water shutoff Tuesday 9–11am",
+      "title_required": "Title is required",
+      "body_label": "Message",
+      "body_hint": "What do residents need to know?",
+      "body_required": "Message is required",
+      "send_button": "Send",
+      "sending": "Sending…",
+      "send_confirm_title": "Send this announcement?",
+      "send_confirm_body": "Every approved resident of the building will get a push notification.",
+      "sent_success": "Announcement sent.",
+      "history_section": "Sent announcements",
+      "empty_title": "No announcements yet",
+      "empty_message": "Compose one above to notify every resident of the building."
     }
   },
 
   "language_toggle": "עברית",
+
+  "announcements": {
+    "screen_title": "Announcements",
+    "empty_title": "No announcements",
+    "empty_message": "Building announcements from your admin will appear here.",
+    "load_error": "Couldn't load announcements."
+  },
 
   "feed": {
     "title": "Spots available in the building",

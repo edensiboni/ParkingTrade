@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/dev_auth_config.dart';
 import '../providers/salon_theme_provider.dart';
 import '../screens/admin/admin_dashboard_screen.dart';
+import '../screens/announcements/announcements_screen.dart';
 import '../screens/auth/admin_login_screen.dart';
 import '../screens/auth/auth_wrapper.dart';
 import '../screens/auth/create_building_screen.dart';
@@ -92,6 +93,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/home',
         builder: (context, state) => const ParkingSpotsScreen(),
+      ),
+      GoRoute(
+        path: '/announcements',
+        builder: (context, state) => const AnnouncementsScreen(),
       ),
       GoRoute(
         path: '/admin-dashboard',

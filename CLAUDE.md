@@ -28,10 +28,10 @@ supabase/
 ├── config.toml       # Local Supabase config (project id: parking-trade)
 ├── functions/        # Edge Functions (admin-bulk-import, approve-booking, create-booking-request,
 │                     #  create-building, create-building-admin, join-building, manage-member,
-│                     #  notify-spot-available, notify-waitlist-match, places-autocomplete,
-│                     #  review-join-request, send-chat-message, submit-join-request)
+│                     #  notify-building-announcement, notify-spot-available, notify-waitlist-match,
+│                     #  places-autocomplete, review-join-request, send-chat-message, submit-join-request)
 │   └── _shared/      # Shared utilities (push.ts = FCM v1 send + dead-token pruning)
-└── migrations/       # SQL migrations, applied in filename order (001–040)
+└── migrations/       # SQL migrations, applied in filename order (001–044)
 
 android/              # Android platform (applicationId: com.example.parking_trade)
 ios/                  # iOS platform
@@ -104,13 +104,14 @@ supabase functions deploy <name>
 # Deploy several at once
 supabase functions deploy admin-bulk-import approve-booking create-booking-request \
   create-building create-building-admin join-building manage-member \
-  notify-waitlist-match places-autocomplete review-join-request send-chat-message \
-  submit-join-request
+  notify-building-announcement notify-spot-available notify-waitlist-match \
+  places-autocomplete review-join-request send-chat-message submit-join-request
 
 # Note: editing supabase/functions/_shared/push.ts affects every function that
 # sends push (approve-booking, create-booking-request, send-chat-message,
-# notify-waitlist-match, submit-join-request, review-join-request) — redeploy all
-# of them, not just the one you touched.
+# notify-building-announcement, notify-spot-available, notify-waitlist-match,
+# submit-join-request, review-join-request) — redeploy all of them, not just
+# the one you touched.
 
 # Set edge function secrets (e.g. for Twilio SMS)
 supabase secrets set TWILIO_ACCOUNT_SID=xxx TWILIO_AUTH_TOKEN=xxx TWILIO_PHONE_NUMBER=xxx
@@ -228,7 +229,7 @@ SELECT cron.schedule('complete-bookings', '*/15 * * * *', 'SELECT complete_expir
 SELECT cron.schedule('expire-waitlist', '*/15 * * * *', 'SELECT expire_waitlist_entries()');
 ```
 
-Both notification outboxes need draining, and both now support the same two delivery
+All three notification outboxes need draining, and each supports the same two delivery
 mechanisms — periodic pg_cron polling (the durable fallback), or a real-time `pg_net`
 webhook (the fast path). Neither wires itself up automatically; each is a one-time,
 per-environment setup step.
@@ -247,12 +248,18 @@ SELECT cron.schedule('drain-spot-availability-notifications', '* * * * *',
   $$ SELECT net.http_post(url := '<functions-url>/notify-spot-available',
        headers := jsonb_build_object('Content-Type','application/json',
                                       'Authorization','Bearer <service-role-key>')) $$);
+
+-- Building-announcement broadcast outbox (migration 043, Roadmap Phase 4)
+SELECT cron.schedule('drain-building-announcement-notifications', '* * * * *',
+  $$ SELECT net.http_post(url := '<functions-url>/notify-building-announcement',
+       headers := jsonb_build_object('Content-Type','application/json',
+                                      'Authorization','Bearer <service-role-key>')) $$);
 ```
 
 **Real-time delivery** — built in as `pg_net`-backed triggers (migration 039 for
-spot-availability, migration 040 for waitlist-match), **opt-in per environment**: each does
-nothing until you store its two Supabase Vault secrets (never commit these values to a
-file):
+spot-availability, migration 040 for waitlist-match, migration 044 for
+building-announcements), **opt-in per environment**: each does nothing until you store its
+two Supabase Vault secrets (never commit these values to a file):
 
 ```sql
 -- Waitlist match-notification outbox (migration 040)
@@ -262,11 +269,15 @@ SELECT vault.create_secret('<the real service_role secret from Project Settings 
 -- Spot-availability broadcast outbox (migration 039)
 SELECT vault.create_secret('https://<project-ref>.supabase.co', 'spot_notify_functions_base_url'); -- or the local value below
 SELECT vault.create_secret('<the real service_role secret from Project Settings → API>', 'spot_notify_service_role_key');
+
+-- Building-announcement broadcast outbox (migration 044, Roadmap Phase 4)
+SELECT vault.create_secret('https://<project-ref>.supabase.co', 'announcement_notify_functions_base_url'); -- or the local value below
+SELECT vault.create_secret('<the real service_role secret from Project Settings → API>', 'announcement_notify_service_role_key');
 ```
 
-The two pipelines use separate, feature-scoped secrets on purpose (not a shared
+The pipelines use separate, feature-scoped secrets on purpose (not a shared
 `functions_base_url`) so either one's real-time delivery can be activated, rotated, or
-disabled independently. For local dev, the URL for both is `http://api.supabase.internal:8000`
+disabled independently. For local dev, the URL for all of them is `http://api.supabase.internal:8000`
 (this project's local Docker network alias for the functions gateway — confirmed via
 `docker inspect`, not `127.0.0.1`) and the key is the same published, non-secret local demo
 key already in `e2e/.env.example`. Vault, not a custom GUC, is used deliberately:
@@ -299,3 +310,4 @@ too even once real-time is on — it's the durability backstop for a dropped web
 - A waitlist match enqueues a row in the `waitlist_match_notifications` outbox (migration 034) rather than calling out over HTTP from the trigger. This keeps the service-role key out of the database, prevents a slow push from stalling the matching transaction, and makes delivery retryable and testable. The `notify-waitlist-match` function drains it, either via pg_cron or in real time via a `pg_net` trigger (migration 040, opt-in per environment — see "Real-time delivery" under Scheduled jobs).
 - Publishing a new `spot_availability_periods` row (Roadmap 2) also enqueues a row in the `spot_availability_notifications` outbox (migration 038), drained by `notify-spot-available`, which broadcasts to every approved, opted-in profile in the same building — excluding the publishing apartment and any apartment already covered by an active `waitlist_match_notifications` push for that exact spot + window (residents don't get pinged twice for one event). This is a discovery-oriented broadcast, distinct from and complementary to the targeted waitlist-match notification.
 - That outbox can be drained in real time by a `pg_net` trigger (migration 039) instead of waiting on a pg_cron poll — see "Real-time delivery" under Scheduled jobs. It is opt-in per environment (two Vault secrets) and never blocks the client's insert; pg_cron remains the durability backstop.
+- Building admins broadcast announcements (Roadmap Phase 4). The `create_building_announcement(title, body)` SECURITY DEFINER RPC (migration 043) inserts a `building_announcements` row (resident-readable via RLS — approved members of the building), which an `AFTER INSERT` trigger enqueues into the `building_announcement_notifications` outbox. `notify-building-announcement` drains it, pushing title+body to every approved, opted-in profile in the building except the sending admin. Same outbox+retry+real-time-webhook shape as spot-availability (migration 044 is the `pg_net` webhook, opt-in per env). v1 is general-only (no apartment targeting), immutable (no edit/delete), no read receipts. Compose is an RPC not an Edge Function because no push happens synchronously in that call.

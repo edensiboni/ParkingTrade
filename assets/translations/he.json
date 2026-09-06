@@ -371,6 +371,7 @@
     "tab_spots": "ניהול חניות",
     "tab_bulk_import": "ייבוא מרוכז",
     "tab_settings": "הגדרות הבניין",
+    "tab_announcements": "הודעות",
 
     "join_requests": {
       "empty_title": "אין בקשות",
@@ -547,10 +548,35 @@
       "qr_link_description": "שתף קישור זה או הפוך אותו לקוד QR כדי שדיירים יפתחו את האפליקציה עם חוויית המיתוג של הבניין.",
       "qr_link_copy": "העתק קישור",
       "qr_link_copied": "הקישור הועתק"
+    },
+
+    "announcements": {
+      "compose_title": "הודעה חדשה",
+      "title_label": "כותרת",
+      "title_hint": "לדוגמה: הפסקת מים ביום שלישי 9–11",
+      "title_required": "כותרת היא שדה חובה",
+      "body_label": "תוכן",
+      "body_hint": "מה הדיירים צריכים לדעת?",
+      "body_required": "תוכן ההודעה הוא שדה חובה",
+      "send_button": "שלח",
+      "sending": "שולח…",
+      "send_confirm_title": "לשלוח את ההודעה?",
+      "send_confirm_body": "כל דייר מאושר בבניין יקבל התראה.",
+      "sent_success": "ההודעה נשלחה.",
+      "history_section": "הודעות שנשלחו",
+      "empty_title": "אין הודעות עדיין",
+      "empty_message": "כתוב הודעה למעלה כדי ליידע את כל דיירי הבניין."
     }
   },
 
   "language_toggle": "English",
+
+  "announcements": {
+    "screen_title": "הודעות",
+    "empty_title": "אין הודעות",
+    "empty_message": "הודעות הבניין מהמנהל יופיעו כאן.",
+    "load_error": "לא ניתן לטעון את ההודעות."
+  },
 
   "feed": {
     "title": "חניות פנויות בבניין",

@@ -7,10 +7,12 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/admin_service.dart';
 import '../../services/building_service.dart';
+import '../../services/announcement_service.dart';
 import '../../services/auth_service.dart';
 import '../../models/admin_parking_spot.dart';
 import '../../models/authorized_apartment.dart';
 import '../../models/building.dart';
+import '../../models/building_announcement.dart';
 import '../../models/building_join_request.dart';
 import '../../models/profile.dart';
 import '../../widgets/address_autocomplete_field.dart';
@@ -41,7 +43,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
     _loadData();
   }
 
@@ -421,6 +423,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         Tab(text: 'admin.tab_spots'.tr()),
                         Tab(text: 'admin.tab_bulk_import'.tr()),
                         Tab(text: 'admin.tab_settings'.tr()),
+                        Tab(text: 'admin.tab_announcements'.tr()),
                       ],
                     ),
                   ),
@@ -460,6 +463,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 ),
                 _BulkImportTab(adminService: _adminService),
                 _BuildingSettingsTab(adminService: _adminService),
+                const _AnnouncementsTab(),
               ],
             ),
           ),
@@ -2880,6 +2884,241 @@ class _SalonDeepLinkCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─── Announcements Tab (Roadmap Phase 4) ─────────────────────────────────────
+//
+// Compose card (title + body, validated, confirm-before-send) over a live
+// history list — the same `building_announcements` rows residents see, so the
+// admin previews exactly what landed. Sending calls the
+// `create_building_announcement` RPC via AnnouncementService; the outbox +
+// notify-building-announcement handle the push fan-out.
+
+class _AnnouncementsTab extends StatefulWidget {
+  const _AnnouncementsTab();
+
+  @override
+  State<_AnnouncementsTab> createState() => _AnnouncementsTabState();
+}
+
+class _AnnouncementsTabState extends State<_AnnouncementsTab> {
+  static const int _maxTitle = 120;
+  static const int _maxBody = 2000;
+
+  final _service = AnnouncementService();
+  final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
+  final _bodyController = TextEditingController();
+
+  List<BuildingAnnouncement> _announcements = [];
+  bool _isLoading = true;
+  bool _isSending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _bodyController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await _service.getBuildingAnnouncements();
+      if (!mounted) return;
+      setState(() {
+        _announcements = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  Future<void> _send() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('admin.announcements.send_confirm_title'.tr()),
+        content: Text('admin.announcements.send_confirm_body'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('admin.dialog.cancel'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('admin.announcements.send_button'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isSending = true);
+    try {
+      await _service.sendAnnouncement(
+        title: _titleController.text.trim(),
+        body: _bodyController.text.trim(),
+      );
+      if (!mounted) return;
+      AppSnack.success(context, 'admin.announcements.sent_success'.tr());
+      _titleController.clear();
+      _bodyController.clear();
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dateFmt = DateFormat('MMM d, y • h:mm a');
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsetsDirectional.fromSTEB(32, 28, 32, 32),
+        children: [
+          // ── Compose card ───────────────────────────────────────────────
+          Card(
+            color: scheme.surfaceContainerLow,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.campaign_rounded,
+                            size: 20, color: scheme.primary),
+                        const SizedBox(width: 8),
+                        Text(
+                          'admin.announcements.compose_title'.tr(),
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _titleController,
+                      maxLength: _maxTitle,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText: 'admin.announcements.title_label'.tr(),
+                        hintText: 'admin.announcements.title_hint'.tr(),
+                      ),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'admin.announcements.title_required'.tr()
+                          : null,
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _bodyController,
+                      maxLength: _maxBody,
+                      maxLines: 5,
+                      minLines: 3,
+                      decoration: InputDecoration(
+                        labelText: 'admin.announcements.body_label'.tr(),
+                        hintText: 'admin.announcements.body_hint'.tr(),
+                        alignLabelWithHint: true,
+                      ),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'admin.announcements.body_required'.tr()
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: FilledButton.icon(
+                        onPressed: _isSending ? null : _send,
+                        icon: _isSending
+                            ? SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: scheme.onPrimary,
+                                ),
+                              )
+                            : const Icon(Icons.send_rounded, size: 18),
+                        label: Text(_isSending
+                            ? 'admin.announcements.sending'.tr()
+                            : 'admin.announcements.send_button'.tr()),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // ── History ────────────────────────────────────────────────────
+          Text(
+            'admin.announcements.history_section'.tr(),
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_isLoading)
+            const SkeletonList(count: 3)
+          else if (_announcements.isEmpty)
+            EmptyState(
+              icon: Icons.campaign_outlined,
+              title: 'admin.announcements.empty_title'.tr(),
+              message: 'admin.announcements.empty_message'.tr(),
+            )
+          else
+            for (final a in _announcements)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(a.title,
+                            style: theme.textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 6),
+                        Text(a.body, style: theme.textTheme.bodyMedium),
+                        const SizedBox(height: 8),
+                        Text(
+                          dateFmt.format(a.createdAt.toLocal()),
+                          style: theme.textTheme.labelSmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+        ],
       ),
     );
   }
