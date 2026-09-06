@@ -49,6 +49,9 @@ app.*.map.json
 .env
 .env.local
 
+# DevStudio secrets (service-account key, upload keystore) — never commit
+secrets/
+
 # Firebase
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist

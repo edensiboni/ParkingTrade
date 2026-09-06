@@ -8,8 +8,10 @@ import 'package:go_router/go_router.dart';
 import '../../services/admin_service.dart';
 import '../../services/building_service.dart';
 import '../../services/auth_service.dart';
+import '../../models/admin_parking_spot.dart';
 import '../../models/authorized_apartment.dart';
 import '../../models/building.dart';
+import '../../models/building_join_request.dart';
 import '../../models/profile.dart';
 import '../../widgets/address_autocomplete_field.dart';
 import '../../config/deep_link_config.dart';
@@ -33,12 +35,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   late TabController _tabController;
   List<Profile> _pendingMembers = [];
   List<Profile> _allMembers = [];
+  List<BuildingJoinRequest> _joinRequests = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _loadData();
   }
 
@@ -55,10 +58,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         _adminService.getPendingMembers(),
         _adminService.getBuildingMembers(),
       ]);
+      final joinRequests = await _adminService.getJoinRequests();
       if (!mounted) return;
       setState(() {
         _pendingMembers = pending;
         _allMembers = all;
+        _joinRequests = joinRequests;
         _isLoading = false;
       });
     } catch (e) {
@@ -161,6 +166,127 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             member: member,
             onApprove: () => _handleAction(member, 'approve'),
             onReject: () => _handleAction(member, 'reject'),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _handleJoinReview(
+      BuildingJoinRequest request, String action) async {
+    final name = request.displayName?.trim().isNotEmpty == true
+        ? request.displayName!.trim()
+        : request.phone;
+
+    String? reason;
+    if (action == 'reject') {
+      final reasonController = TextEditingController();
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('admin.join_requests.reject_title'.tr()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(tr('admin.join_requests.reject_body',
+                  namedArgs: {'name': name})),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'admin.join_requests.reason_label'.tr(),
+                  hintText: 'admin.join_requests.reason_hint'.tr(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('admin.dialog.cancel'.tr()),
+            ),
+            FilledButton.tonal(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              child: Text('admin.join_requests.confirm_reject'.tr()),
+            ),
+          ],
+        ),
+      );
+      reason = reasonController.text.trim();
+      reasonController.dispose();
+      if (confirmed != true || !mounted) return;
+    } else {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('admin.join_requests.approve_title'.tr()),
+          content: Text(tr('admin.join_requests.approve_body', namedArgs: {
+            'name': name,
+            'unit': request.apartmentIdentifier,
+          })),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('admin.dialog.cancel'.tr()),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text('admin.join_requests.confirm_approve'.tr()),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    try {
+      await _adminService.reviewJoinRequest(
+        requestId: request.id,
+        action: action,
+        reason: reason,
+      );
+      if (!mounted) return;
+      AppSnack.success(
+        context,
+        action == 'approve'
+            ? 'admin.join_requests.approved_success'.tr()
+            : 'admin.join_requests.rejected_success'.tr(),
+      );
+      _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  Widget _buildJoinRequestsList() {
+    if (_isLoading) return const SkeletonList(count: 3);
+
+    if (_joinRequests.isEmpty) {
+      return EmptyState(
+        icon: Icons.how_to_reg_outlined,
+        title: 'admin.join_requests.empty_title'.tr(),
+        message: 'admin.join_requests.empty_message'.tr(),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView.separated(
+        padding: const EdgeInsetsDirectional.fromSTEB(32, 28, 32, 32),
+        itemCount: _joinRequests.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 14),
+        itemBuilder: (context, index) {
+          final request = _joinRequests[index];
+          return _JoinRequestCard(
+            request: request,
+            onApprove: () => _handleJoinReview(request, 'approve'),
+            onReject: () => _handleJoinReview(request, 'reject'),
           );
         },
       ),
@@ -281,10 +407,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                                     }),
                         ),
                         Tab(
+                          text: _joinRequests.isEmpty
+                              ? 'admin.tab_join_requests'.tr()
+                              : tr('admin.tab_join_requests_count', namedArgs: {
+                                  'count': '${_joinRequests.length}'
+                                }),
+                        ),
+                        Tab(
                           text: tr('admin.tab_members',
                               namedArgs: {'count': '${_allMembers.length}'}),
                         ),
                         Tab(text: 'admin.tab_apartments'.tr()),
+                        Tab(text: 'admin.tab_spots'.tr()),
                         Tab(text: 'admin.tab_bulk_import'.tr()),
                         Tab(text: 'admin.tab_settings'.tr()),
                       ],
@@ -317,8 +451,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               controller: _tabController,
               children: [
                 _buildPendingList(),
+                _buildJoinRequestsList(),
                 _buildAllMembersList(),
                 _ManageApartmentsTab(adminService: _adminService),
+                _SpotManagementTab(
+                  adminService: _adminService,
+                  onOpenBulkImport: () => _tabController.animateTo(5),
+                ),
                 _BulkImportTab(adminService: _adminService),
                 _BuildingSettingsTab(adminService: _adminService),
               ],
@@ -403,6 +542,111 @@ class _PendingMemberCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _JoinRequestCard extends StatelessWidget {
+  final BuildingJoinRequest request;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  const _JoinRequestCard({
+    required this.request,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dateFmt = DateFormat('MMM d, y');
+    final name = request.displayName?.trim().isNotEmpty == true
+        ? request.displayName!.trim()
+        : 'admin.join_requests.unnamed'.tr();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _Avatar(name: request.displayName),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(name, style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${request.phone}  ·  ${tr('admin.join_requests.unit', namedArgs: {
+                              'unit': request.apartmentIdentifier
+                            })}',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                      Text(
+                        tr('admin.join_requests.requested_on', namedArgs: {
+                          'date': dateFmt.format(request.createdAt.toLocal())
+                        }),
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                StatusChip(
+                  label: 'admin.join_requests.pending_chip'.tr(),
+                  tone: StatusTone.warning,
+                  icon: Icons.hourglass_top_rounded,
+                ),
+              ],
+            ),
+            if (request.note?.trim().isNotEmpty == true) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(request.note!.trim(),
+                    style: theme.textTheme.bodySmall),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: onReject,
+                  icon: Icon(Icons.close_rounded, color: scheme.error, size: 18),
+                  label: Text('admin.join_requests.decline'.tr(),
+                      style: TextStyle(color: scheme.error)),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: scheme.error),
+                    minimumSize: const Size(0, 40),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                FilledButton.icon(
+                  onPressed: onApprove,
+                  icon: const Icon(Icons.check_rounded, size: 18),
+                  label: Text('admin.join_requests.approve'.tr()),
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+                ),
+              ],
             ),
           ],
         ),
@@ -1495,6 +1739,411 @@ class _EditApartmentDialogState extends State<_EditApartmentDialog> {
           child: Text('admin.apartments.save_button'.tr()),
         ),
       ],
+    );
+  }
+}
+
+// ─── Spot Management Tab ─────────────────────────────────────────────────────
+//
+// Admin view of the operational `parking_spots` table (via the
+// admin_list_building_spots RPC). Surfaces orphaned rows — spots with no
+// apartment, or whose identifier has fallen out of the apartment's
+// authorized_apartments snapshot — and lets the admin force-delete any spot.
+// Re-importing is delegated to the existing Bulk Import tab.
+
+class _SpotManagementTab extends StatefulWidget {
+  final AdminService adminService;
+  final VoidCallback onOpenBulkImport;
+
+  const _SpotManagementTab({
+    required this.adminService,
+    required this.onOpenBulkImport,
+  });
+
+  @override
+  State<_SpotManagementTab> createState() => _SpotManagementTabState();
+}
+
+class _SpotManagementTabState extends State<_SpotManagementTab> {
+  List<AdminParkingSpot> _spots = [];
+  bool _isLoading = true;
+  final Set<String> _deleting = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSpots();
+  }
+
+  Future<void> _loadSpots() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await widget.adminService.getBuildingSpots();
+      if (!mounted) return;
+      setState(() {
+        _spots = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  Future<bool> _confirmDelete({
+    required String title,
+    required String body,
+    required String confirmLabel,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('admin.dialog.cancel'.tr()),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _deleteSpot(AdminParkingSpot spot) async {
+    final body = spot.hasActiveBookings
+        ? tr('admin.spots.delete_dialog_body_with_bookings', namedArgs: {
+            'spot': spot.spotIdentifier,
+            'count': '${spot.activeBookingsCount}',
+          })
+        : tr('admin.spots.delete_dialog_body',
+            namedArgs: {'spot': spot.spotIdentifier});
+
+    if (!await _confirmDelete(
+      title: 'admin.spots.delete_dialog_title'.tr(),
+      body: body,
+      confirmLabel: 'admin.spots.delete_button'.tr(),
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
+    setState(() => _deleting.add(spot.id));
+    try {
+      await widget.adminService.deleteBuildingSpot(spot.id);
+      if (!mounted) return;
+      AppSnack.success(context, 'admin.spots.deleted_success'.tr());
+      await _loadSpots();
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.error(context, e.toString().replaceAll('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _deleting.remove(spot.id));
+    }
+  }
+
+  Future<void> _deleteAllOrphans(List<AdminParkingSpot> orphans) async {
+    if (!await _confirmDelete(
+      title: 'admin.spots.delete_all_orphans_confirm_title'.tr(),
+      body: tr('admin.spots.delete_all_orphans_confirm_body',
+          namedArgs: {'count': '${orphans.length}'}),
+      confirmLabel: 'admin.spots.delete_all_orphans_button'.tr(),
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
+    setState(() => _deleting.addAll(orphans.map((s) => s.id)));
+    var failures = 0;
+    for (final spot in orphans) {
+      try {
+        await widget.adminService.deleteBuildingSpot(spot.id);
+      } catch (_) {
+        failures++;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _deleting.clear());
+    if (failures == 0) {
+      AppSnack.success(
+        context,
+        tr('admin.spots.deleted_many_success',
+            namedArgs: {'count': '${orphans.length}'}),
+      );
+    } else {
+      AppSnack.error(
+        context,
+        tr('admin.spots.deleted_many_partial',
+            namedArgs: {'count': '${orphans.length - failures}', 'errors': '$failures'}),
+      );
+    }
+    await _loadSpots();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    if (_isLoading) return const SkeletonList(count: 5);
+
+    if (_spots.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _loadSpots,
+        child: ListView(
+          children: [
+            SizedBox(height: MediaQuery.of(context).size.height * 0.12),
+            EmptyState(
+              icon: Icons.local_parking_outlined,
+              title: 'admin.spots.empty_title'.tr(),
+              message: 'admin.spots.empty_message'.tr(),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final orphans = _spots.where((s) => s.isOrphan).toList();
+    final assigned = _spots.where((s) => !s.isOrphan).toList();
+    final activeCount = _spots.where((s) => s.isActive).length;
+
+    return RefreshIndicator(
+      onRefresh: _loadSpots,
+      child: ListView(
+        padding: const EdgeInsetsDirectional.fromSTEB(32, 28, 32, 32),
+        children: [
+          // ── Summary banner ─────────────────────────────────────────────
+          Card(
+            color: scheme.surfaceContainerLow,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.local_parking_rounded,
+                      size: 20, color: scheme.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      tr('admin.spots.summary_banner', namedArgs: {
+                        'total': '${_spots.length}',
+                        'active': '$activeCount',
+                        'orphaned': '${orphans.length}',
+                      }),
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: widget.onOpenBulkImport,
+                    icon: const Icon(Icons.upload_file_rounded, size: 18),
+                    label: Text('admin.spots.reimport_button'.tr()),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'admin.spots.reimport_hint'.tr(),
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+
+          // ── Orphaned section ───────────────────────────────────────────
+          if (orphans.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Icon(Icons.warning_amber_rounded,
+                    size: 18, color: scheme.error),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    tr('admin.spots.orphan_section_title',
+                        namedArgs: {'count': '${orphans.length}'}),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: scheme.error,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _deleting.isNotEmpty
+                      ? null
+                      : () => _deleteAllOrphans(orphans),
+                  style: TextButton.styleFrom(foregroundColor: scheme.error),
+                  child: Text('admin.spots.delete_all_orphans_button'.tr()),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'admin.spots.orphan_section_desc'.tr(),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            for (final spot in orphans)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _SpotCard(
+                  spot: spot,
+                  isDeleting: _deleting.contains(spot.id),
+                  onDelete: () => _deleteSpot(spot),
+                ),
+              ),
+          ],
+
+          // ── Assigned spots section ─────────────────────────────────────
+          if (assigned.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text(
+              'admin.spots.assigned_section_title'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                letterSpacing: 0.4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (final spot in assigned)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _SpotCard(
+                  spot: spot,
+                  isDeleting: _deleting.contains(spot.id),
+                  onDelete: () => _deleteSpot(spot),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SpotCard extends StatelessWidget {
+  final AdminParkingSpot spot;
+  final bool isDeleting;
+  final VoidCallback onDelete;
+
+  const _SpotCard({
+    required this.spot,
+    required this.isDeleting,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: spot.isOrphan
+                    ? scheme.errorContainer.withValues(alpha: 0.5)
+                    : scheme.tertiaryContainer.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.local_parking_rounded,
+                size: 20,
+                color: spot.isOrphan
+                    ? scheme.onErrorContainer
+                    : scheme.onTertiaryContainer,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          spot.spotIdentifier,
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (!spot.isActive)
+                        StatusChip(
+                          label: 'admin.spots.inactive_chip'.tr(),
+                          tone: StatusTone.warning,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    spot.apartmentIdentifier != null
+                        ? tr('admin.spots.unit_line',
+                            namedArgs: {'unit': spot.apartmentIdentifier!})
+                        : 'admin.spots.unassigned_line'.tr(),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: spot.isOrphan
+                          ? scheme.error
+                          : scheme.onSurfaceVariant,
+                      fontWeight:
+                          spot.isOrphan ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                  if (spot.isOrphan && spot.apartmentIdentifier != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'admin.spots.not_in_snapshot'.tr(),
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: scheme.error),
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Text(
+                    tr('admin.spots.counts_line', namedArgs: {
+                      'periods': '${spot.availabilityPeriodsCount}',
+                      'bookings': '${spot.activeBookingsCount}',
+                    }),
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (isDeleting)
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else
+              IconButton(
+                tooltip: 'admin.spots.delete_tooltip'.tr(),
+                icon: Icon(Icons.delete_outline_rounded, color: scheme.error),
+                onPressed: onDelete,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

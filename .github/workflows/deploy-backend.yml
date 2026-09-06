@@ -49,6 +49,7 @@ jobs:
       - name: Deploy Edge Functions
         run: |
           for fn in \
+            admin-bulk-import \
             approve-booking \
             create-booking-request \
             create-building \
@@ -58,7 +59,9 @@ jobs:
             notify-spot-available \
             notify-waitlist-match \
             places-autocomplete \
+            review-join-request \
             send-chat-message \
+            submit-join-request \
           ; do
             echo "▶ Deploying $fn..."
             supabase functions deploy "$fn"

@@ -5,8 +5,10 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../config/dev_auth_config.dart';
+import '../../models/building_join_request.dart';
 import '../../models/profile.dart';
 import '../../services/auth_service.dart';
+import '../../services/join_request_service.dart';
 import 'dev_auth_screen.dart';
 import 'phone_auth_screen.dart';
 
@@ -133,6 +135,23 @@ class _AuthWrapperState extends State<AuthWrapper> {
         if (profile != null && profile.isAdmin) {
           debugPrint('--- AuthWrapper: navigating to /admin-dashboard (admin, no apartment) ---');
           context.go('/admin-dashboard');
+          return;
+        }
+
+        // No profile — the user may have an open self-service join request.
+        BuildingJoinRequest? joinRequest;
+        try {
+          joinRequest = await JoinRequestService().myLatestRequest();
+        } catch (e) {
+          debugPrint('--- AuthWrapper: join-request lookup failed: $e ---');
+        }
+        if (!mounted) return;
+
+        if (joinRequest != null &&
+            (joinRequest.status == JoinRequestStatus.pending ||
+                joinRequest.status == JoinRequestStatus.rejected)) {
+          debugPrint('--- AuthWrapper: navigating to /join-request-pending ---');
+          context.go('/join-request-pending');
         } else {
           debugPrint('--- AuthWrapper: navigating to /not-registered ---');
           context.go('/not-registered');

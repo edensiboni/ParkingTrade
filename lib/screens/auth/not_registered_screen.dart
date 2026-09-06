@@ -65,6 +65,17 @@ class NotRegisteredScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 48),
 
+                  // ── Request to join ────────────────────────────────────────
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => context.go('/join-request'),
+                      icon: const Icon(Icons.apartment_rounded),
+                      label: Text('auth.not_registered.request_join'.tr()),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
                   // ── Sign out ───────────────────────────────────────────────
                   SizedBox(
                     width: double.infinity,
