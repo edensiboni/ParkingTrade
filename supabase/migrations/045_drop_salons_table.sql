@@ -1,0 +1,37 @@
+-- ============================================================
+-- Migration 045: Drop the legacy `salons` branding table.
+--
+-- Context: Migration 031 added `salons` (id, name, primary_color,
+-- secondary_color, logo_url, timestamps) to back the per-salon
+-- branded-theme layer and the `stylecast://salon?id=<uuid>` deep
+-- links — vestigial from an earlier product direction.
+--
+-- The entire client-side branding layer has been excised
+-- (salon_theme_provider / salon_theme_service / salon_branding /
+-- salon_theme_config / salon_deep_link_listener / deep_link_config,
+-- the `stylecast://` intent filters, the `app_links` dependency).
+-- Nothing in the app, the Edge Functions, or the E2E suite reads or
+-- writes `salons` any more. This drops the now-orphaned table.
+--
+-- Safety:
+--   * No other table has a foreign key referencing `salons`
+--     (`salons.id` is a bare UUID PK, not itself an FK), so CASCADE
+--     only removes objects that depend ON the table — its RLS policy
+--     `salons_select_anon` and its `salons_updated_at` trigger. The
+--     shared `update_updated_at_column()` function is unaffected.
+--   * The table was never surfaced to users for writes (branding rows
+--     were meant to be admin-seeded and that path never shipped), so
+--     no production row loss of consequence is expected. This is a
+--     hard-to-reverse production schema change regardless — it is
+--     applied to prod by the `deploy` job's `supabase db push` on the
+--     merge to `main`.
+--
+-- Idempotent: `DROP TABLE IF EXISTS` is a no-op if the table is
+-- already gone (e.g. re-run, or prod drift where it was never
+-- created). Safe to run twice.
+--
+-- Manual steps: none. No pg_cron schedule, Vault secret, or Edge
+-- Function references `salons`.
+-- ============================================================
+
+DROP TABLE IF EXISTS salons CASCADE;
