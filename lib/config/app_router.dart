@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/dev_auth_config.dart';
-import '../providers/salon_theme_provider.dart';
 import '../screens/admin/admin_dashboard_screen.dart';
 import '../screens/announcements/announcements_screen.dart';
 import '../screens/auth/admin_login_screen.dart';
@@ -20,7 +19,6 @@ import '../screens/building/rejected_screen.dart';
 import '../screens/spots/parking_spots_screen.dart';
 import '../services/auth_service.dart';
 import '../services/navigation_service.dart';
-import '../widgets/salon_deep_link_listener.dart';
 
 /// Route guard for admin-only screens. Uses the cached profile when available
 /// (populated by [AuthService.getCurrentProfile] during the normal sign-in
@@ -43,22 +41,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: '/',
-        builder: (context, state) => SalonDeepLinkListener(
-          salonId: state.uri.queryParameters[salonIdQueryParam],
-          child: const AuthWrapper(),
-        ),
-      ),
-      GoRoute(
-        path: '/salon',
-        redirect: (context, state) async {
-          final salonId = state.uri.queryParameters[salonIdQueryParam];
-          if (salonId != null && salonId.isNotEmpty) {
-            await ref.read(salonThemeProvider.notifier).loadTheme(salonId);
-          }
-          final hasSession =
-              Supabase.instance.client.auth.currentSession != null;
-          return hasSession ? '/home' : '/';
-        },
+        builder: (context, state) => const AuthWrapper(),
       ),
       GoRoute(
         path: '/auth',

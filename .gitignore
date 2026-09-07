@@ -4,6 +4,16 @@
 *.pyc
 *.swp
 .DS_Store
+
+# Editor-generated ".xml"-suffixed duplicates of Xcode project files
+# (Xcode reads the extensionless originals; these copies are noise).
+ios/**/*.storyboard.xml
+ios/**/*.xcscheme.xml
+ios/**/*.xcworkspacedata.xml
+ios/**/*.xcsettings.xml
+ios/**/*.xcprivacy.xml
+android/**/*.storyboard.xml
+
 .atom/
 .build/
 .buildlog/
