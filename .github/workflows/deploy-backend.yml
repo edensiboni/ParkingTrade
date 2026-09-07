@@ -1,31 +1,41 @@
-# ⚠️  MANUAL / EMERGENCY USE ONLY
+# MANUAL / EMERGENCY backend deploy — escape hatch for a hotfix migration or a
+# function redeploy without the full pipeline.
 #
-# Normal deployments are handled by the "deploy" job inside ci.yml, which is
-# gated on both migration verification and Flutter analysis passing.
+# Normal deploys go through deploy-staging.yml (auto on main) and
+# deploy-production.yml (on a release / dispatch, behind the environment gate).
 #
-# This workflow exists solely as a manual escape hatch — for example, when you
-# need to push a hotfix migration or redeploy Edge Functions without waiting for
-# the full CI pipeline (e.g., after a direct hotfix commit to a release branch).
+# Trigger: workflow_dispatch only. Pick the target:
+#   • staging     — repo secrets, no gate (default)
+#   • production  — `production` environment secrets + required-reviewer gate
 #
-# Trigger: workflow_dispatch only (no automatic triggers).
-#
-# Required GitHub secrets:
-#   SUPABASE_ACCESS_TOKEN   — personal access token for Supabase CLI
-#   SUPABASE_PROJECT_REF    — project ref (e.g. njlbcrcoogpblscvjfah)
-#   SUPABASE_DB_PASSWORD    — database password
+# Because staging and production secrets share identical names, the single `env:`
+# block below resolves correctly for whichever target is chosen.
 
 name: Deploy backend (manual / emergency)
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: "Which environment to deploy to"
+        type: choice
+        options: [staging, production]
+        default: staging
+      run_bootstrap:
+        description: "Also run the pg_cron + Vault bootstrap"
+        type: boolean
+        default: true
 
 concurrency:
-  group: deploy-backend
-  cancel-in-progress: true
+  group: deploy-backend-${{ github.event.inputs.target }}
+  cancel-in-progress: false
 
 jobs:
   deploy-backend:
     runs-on: ubuntu-latest
+    # Empty string => no environment (staging). 'production' => gated + env secrets.
+    environment: ${{ github.event.inputs.target == 'production' && 'production' || '' }}
+
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
@@ -40,31 +50,26 @@ jobs:
         with:
           version: latest
 
-      - name: Link project
+      - name: Install psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Link project (${{ github.event.inputs.target }})
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
       - name: Push migrations
         run: supabase db push --include-all --yes
 
       - name: Deploy Edge Functions
-        run: |
-          for fn in \
-            admin-bulk-import \
-            approve-booking \
-            create-booking-request \
-            create-building \
-            create-building-admin \
-            join-building \
-            manage-member \
-            notify-building-announcement \
-            notify-spot-available \
-            notify-waitlist-match \
-            places-autocomplete \
-            review-join-request \
-            send-chat-message \
-            submit-join-request \
-          ; do
-            echo "▶ Deploying $fn..."
-            supabase functions deploy "$fn"
-          done
-          echo "✅ All Edge Functions deployed."
+        run: bash scripts/deploy-edge-functions.sh
+
+      - name: Sync Edge Function secrets + run bootstrap
+        if: ${{ github.event.inputs.run_bootstrap == 'true' }}
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          FUNCTIONS_BASE_URL: ${{ secrets.SUPABASE_URL }}
+          SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
+        run: bash scripts/bootstrap-env.sh

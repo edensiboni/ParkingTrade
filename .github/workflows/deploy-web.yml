@@ -20,6 +20,11 @@
 # Behavior:
 #   - Push to main: waits for the "CI" workflow to succeed, then deploys to the live channel.
 #   - Pull request:  builds and deploys to a temporary preview channel (expires in 7 days).
+#
+# NOTE (environment split — feat/environment-split): the repo-level secrets this
+# workflow reads now point at STAGING. So push-to-main here deploys web to the
+# staging Firebase project. Production web is built + deployed by
+# deploy-production.yml using the `production` environment secrets.
 
 name: Deploy web
 

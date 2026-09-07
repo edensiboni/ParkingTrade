@@ -1,7 +1,7 @@
 #!/bin/bash
-# Deploy the four Edge Functions. Does not set FCM secrets.
-# Usage: run from anywhere; script cd's to repo root.
-
+# Deploy all Edge Functions to the linked Supabase project.
+# Thin wrapper — the canonical function list lives in deploy-edge-functions.sh
+# (single source of truth, also used by the CI/CD workflows).
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -15,10 +15,4 @@ if [ -f "$REPO_ROOT/.env" ]; then
 fi
 
 "$SCRIPT_DIR/check-env.sh"
-
-FUNCTIONS="join-building create-building create-building-admin approve-booking create-booking-request places-autocomplete"
-for fn in $FUNCTIONS; do
-    echo "Deploying $fn..."
-    supabase functions deploy "$fn"
-done
-echo "All Edge Functions deployed successfully."
+exec bash "$SCRIPT_DIR/deploy-edge-functions.sh"
