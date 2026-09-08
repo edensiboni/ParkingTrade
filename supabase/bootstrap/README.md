@@ -33,12 +33,16 @@ Run automatically by `deploy-staging.yml` / `deploy-production.yml` after
 | Twilio SMS credentials (prod sender / subaccount) | Dashboard → Auth → SMS | Separate from dev Twilio — see below |
 | Site URL + redirect allowlist | Dashboard → Auth → URL Configuration | Prod web origin + `parkingtrade://` scheme |
 | PITR / daily backups | Dashboard → Database → Backups | Needs the Pro plan |
-| Provision `SUPABASE_DB_URL` secret | GitHub | Full pooler connection string (`…pooler.supabase.com:5432`) |
+
+No `SUPABASE_DB_URL` secret is needed — `bootstrap-env.sh` derives the Postgres
+connection from `supabase/.temp/pooler-url` (written by `supabase link`) and
+injects `SUPABASE_DB_PASSWORD` via `PGPASSWORD`.
 
 ## Running it by hand (fallback)
 
 ```bash
-export SUPABASE_PROJECT_REF=…  SUPABASE_ACCESS_TOKEN=…  SUPABASE_DB_URL=…
+supabase link --project-ref "$SUPABASE_PROJECT_REF"   # writes supabase/.temp/pooler-url
+export SUPABASE_PROJECT_REF=…  SUPABASE_ACCESS_TOKEN=…  SUPABASE_DB_PASSWORD=…
 export FUNCTIONS_BASE_URL="https://<ref>.supabase.co"
 export SERVICE_ROLE_KEY=…  FIREBASE_SERVICE_ACCOUNT="$(cat sa.json)"  PLACES_API_KEY=…
 bash scripts/bootstrap-env.sh
@@ -47,7 +51,7 @@ bash scripts/bootstrap-env.sh
 Or just the SQL:
 
 ```bash
-psql "$SUPABASE_DB_URL" \
+PGPASSWORD="<db password>" psql "$(cat supabase/.temp/pooler-url)" \
   -v functions_base_url="https://<ref>.supabase.co" \
   -v service_role_key="<service_role secret>" \
   -f supabase/bootstrap/bootstrap.sql

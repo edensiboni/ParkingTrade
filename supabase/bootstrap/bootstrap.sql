@@ -16,8 +16,9 @@
 --      and the 3 notification-outbox drains — the durability backstop).
 --   4. Prints a verification summary (the deploy step asserts the counts).
 --
--- Usage:
---   psql "$SUPABASE_DB_URL" \
+-- Usage (normally invoked by scripts/bootstrap-env.sh, which derives the
+-- connection from supabase/.temp/pooler-url + PGPASSWORD):
+--   PGPASSWORD="<db password>" psql "$(cat supabase/.temp/pooler-url)" \
 --     -v functions_base_url="https://<project-ref>.supabase.co" \
 --     -v service_role_key="<service_role secret — Dashboard → Project Settings → API>" \
 --     -f supabase/bootstrap/bootstrap.sql

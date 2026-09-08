@@ -67,7 +67,7 @@ jobs:
       - name: Sync Edge Function secrets + run bootstrap
         if: ${{ github.event.inputs.run_bootstrap == 'true' }}
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          # DB connection derived from supabase/.temp/pooler-url + SUPABASE_DB_PASSWORD.
           FUNCTIONS_BASE_URL: ${{ secrets.SUPABASE_URL }}
           SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
