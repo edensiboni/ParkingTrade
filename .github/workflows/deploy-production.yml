@@ -1,0 +1,150 @@
+# Deploy to PRODUCTION (the dedicated prod Supabase + Firebase projects).
+#
+# Trigger:
+#   • release: published   — cutting a GitHub Release on a v* tag (the normal path)
+#   • workflow_dispatch     — manual, takes a `ref` input (tag or SHA)
+#
+# GATE: the `deploy` job declares `environment: production`. That environment
+# has required reviewers + is restricted to v* tags in repo settings, so:
+#   - a human must approve every prod deploy
+#   - no other workflow/job can read the `production` environment secrets
+#
+# Verification is re-run against the EXACT ref being deployed (job `verify`),
+# never trusted from a prior main run — a tag can point at any commit.
+#
+# Uses `production` ENVIRONMENT secrets, same names as the staging repo secrets:
+#   SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF, SUPABASE_DB_PASSWORD,
+#   SUPABASE_DB_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+#   SUPABASE_PUBLISHABLE_KEY, FIREBASE_SERVICE_ACCOUNT, FIREBASE_PROJECT_ID,
+#   FIREBASE_WEB_API_KEY, FIREBASE_WEB_APP_ID, FIREBASE_WEB_PROJECT_ID,
+#   FIREBASE_WEB_MESSAGING_SENDER_ID, FIREBASE_WEB_AUTH_DOMAIN,
+#   FIREBASE_WEB_STORAGE_BUCKET, PLACES_API_KEY
+
+name: Deploy to Production
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag or commit SHA to deploy (must be a v* tag under normal policy)"
+        required: true
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  # Re-verify the exact ref being shipped.
+  verify:
+    uses: ./.github/workflows/_verify.yml
+
+  deploy:
+    name: "Deploy → production"
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      DEPLOY_REF: ${{ github.event.inputs.ref || github.event.release.tag_name || github.sha }}
+
+    steps:
+      - name: Checkout ${{ env.DEPLOY_REF }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_REF }}
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Link to production project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Push migrations
+        run: supabase db push --include-all --yes
+
+      - name: Deploy Edge Functions
+        run: bash scripts/deploy-edge-functions.sh
+
+      - name: Sync Edge Function secrets + run bootstrap (pg_cron + Vault)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          FUNCTIONS_BASE_URL: ${{ secrets.SUPABASE_URL }}
+          SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
+        run: bash scripts/bootstrap-env.sh
+
+      - name: Setup Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build Flutter web (production)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
+          FIREBASE_WEB_API_KEY: ${{ secrets.FIREBASE_WEB_API_KEY }}
+          FIREBASE_WEB_APP_ID: ${{ secrets.FIREBASE_WEB_APP_ID }}
+          FIREBASE_WEB_PROJECT_ID: ${{ secrets.FIREBASE_WEB_PROJECT_ID }}
+          FIREBASE_WEB_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_WEB_MESSAGING_SENDER_ID }}
+          FIREBASE_WEB_AUTH_DOMAIN: ${{ secrets.FIREBASE_WEB_AUTH_DOMAIN }}
+          FIREBASE_WEB_STORAGE_BUCKET: ${{ secrets.FIREBASE_WEB_STORAGE_BUCKET }}
+        run: |
+          flutter pub get
+          flutter build web \
+            --release \
+            --dart-define=isDev=false \
+            --dart-define=PWA_STRATEGY=offline-first \
+            -t lib/main_web.dart \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_PUBLISHABLE_KEY" \
+            --dart-define=PLACES_API_KEY="$PLACES_API_KEY" \
+            --dart-define=FIREBASE_WEB_API_KEY="$FIREBASE_WEB_API_KEY" \
+            --dart-define=FIREBASE_WEB_APP_ID="$FIREBASE_WEB_APP_ID" \
+            --dart-define=FIREBASE_WEB_PROJECT_ID="$FIREBASE_WEB_PROJECT_ID" \
+            --dart-define=FIREBASE_WEB_MESSAGING_SENDER_ID="$FIREBASE_WEB_MESSAGING_SENDER_ID" \
+            --dart-define=FIREBASE_WEB_AUTH_DOMAIN="$FIREBASE_WEB_AUTH_DOMAIN" \
+            --dart-define=FIREBASE_WEB_STORAGE_BUCKET="$FIREBASE_WEB_STORAGE_BUCKET"
+
+      - name: Deploy web to Firebase Hosting (live)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
+          channelId: live
+
+      - name: Post-deploy smoke test
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: bash scripts/smoke-test.sh
+
+      - name: Deployment summary
+        run: |
+          {
+            echo "## Production deploy complete — ${DEPLOY_REF}"
+            echo ""
+            echo "| Item | Status |"
+            echo "| --- | --- |"
+            echo "| Migrations | pushed |"
+            echo "| Edge Functions | deployed |"
+            echo "| Edge secrets + bootstrap | applied |"
+            echo "| Flutter web (live) | deployed |"
+            echo "| Smoke test | passed |"
+          } >> "$GITHUB_STEP_SUMMARY"

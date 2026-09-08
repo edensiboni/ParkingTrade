@@ -259,51 +259,74 @@ supabase start / supabase stop               # local stack (do NOT `db reset` wi
 
 ## CI/CD
 
+**Environment split (Phase 5 · Workstream B).** `main` == the **staging** Supabase
+project (`njlbcrcoogpblscvjfah`). **Production** is a separate Supabase + Firebase
+project, deployed only from a published GitHub Release (`v*` tag) or manual dispatch,
+behind the `production` GitHub Environment approval gate.
+
 GitHub Actions workflows in `.github/workflows/`:
 
-- **`ci.yml`** — the real pipeline, and the **only automatic deploy path**. Three jobs:
-  1. `supabase-db-verify` — boots a local Supabase stack and runs `supabase db reset`,
-     applying **every** migration in order. Catches SQL syntax errors, non-idempotent
-     policies (missing `DROP POLICY IF EXISTS`), and order-dependent migrations.
-  2. `flutter-analyze-test` — `flutter analyze --no-fatal-infos`, `flutter test --coverage`,
-     and `deno test` on shared Edge Function utilities.
-  3. `deploy` — runs **only** on push to `main`, **only** if jobs 1 & 2 pass. Runs
-     `supabase db push --include-all --yes`, then deploys the Edge Functions.
+- **`_verify.yml`** — reusable (`workflow_call`), the single verification gate. No
+  deploys, no secrets. Three jobs:
+  1. `supabase-db-verify` — boots a local stack, `supabase db reset` applies **every**
+     migration in order. Catches SQL errors, non-idempotent policies, order deps.
+  2. `flutter-analyze-test` — `flutter analyze --no-fatal-infos`, `flutter test
+     --coverage`, `deno test` on shared Edge Function utilities.
+  3. `bootstrap-consistency` — `scripts/check-bootstrap-consistency.sh`: asserts
+     `supabase/bootstrap/bootstrap.sql` still covers every Vault secret / `notify-*`
+     drain the migrations reference.
 
-  Triggers: pushes to `main` and `feature/**`, plus PRs targeting `main`. A branch named
-  `fix/...` does **not** trigger CI on push — open a PR against `main` to validate it.
+- **`ci.yml`** — calls `_verify.yml` on PRs to `main` and pushes to `feature/**` and
+  `main`. **Never deploys.** A `fix/...` branch does not trigger CI — open a PR.
 
-- **`deploy-backend.yml`** — ⚠️ **manual / emergency only** (`workflow_dispatch`). Does
-  **not** run on push to `main`. For hotfixing a migration or redeploying functions
-  without the full pipeline.
+- **`deploy-staging.yml`** — auto. On `workflow_run` of "CI" succeeding on `main`:
+  `db push` → deploy Edge Functions → sync Edge secrets + run `bootstrap-env.sh`
+  against **staging**. Also `workflow_dispatch`. Trusts the CI run (does not re-verify).
 
-- **`deploy-web.yml`** — builds Flutter web (`lib/main_web.dart`) → Firebase Hosting.
-  On push to `main`: waits for CI, deploys to live channel. On PRs: 7-day preview channel.
+- **`deploy-production.yml`** — on `release: [published]` + `workflow_dispatch` (input
+  `ref`). Job `verify` re-runs `_verify.yml` against the **exact** tagged commit; job
+  `deploy` (`environment: production`, required-reviewer gate) does `db push` → Edge
+  Functions → `bootstrap-env.sh` → Flutter web `--release` → Firebase Hosting live →
+  `scripts/smoke-test.sh`.
 
-### ⚠️ Adding an Edge Function — update TWO hardcoded lists
+- **`deploy-backend.yml`** — ⚠️ manual / emergency (`workflow_dispatch`). `target`
+  input picks `staging` (repo secrets, no gate) or `production` (`production`
+  environment secrets + gate).
 
-Edge Functions deploy from an explicit `for fn in ...` list, **not** a glob of
-`supabase/functions/*`. A function missing from the list fails *silently*: its migration
-lands in production but the function is never deployed. When adding a function, update both:
+- **`deploy-web.yml`** — Flutter web (`lib/main_web.dart`) → Firebase Hosting. Push to
+  `main` → **staging** Firebase live channel (its repo secrets point at staging). PRs
+  → 7-day preview channel. Production web is handled inside `deploy-production.yml`.
 
-- `.github/workflows/ci.yml` → job `deploy` → step "Deploy Edge Functions"
-- `.github/workflows/deploy-backend.yml` → step "Deploy Edge Functions"
+### Adding an Edge Function — ONE list now
 
-(All Edge Functions — including `admin-bulk-import` — are now in both lists.)
+`scripts/deploy-edge-functions.sh` is the single canonical list (used by every deploy
+workflow and by `scripts/deploy-functions.sh`). Add the new function there — nowhere
+else. The script self-checks: it errors if a `supabase/functions/*` dir is missing
+from the list.
 
-### Required GitHub secrets (repo settings → Secrets → Actions)
+### Adding a new async notification pipeline
 
-Backend (set): `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF`.
+New outbox + `pg_net` webhook migration ⇒ **also** add its Vault secrets and cron
+drain to `supabase/bootstrap/bootstrap.sql`. `_verify.yml` job 3 fails the build if
+you forget.
 
-Web deploy:
-- `FIREBASE_SERVICE_ACCOUNT` — service account JSON with "Firebase Hosting Admin"
-- `FIREBASE_PROJECT_ID`
-- `SUPABASE_URL` — same value as `.env`
-- `SUPABASE_PUBLISHABLE_KEY` — Supabase publishable/anon key
-- `PLACES_API_KEY` *(optional)*
-- `FIREBASE_WEB_*` *(optional, web push)* — `FIREBASE_WEB_API_KEY`, `FIREBASE_WEB_APP_ID`,
-  `FIREBASE_WEB_PROJECT_ID`, `FIREBASE_WEB_MESSAGING_SENDER_ID`, `FIREBASE_WEB_AUTH_DOMAIN`,
-  `FIREBASE_WEB_STORAGE_BUCKET`
+### GitHub secrets & environments
+
+**Repository secrets** (point at **staging**): `SUPABASE_ACCESS_TOKEN`,
+`SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`, `SUPABASE_DB_URL` (full pooler
+connection string for `psql`), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+`SUPABASE_PUBLISHABLE_KEY`, `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_PROJECT_ID`,
+`FIREBASE_WEB_*`, `PLACES_API_KEY`.
+
+**`production` Environment secrets** — **identical names**, prod values. Environment
+config: required reviewers + deployment branches restricted to `v*` tags. Because the
+names match, workflow YAML is identical between environments; GitHub resolves the
+`production` set only for jobs that declare `environment: production`, so a
+non-production job physically cannot read prod credentials.
+
+`SUPABASE_DB_URL` is new (needed for the `psql` bootstrap). `SUPABASE_SERVICE_ROLE_KEY`
+is now also a CI secret (bootstrap writes it into Vault + the cron drain commands).
+Rotating the service_role key ⇒ re-run the bootstrap (it refreshes both).
 
 ### One-time Firebase Hosting setup (local)
 

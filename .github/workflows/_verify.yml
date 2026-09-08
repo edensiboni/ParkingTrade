@@ -1,0 +1,114 @@
+# Reusable verification workflow — the single source of "is this ref deployable?".
+#
+# Called via `workflow_call` by:
+#   • ci.yml               — on every PR to main and every push to feature/**  and main
+#   • deploy-production.yml — against the exact tagged commit, BEFORE a prod deploy
+#
+# It performs NO deployment and needs NO secrets. Three jobs:
+#   1. supabase-db-verify     — boots a clean local stack, applies EVERY migration
+#                               in order via `supabase db reset` (catches SQL errors
+#                               and non-idempotent policies).
+#   2. flutter-analyze-test   — flutter analyze + test + deno test on _shared utils.
+#   3. bootstrap-consistency  — asserts supabase/bootstrap/bootstrap.sql still covers
+#                               every Vault secret / notify-* drain the migrations need
+#                               (see scripts/check-bootstrap-consistency.sh).
+
+name: Verify
+
+on:
+  workflow_call:
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 1 — Supabase DB verification
+  # ───────────────────────────────────────────────────────────────────────────
+  supabase-db-verify:
+    name: "Job 1 · Supabase DB — migration smoke test"
+    runs-on: ubuntu-latest
+
+    services:
+      docker:
+        image: docker:dind
+        options: --privileged
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        run: supabase start
+        timeout-minutes: 5
+
+      # Drops and recreates the local DB, then applies ALL migration files in
+      # order. Catches SQL syntax errors, non-idempotent statements (missing
+      # DROP POLICY IF EXISTS), and order-dependent migrations.
+      - name: Run all migrations (supabase db reset)
+        run: supabase db reset --local
+
+      - name: Stop local Supabase (cleanup)
+        if: always()
+        run: supabase stop --backup
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 2 — Flutter static analysis & tests
+  # ───────────────────────────────────────────────────────────────────────────
+  flutter-analyze-test:
+    name: "Job 2 · Flutter — analyze & test"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Flutter analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Flutter test
+        run: flutter test --coverage
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Deno test (invite codes for building Edge Functions)
+        run: deno test supabase/functions/_shared/invite_code_test.ts
+
+      - name: Upload coverage report
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-coverage
+          path: coverage/lcov.info
+          retention-days: 14
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 3 — Bootstrap ↔ migrations consistency
+  # ───────────────────────────────────────────────────────────────────────────
+  bootstrap-consistency:
+    name: "Job 3 · Bootstrap — migration parity check"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # pg_cron schedules and Vault secrets live OUTSIDE the migration chain
+      # (supabase/bootstrap/bootstrap.sql). This asserts that file never falls
+      # behind a migration that adds a new async pipeline.
+      - name: Check bootstrap covers every migration-declared secret / drain
+        run: bash scripts/check-bootstrap-consistency.sh

@@ -1,0 +1,96 @@
+# Deploy backend to STAGING (Supabase project njlbcrcoogpblscvjfah).
+#
+# main == staging. This runs automatically once the "CI" workflow succeeds on a
+# push to main — the canary environment. Break it here, not in production.
+#
+# It trusts the CI run that just passed on this exact commit (workflow_run gives
+# us head_sha); it does NOT re-run verification. Production does — see
+# deploy-production.yml.
+#
+# Steps: db push → deploy Edge Functions → sync Edge Function secrets →
+#        run the idempotent bootstrap (pg_cron jobs + Vault secrets).
+#
+# Uses REPOSITORY secrets (which point at staging):
+#   SUPABASE_ACCESS_TOKEN     — Supabase CLI PAT
+#   SUPABASE_PROJECT_REF      — njlbcrcoogpblscvjfah
+#   SUPABASE_DB_PASSWORD      — database password (for `supabase db push`)
+#   SUPABASE_DB_URL           — full Postgres connection string (pooler) for psql
+#   SUPABASE_URL              — https://<ref>.supabase.co (also the functions base URL)
+#   SUPABASE_SERVICE_ROLE_KEY — service_role key (bootstrap: Vault + cron drains)
+#   FIREBASE_SERVICE_ACCOUNT  — FCM v1 service-account JSON (Edge runtime)
+#   PLACES_API_KEY            — Google Places key (Edge runtime)
+
+name: Deploy to Staging
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: "Deploy backend → staging"
+    # For workflow_run, only proceed if CI passed. Manual dispatch always runs.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # For workflow_run, check out the exact commit CI validated.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Link to staging project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Push migrations
+        run: supabase db push --include-all --yes
+
+      - name: Deploy Edge Functions
+        run: bash scripts/deploy-edge-functions.sh
+
+      - name: Sync Edge Function secrets + run bootstrap (pg_cron + Vault)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          FUNCTIONS_BASE_URL: ${{ secrets.SUPABASE_URL }}
+          SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
+        run: bash scripts/bootstrap-env.sh
+
+      - name: Deployment summary
+        run: |
+          {
+            echo "## Staging deploy complete"
+            echo ""
+            echo "| Item | Status |"
+            echo "| --- | --- |"
+            echo "| Migrations | pushed |"
+            echo "| Edge Functions | deployed |"
+            echo "| Edge secrets + bootstrap | applied |"
+            echo "| Flutter web | handled by deploy-web.yml |"
+          } >> "$GITHUB_STEP_SUMMARY"
