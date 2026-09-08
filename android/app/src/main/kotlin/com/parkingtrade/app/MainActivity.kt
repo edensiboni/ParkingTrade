@@ -1,4 +1,4 @@
-package com.example.parking_trade
+package com.parkingtrade.app
 
 import io.flutter.embedding.android.FlutterActivity
 
