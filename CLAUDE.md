@@ -313,10 +313,9 @@ you forget.
 ### GitHub secrets & environments
 
 **Repository secrets** (point at **staging**): `SUPABASE_ACCESS_TOKEN`,
-`SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`, `SUPABASE_DB_URL` (full pooler
-connection string for `psql`), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-`SUPABASE_PUBLISHABLE_KEY`, `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_PROJECT_ID`,
-`FIREBASE_WEB_*`, `PLACES_API_KEY`.
+`SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`, `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PUBLISHABLE_KEY`, `FIREBASE_SERVICE_ACCOUNT`,
+`FIREBASE_PROJECT_ID`, `FIREBASE_WEB_*`, `PLACES_API_KEY`.
 
 **`production` Environment secrets** — **identical names**, prod values. Environment
 config: required reviewers + deployment branches restricted to `v*` tags. Because the
@@ -324,9 +323,11 @@ names match, workflow YAML is identical between environments; GitHub resolves th
 `production` set only for jobs that declare `environment: production`, so a
 non-production job physically cannot read prod credentials.
 
-`SUPABASE_DB_URL` is new (needed for the `psql` bootstrap). `SUPABASE_SERVICE_ROLE_KEY`
-is now also a CI secret (bootstrap writes it into Vault + the cron drain commands).
-Rotating the service_role key ⇒ re-run the bootstrap (it refreshes both).
+The `psql` bootstrap needs no connection-string secret: `bootstrap-env.sh` derives
+the Postgres URL from `supabase/.temp/pooler-url` (written by `supabase link`) and
+injects `SUPABASE_DB_PASSWORD` via `PGPASSWORD`. `SUPABASE_SERVICE_ROLE_KEY` is a CI
+secret (bootstrap writes it into Vault + the cron drain commands); rotating it ⇒
+re-run the bootstrap (it refreshes both).
 
 ### One-time Firebase Hosting setup (local)
 

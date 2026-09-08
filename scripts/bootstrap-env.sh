@@ -7,9 +7,15 @@
 #   2. Runs supabase/bootstrap/bootstrap.sql (pg_cron jobs + Vault secrets).
 #   3. Asserts the verification counts (5 cron jobs, 6 vault secrets).
 #
+# The Postgres connection is derived, not configured: `supabase link` (run in the
+# deploy job just before this script) writes `supabase/.temp/pooler-url` —
+# already tenant-qualified (postgres.<ref>@aws-N-<region>.pooler.supabase.com) —
+# and we inject the password via PGPASSWORD. No connection-string secret, no
+# region/host guessing, no URI percent-encoding footgun.
+#
 # Required environment:
 #   SUPABASE_PROJECT_REF      — linked project ref (for `supabase secrets set`)
-#   SUPABASE_DB_URL           — full Postgres connection string (pooler) for psql
+#   SUPABASE_DB_PASSWORD      — database password (injected via PGPASSWORD)
 #   FUNCTIONS_BASE_URL        — https://<ref>.supabase.co  (== SUPABASE_URL)
 #   SERVICE_ROLE_KEY          — service_role secret
 #   FIREBASE_SERVICE_ACCOUNT  — FCM v1 service-account JSON
@@ -18,16 +24,27 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 : "${SUPABASE_PROJECT_REF:?}"
-: "${SUPABASE_DB_URL:?}"
+: "${SUPABASE_DB_PASSWORD:?}"
 : "${FUNCTIONS_BASE_URL:?}"
 : "${SERVICE_ROLE_KEY:?}"
 : "${FIREBASE_SERVICE_ACCOUNT:?}"
 : "${PLACES_API_KEY:?}"
 
+POOLER_URL_FILE="supabase/.temp/pooler-url"
+if [ ! -s "$POOLER_URL_FILE" ]; then
+  echo "::error::$POOLER_URL_FILE missing — run 'supabase link --project-ref \$SUPABASE_PROJECT_REF' before this script" >&2
+  exit 1
+fi
+DB_URL="$(tr -d '[:space:]' < "$POOLER_URL_FILE")"
+
+# The pooler URL carries no password; keep it that way and pass the secret via
+# PGPASSWORD so it never appears in a URI, a process arg, or a log.
+export PGPASSWORD="$SUPABASE_DB_PASSWORD"
+
 # Keep secret values out of any accidental `set -x` / log echo.
 echo "::add-mask::${SERVICE_ROLE_KEY}"
 echo "::add-mask::${PLACES_API_KEY}"
-echo "::add-mask::${SUPABASE_DB_URL}"
+echo "::add-mask::${SUPABASE_DB_PASSWORD}"
 
 echo "▶ Syncing Edge Function runtime secrets…"
 supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" \
@@ -35,8 +52,8 @@ supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" \
   PLACES_API_KEY="$PLACES_API_KEY" >/dev/null
 echo "  done."
 
-echo "▶ Running bootstrap.sql (pg_cron + Vault)…"
-OUT="$(psql "$SUPABASE_DB_URL" \
+echo "▶ Running bootstrap.sql (pg_cron + Vault) via ${DB_URL%%@*}@…"
+OUT="$(psql "$DB_URL" \
   --no-psqlrc --quiet --tuples-only --no-align --field-separator='=' \
   -v functions_base_url="$FUNCTIONS_BASE_URL" \
   -v service_role_key="$SERVICE_ROLE_KEY" \

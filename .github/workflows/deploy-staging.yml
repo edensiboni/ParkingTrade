@@ -13,8 +13,7 @@
 # Uses REPOSITORY secrets (which point at staging):
 #   SUPABASE_ACCESS_TOKEN     — Supabase CLI PAT
 #   SUPABASE_PROJECT_REF      — njlbcrcoogpblscvjfah
-#   SUPABASE_DB_PASSWORD      — database password (for `supabase db push`)
-#   SUPABASE_DB_URL           — full Postgres connection string (pooler) for psql
+#   SUPABASE_DB_PASSWORD      — database password (`supabase db push` + psql PGPASSWORD)
 #   SUPABASE_URL              — https://<ref>.supabase.co (also the functions base URL)
 #   SUPABASE_SERVICE_ROLE_KEY — service_role key (bootstrap: Vault + cron drains)
 #   FIREBASE_SERVICE_ACCOUNT  — FCM v1 service-account JSON (Edge runtime)
@@ -75,7 +74,8 @@ jobs:
 
       - name: Sync Edge Function secrets + run bootstrap (pg_cron + Vault)
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          # DB connection is derived from supabase/.temp/pooler-url (written by
+          # the link step above) + SUPABASE_DB_PASSWORD (inherited from job env).
           FUNCTIONS_BASE_URL: ${{ secrets.SUPABASE_URL }}
           SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
