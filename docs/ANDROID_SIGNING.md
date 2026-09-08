@@ -53,25 +53,10 @@ points at `android/app/upload-keystore.jks`.
 
 ---
 
-## 3. Wire it into `android/app/build.gradle.kts`
+## 3. `android/app/build.gradle.kts` wiring
 
-> Applied in a follow-up PR (it collides with the app-identity rename in the same
-> file — lands once #33 is merged). Exact change:
-
-At the **top of the file**, above `android { }`:
-
-```kotlin
-import java.util.Properties
-import java.io.FileInputStream
-
-val keystoreProperties = Properties()
-val keystorePropertiesFile = rootProject.file("key.properties")
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
-}
-```
-
-Inside `android { }`, add a `signingConfigs` block and rewrite `buildTypes.release`:
+**Done** (PR #36). The file now loads `rootProject.file("key.properties")` at the
+top and defines a `release` signing config from it:
 
 ```kotlin
     signingConfigs {
@@ -85,19 +70,18 @@ Inside `android { }`, add a `signingConfigs` block and rewrite `buildTypes.relea
 
     buildTypes {
         release {
-            // Use the real upload key when key.properties is present (release
-            // builds, CI). Fall back to debug signing otherwise so
-            // `flutter run --release` still works on a bare checkout.
-            signingConfig = if (keystorePropertiesFile.exists())
+            signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
-            else
+            } else {
                 signingConfigs.getByName("debug")
+            }
         }
     }
 ```
 
 The conditional fallback matters: local dev and the `flutter analyze` / test CI
-have no keystore and must not break.
+have no keystore and must not break. `storeFile` is resolved relative to
+`android/app/`, so `storeFile=upload-keystore.jks` → `android/app/upload-keystore.jks`.
 
 ---
 
